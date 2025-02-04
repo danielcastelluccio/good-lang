@@ -1,0 +1,124 @@
+def Hash_Map<T: type, U: type> = struct {
+	t: T,
+	u: U
+};
+
+def String_Hash_Map<U: type> = Hash_Map(<string, U>);
+
+var x: Hash_Map(<uint, uint>);
+insert(&x, 4, 5);
+
+insert(<uint, uint>)(&x, 4, 5);
+
+// Advantages: good
+// Disadvantages: how to deduce types?
+def insert<T: type, U: type> = fn(map: *Hash_Map(<T, U>), t: T, u: U) -> {
+	
+};
+
+// Advantages: definitely can implement
+// Disadvantages: errors won't be obvious
+def insert<T: type> = fn(map: *T, t: key_type(T), u: value_type(T)) -> {
+	
+};
+
+def main = fn() {
+	var map: Hash_Map(<uint, uint>);
+	insert(&map, 4, 5);
+};
+
+def Foo1<T: type> = struct {
+	t: T
+};
+
+def Foo2<T: type> = fn() type {
+	return struct {
+		t: T,
+	};
+};
+
+def Foo1_uint = Foo1(<uint>);
+def Foo2_uint = Foo2(<uint>)();
+
+// ----
+
+def String = *[]byte;
+
+def String2 = fn() {
+	return String; // depends on value of String
+};
+
+def Foo = struct {
+	a: String2() // depends on value of String2
+};
+
+def bar = fn() {
+	var foo: Foo; // depends on value of Foo
+	baz(); // depends on type of bar
+};
+
+def baz = fn() {
+	bar(); // depends on type of bar
+};
+
+def X = mod {
+};
+
+def Y = import("test");
+
+def x = fn() {
+};
+
+def X = mod {
+	def foo = x; // depends X
+};
+
+X.print // depends X
+
+def foo = fn(): uint -> {
+	var a = {
+		var b = 1 + 1;
+		if foo() {
+			yield b; // break out of the block
+		};
+	};
+	// a = 2
+
+	while true {
+		while true {
+			if foo() {
+				break@1;
+			}
+			if bar() {
+				continue;
+			}
+		};
+	};
+};
+
+// -----
+
+def x = mod {
+	def foo = fn() -> {
+	};
+};
+
+def bar = fn() -> {
+	x::foo();
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

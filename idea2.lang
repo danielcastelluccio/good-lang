@@ -1,0 +1,15 @@
+def A<T: type> = T;
+
+def foo = fn<T: type>(a: A(<T>)) -> {
+};
+
+def B = A(<uint>);
+
+var x: A(<uint>); // Value { uint, .node = A(<uint>) }
+foo(x);
+
+var y: B; // Value { uint, .node = B }
+foo(b);
+
+def foo<T: type> = fn(a: T) -> {
+};

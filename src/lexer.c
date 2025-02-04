@@ -1,0 +1,312 @@
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "lexer.h"
+
+Lexer lexer_create(char *path, char *source, size_t source_length) {
+	return (Lexer) {
+		.source = source,
+		.source_length = source_length,
+		.position = 0,
+		.path = path,
+		.row = 1,
+		.column = 1,
+		.has_cached = false
+	};
+}
+
+static bool is_alphabetical(char character) {
+	return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
+}
+
+static bool is_numeric(char character) {
+	return (character >= '0' && character <= '9');
+}
+
+static bool is_alphanumeric(char character) {
+	return is_alphabetical(character) || is_numeric(character);
+}
+
+static bool is_whitespace(char character) {
+	return character == ' ' || character == '\n' || character == '\t';
+}
+
+static Token_Data create_token(Token_Kind kind, Lexer *lexer) {
+	return (Token_Data) { .kind = kind, .location = { .path = lexer->path, .row = lexer->row, .column = lexer->column - 1 } };
+}
+
+static char *extract_string(char *source, size_t start, size_t end) {
+	size_t length = end - start;
+	char *string = malloc(length + 1);
+	string[length] = '\0';
+	memcpy(string, source + start, length);
+	return string;
+}
+
+static size_t extract_integer(char *source, size_t start, size_t end) {
+	char *extracted = extract_string(source, start, end);
+	return atoll(extracted);
+}
+
+static void increment_position(Lexer *lexer) {
+	lexer->position++;
+	lexer->column++;
+}
+
+static bool is_keyword(char *identifier) {
+	if (strcmp(identifier, "fn") == 0) return true;
+	else if (strcmp(identifier, "def") == 0) return true;
+	else if (strcmp(identifier, "return") == 0) return true;
+	else if (strcmp(identifier, "extern") == 0) return true;
+	else if (strcmp(identifier, "var") == 0) return true;
+	else if (strcmp(identifier, "if") == 0) return true;
+	else if (strcmp(identifier, "else") == 0) return true;
+	else if (strcmp(identifier, "static") == 0) return true;
+	else if (strcmp(identifier, "mod") == 0) return true;
+	else return false;
+}
+
+Token_Data lexer_next(Lexer *lexer, bool advance) {
+	if (lexer->has_cached) {
+		lexer->has_cached = !advance;
+		return lexer->cached_token;
+	}
+	
+	if (lexer->position == lexer->source_length) {
+		return create_token(END_OF_FILE, lexer);
+	}
+
+	while (is_whitespace(lexer->source[lexer->position])) {
+		if (lexer->source[lexer->position] == '\n') {
+			lexer->row++;
+			lexer->column = 0;
+		}
+
+		increment_position(lexer);
+
+		if (lexer->position == lexer->source_length) {
+			return create_token(END_OF_FILE, lexer);
+		}
+	}
+
+	Token_Data result = {};
+	char character = lexer->source[lexer->position];
+	increment_position(lexer);
+	switch (character) {
+		case ':':
+			if (lexer->source[lexer->position] == ':') {
+				result = create_token(COLON_COLON, lexer);
+				increment_position(lexer);
+				break;
+			}
+			result = create_token(COLON, lexer);
+			break;
+		case ';':
+			result = create_token(SEMICOLON, lexer);
+			break;
+		case ',':
+			result = create_token(COMMA, lexer);
+			break;
+		case '=':
+			if (lexer->source[lexer->position] == '=') {
+				result = create_token(EQUAL_EQUALS, lexer);
+				increment_position(lexer);
+				break;
+			}
+			result = create_token(EQUALS, lexer);
+			break;
+		case '*':
+			result = create_token(ASTERISK, lexer);
+			break;
+		case '(':
+			if (lexer->source[lexer->position] == '<') {
+				result = create_token(OPEN_PARENTHESIS_LESS, lexer);
+				increment_position(lexer);
+				break;
+			}
+			result = create_token(OPEN_PARENTHESIS, lexer);
+			break;
+		case ')':
+			result = create_token(CLOSED_PARENTHESIS, lexer);
+			break;
+		case '{':
+			result = create_token(OPEN_CURLY_BRACE, lexer);
+			break;
+		case '}':
+			result = create_token(CLOSED_CURLY_BRACE, lexer);
+			break;
+		case '[':
+			result = create_token(OPEN_BRACE, lexer);
+			break;
+		case ']':
+			result = create_token(CLOSED_BRACE, lexer);
+			break;
+		case '<':
+			result = create_token(LESS, lexer);
+			break;
+		case '>':
+			if (lexer->source[lexer->position] == ')') {
+				result = create_token(GREATER_CLOSED_PARENTHESIS, lexer);
+				increment_position(lexer);
+				break;
+			}
+			result = create_token(GREATER, lexer);
+			break;
+		case '.': {
+			if (lexer->source[lexer->position] == '.') {
+				if (lexer->source[lexer->position] == '.') {
+					result = create_token(PERIOD_PERIOD_PERIOD, lexer);
+					increment_position(lexer);
+					increment_position(lexer);
+					break;
+				}
+
+				increment_position(lexer);
+				result = create_token(PERIOD_PERIOD, lexer);
+				break;
+			}
+			result = create_token(PERIOD, lexer);
+			break;
+		}
+		case '-':
+			if (lexer->source[lexer->position] == '>') {
+				result = create_token(MINUS_GREATER, lexer);
+				increment_position(lexer);
+				break;
+			}
+			result = create_token(MINUS, lexer);
+			break;
+		case '"': {
+			size_t string_start = lexer->position;
+			size_t string_start_row = lexer->row;
+			size_t string_start_column = lexer->column - 1;
+
+			while (lexer->source[lexer->position] != '"') {
+				increment_position(lexer);
+			}
+			increment_position(lexer);
+
+			size_t string_end = lexer->position - 1;
+
+			result = (Token_Data) {
+				.kind = STRING,
+				.string = extract_string(lexer->source, string_start, string_end),
+				.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+			};
+			break;
+		}
+		default: {
+			if (is_alphabetical(character)) {
+				size_t string_start = lexer->position - 1;
+				size_t string_start_row = lexer->row;
+				size_t string_start_column = lexer->column - 1;
+
+				while (is_alphanumeric(lexer->source[lexer->position])) {
+					increment_position(lexer);
+				}
+
+				size_t string_end = lexer->position;
+				char *extracted_string = extract_string(lexer->source, string_start, string_end);
+
+				Token_Kind kind = is_keyword(extracted_string) ? KEYWORD : IDENTIFIER;
+
+				result = (Token_Data) {
+					.kind = kind,
+					.string = extracted_string,
+					.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+				};
+				break;
+			} else if (is_numeric(character)) {
+				size_t number_start = lexer->position - 1;
+				size_t number_start_row = lexer->row;
+				size_t number_start_column = lexer->column - 1;
+
+				while (is_numeric(lexer->source[lexer->position])) {
+					increment_position(lexer);
+				}
+
+				size_t number_end = lexer->position;
+				size_t extracted_integer = extract_integer(lexer->source, number_start, number_end);
+
+				result = (Token_Data) {
+					.kind = INTEGER,
+					.integer = extracted_integer,
+					.location = { .path = lexer->path, .row = number_start_row, .column = number_start_column }
+				};
+				break;
+			} else {
+				result = create_token(INVALID, lexer);
+				break;
+			}
+		}
+	}
+
+	if (!advance) {
+		lexer->cached_token = result;
+		lexer->has_cached = true;
+	}
+
+	return result;
+}
+
+char *token_to_string(Token_Kind kind) {
+	switch (kind) {
+		case IDENTIFIER:
+			return "Identifier";
+		case KEYWORD:
+			return "Keyword";
+		case STRING:
+			return "String";
+		case INTEGER:
+			return "Integer";
+		case COLON:
+			return ":";
+		case SEMICOLON:
+			return ";";
+		case COMMA:
+			return ",";
+		case EQUALS:
+			return "=";
+		case ASTERISK:
+			return "*";
+		case LESS:
+			return "<";
+		case GREATER:
+			return ">";
+		case OPEN_PARENTHESIS_LESS:
+			return "(<";
+		case GREATER_CLOSED_PARENTHESIS:
+			return ">)";
+		case PERIOD:
+			return ".";
+		case PERIOD_PERIOD:
+			return "..";
+		case PERIOD_PERIOD_PERIOD:
+			return "...";
+		case MINUS_GREATER:
+			return "->";
+		case EQUAL_EQUALS:
+			return "==";
+		case COLON_COLON:
+			return "::";
+		case OPEN_PARENTHESIS:
+			return "(";
+		case CLOSED_PARENTHESIS:
+			return ")";
+		case OPEN_CURLY_BRACE:
+			return "{";
+		case CLOSED_CURLY_BRACE:
+			return "}";
+		case OPEN_BRACE:
+			return "[";
+		case CLOSED_BRACE:
+			return "]";
+		case END_OF_FILE:
+			return "Eof";
+		case INVALID:
+			return "Invalid";
+		default:
+			return "Unimplemented";
+	}
+}

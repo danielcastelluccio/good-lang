@@ -1,0 +1,47 @@
+def extern printf = fn(s: *[]byte, ...) ->;
+
+def foo<T: type> = fn(t: T) -> {
+	def b<U: type> = fn(u: T) -> {
+		if static T == uint {
+			printf("%i\n\0", u);
+		} else if static T == *[]byte {
+			printf("%s\n\0", u);
+		};
+		return;
+	};
+
+	b(<uint>)(t);
+	return;
+};
+
+def X<T: type> = mod {
+	def foo2<U: type> = fn() -> {
+		if static T == uint {
+			if static U == uint {
+				printf("T: uint, U: uint\n\0");
+			} else if static U == *[]byte {
+				printf("T: uint, U: string\n\0");
+			};
+		} else if static T == *[]byte {
+			if static U == uint {
+				printf("T: string, U: uint\n\0");
+			} else if static U == *[]byte {
+				printf("T: string, U: string\n\0");
+			};
+		};
+		return;
+	};
+};
+
+def extern main = fn() -> {
+	foo(<uint>)(5);
+	foo(<*[]byte>)("this is so cool\0");
+
+	def XString = X(<*[]byte>);
+	XString::foo2(<uint>)();
+
+	def XUint = X(<uint>);
+	XUint::foo2(<uint>)();
+
+	return;
+};
