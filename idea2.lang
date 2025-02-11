@@ -1,15 +1,34 @@
-def A<T: type> = T;
-
-def foo = fn<T: type>(a: A(<T>)) -> {
+def Tagged_Union<Tag_Type: type, Union: type> = struct {
+	tag: Tag_Type,
+	data: Union
 };
 
-def B = A(<uint>);
+def Node = Tagged_Union(<uint, union {
+	a: uint,
+	b: uint
+}>);
 
-var x: A(<uint>); // Value { uint, .node = A(<uint>) }
-foo(x);
-
-var y: B; // Value { uint, .node = B }
-foo(b);
-
-def foo<T: type> = fn(a: T) -> {
+def slice<T: type> = struct {
+	len: uint,
+	ptr: *[]T,
 };
+
+def slice_create<T: type, U: type> = fn(array: [U]T) -> {
+	
+};
+
+def switch_test = fn(check: Ast_Node, branches: slice(<Ast_Node>)) -> {
+	Node *node = new(.{ .switch_ = .{ .check = check, .branches = branches } });
+};
+
+#insert switch_test(#ast x.tag, slice_create([_]Ast_Node{#ast print("is an a")}));
+
+fn expand_switch = fn(switch_node: Ast_Node) -> {
+
+};
+
+var x: Node;
+expand_switch(switch x {
+	a => |a| print("is an a with value ", a),
+	b => |b| print("is an b with value ", a),
+});

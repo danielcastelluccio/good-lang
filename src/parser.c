@@ -135,6 +135,7 @@ static Node *parse_define(Lexer *lexer) {
 
 	Token_Data identifier = consume_check(lexer, IDENTIFIER);
 
+	Node *constraint = NULL;
 	Generic_Argument *generics = NULL;
 	if (lexer_next(lexer, false).kind == LESS) {
 		consume_check(lexer, LESS);
@@ -154,6 +155,9 @@ static Node *parse_define(Lexer *lexer) {
 			if (token.kind == COMMA) {
 				lexer_next(lexer, true);
 			} else if (token.kind == GREATER) {
+			} else if (token.kind == SEMICOLON) {
+				consume_check(lexer, SEMICOLON);
+				constraint = parse_expression(lexer);
 			} else {
 				handle_token_error_no_expected(token);
 			}
@@ -171,6 +175,7 @@ static Node *parse_define(Lexer *lexer) {
 	define->define.expression = expression;
 	define->define.extern_ = extern_;
 	define->define.generics = generics;
+	define->define.generic_constraint = constraint;
 
 	return define;
 }

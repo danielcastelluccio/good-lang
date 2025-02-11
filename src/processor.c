@@ -109,10 +109,6 @@ typedef struct {
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics) {
 	Define_Node define = node->define;
 
-	if (generics == NULL && strcmp(define.identifier, "b") == 0) {
-		return (Process_Define_Result) {};
-	}
-
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
 		return (Process_Define_Result) {};
 	}
@@ -137,6 +133,14 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	
 	for (long int i = 0; i < arrlen(generics); i++) {
 		shput(arrlast(context->scopes).generic_bindings, define.generics[i].identifier, generics[i]);
+	}
+
+	if (define.generic_constraint != NULL) {
+		process_node(context, define.generic_constraint);
+		Value *result = evaluate(context, define.generic_constraint);
+		if (!result->boolean.value) {
+			return (Process_Define_Result) {};
+		}
 	}
 
 	process_node(context, define.expression);

@@ -92,6 +92,7 @@ typedef struct {
 	char *identifier;
 	Node *expression;
 	Generic_Argument *generics; // stb_ds
+	Node *generic_constraint;
 	bool extern_;
 } Define_Node;
 

@@ -16,10 +16,14 @@ def insert<T: type, U: type> = fn(map: *Hash_Map(<T, U>), t: T, u: U) -> {
 	
 };
 
-// Advantages: definitely can implement
-// Disadvantages: errors won't be obvious
 def insert<T: type> = fn(map: *T, t: key_type(T), u: value_type(T)) -> {
-	
+	assert(follows(T, Hash_Map(<void, void>)));
+};
+
+def key_type = fn(T: type): type -> type_info(T).struct_.items[0].type;
+
+def insert<T: type; follows(T, Hash_Map(<void, void>)) && foo(T)> = fn(map: *T, t: key_type(T), u: value_type(T)) -> {
+	run assert(follows(T, Hash_Map(<void, void>)));
 };
 
 def main = fn() {
@@ -105,6 +109,30 @@ def x = mod {
 
 def bar = fn() -> {
 	x::foo();
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def Map = struct<T: type, U: type> {
+};
+
+def StringMap = generic<U: type> Map(<String, U>);
+
+
+def put = fn<T: type; follows(T, Map)>(map: T, ) -> {
 };
 
 
