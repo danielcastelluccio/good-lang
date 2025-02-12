@@ -26,6 +26,9 @@ bool value_equal(Value *value1, Value *value2) {
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
 		}
+		case DEFINE_DATA_VALUE: {
+			return value_equal(value1->define_data.value, value2->define_data.value);
+		}
 		default:
 			assert(false);
 	}
@@ -44,9 +47,7 @@ Value *evaluate(Context *context, Node *node) {
 				function_value->function.body = function.body;
 			}
 
-			if (hmget(context->compile_only_function_nodes, node)) {
-				hmput(context->compile_only_functions, function_value, true);
-			}
+			function_value->function.compile_only = get_data(context, node)->function.compile_only;
 
 			function_value->function.generic_id = context->generic_id;
 

@@ -13,6 +13,7 @@ Value *value_new(Value_Tag tag) {
 
 Node_Data *node_data_new(Node_Kind kind) {
 	Node_Data *data = malloc(sizeof(Node_Data));
+	memset(data, 0, sizeof(Node_Data));
 	data->kind = kind;
 	return data;
 }
@@ -21,6 +22,7 @@ Value *get_type(Context *context, Node *node) {
 	Node_Types *node_types = hmget(context->node_types, context->generic_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
+		*node_types = NULL;
 		hmput(context->node_types, context->generic_id, node_types);
 	}
 
@@ -38,6 +40,7 @@ void set_type(Context *context, Node *node, Value *value) {
 	Node_Types *node_types = hmget(context->node_types, context->generic_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
+		*node_types = NULL;
 		hmput(context->node_types, context->generic_id, node_types);
 	}
 	hmput(*node_types, node, value);
@@ -47,6 +50,7 @@ Node_Data *get_data(Context *context, Node *node) {
 	Node_Datas *node_datas = hmget(context->node_datas, context->generic_id);
 	if (node_datas == NULL) {
 		node_datas = malloc(sizeof(Node_Datas *));
+		*node_datas = NULL;
 		hmput(context->node_datas, context->generic_id, node_datas);
 	}
 
@@ -64,6 +68,7 @@ void set_data(Context *context, Node *node, Node_Data *value) {
 	Node_Datas *node_datas = hmget(context->node_datas, context->generic_id);
 	if (node_datas == NULL) {
 		node_datas = malloc(sizeof(Node_Datas *));
+		*node_datas = NULL;
 		hmput(context->node_datas, context->generic_id, node_datas);
 	}
 	hmput(*node_datas, node, value);
@@ -83,4 +88,11 @@ void reset_node(Context *context, Node *node) {
 		hmput(context->node_datas, context->generic_id, node_datas);
 	}
 	(void) hmdel(*node_datas, node);
+}
+
+Value *strip_define_data(Value *value) {
+	while (value->tag == DEFINE_DATA_VALUE) {
+		value = value->define_data.value;
+	}
+	return value;
 }

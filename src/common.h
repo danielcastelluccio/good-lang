@@ -26,6 +26,7 @@ typedef enum {
 	BOOLEAN_VALUE,
 	MODULE_VALUE,
 	MODULE_TYPE_VALUE,
+	DEFINE_DATA_VALUE,
 	NONE_VALUE,
 	INTERNAL_VALUE
 } Value_Tag;
@@ -34,6 +35,7 @@ typedef struct {
 	Value *type;
 	Node *body;
 	size_t generic_id;
+	bool compile_only;
 } Function_Value;
 
 typedef struct {
@@ -70,9 +72,10 @@ typedef struct {
 } Internal_Value;
 
 typedef struct {
-	Node *node;
-	Generic_Binding *bindings; // stb_ds
-} Value_Generic;
+	Node *define_node;
+	Generic_Binding *bindings;
+	Value *value;
+} Define_Data_Value;
 
 struct Value {
 	Value_Tag tag;
@@ -84,8 +87,8 @@ struct Value {
 		Array_Type_Value array_type;
 		Boolean_Value boolean;
 		Internal_Value internal;
+		Define_Data_Value define_data;
 	};
-	Value_Generic *generics;
 };
 
 Value *value_new(Value_Tag tag);
@@ -125,8 +128,24 @@ typedef struct {
 } If_Node_Data;
 
 typedef struct {
-	Value *value;
+	Generic_Binding *generics;
+	Generic_Binding value;
+} Generic_Value;
+
+typedef struct {
+	enum {
+		DEFINE_SINGLE,
+		DEFINE_GENERIC
+	} kind;
+	union {
+		Generic_Binding value;
+		Generic_Value *generic_values;
+	};
 } Define_Data;
+
+typedef struct {
+	bool compile_only;
+} Function_Data;
 
 typedef struct {
 	Value *value;
@@ -146,6 +165,7 @@ typedef struct {
 		Call_Node_Data call;
 		If_Node_Data if_;
 		Define_Data define;
+		Function_Data function;
 		Function_Type_Data function_type;
 		Module_Access_Data module_access;
 	};
@@ -158,13 +178,9 @@ typedef struct { Node *key; Value *value; } *Node_Types;
 typedef struct { Node *key; Node_Data *value; } *Node_Datas;
 
 typedef struct {
-	Node *root;
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
-	struct { Node *key; bool value; } *compile_only_function_nodes; // stb_ds
-	struct { Value *key; bool value; } *compile_only_functions; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
 	Node *current_function;
-	Value *current_value;
 	Scope *scopes; // stb_ds
 	bool compile_only;
 	Value *wanted_type;
@@ -180,5 +196,7 @@ Node_Data *get_data(Context *context, Node *node);
 void set_data(Context *context, Node *node, Node_Data *value);
 
 void reset_node(Context *context, Node *node);
+
+Value *strip_define_data(Value *value);
 
 #endif

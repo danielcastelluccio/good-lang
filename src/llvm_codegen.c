@@ -19,7 +19,7 @@ typedef struct {
 	LLVMBuilderRef llvm_builder;
 	Context context;
 	struct { Value *key; LLVMValueRef value; } *generated_cache; // stb_ds
-	struct { Node *key; LLVMValueRef value; } *variables; // stb_ds
+	struct { Node_Data *key; LLVMValueRef value; } *variables; // stb_ds
 	LLVMValueRef *function_arguments; // stb_ds
 	LLVMValueRef current_function;
 } State;
@@ -65,7 +65,10 @@ static LLVMTypeRef create_llvm_type(Value *value) {
 			else assert(false);
 			break;
 		}
-
+		case DEFINE_DATA_VALUE: {
+			Define_Data_Value define_data = value->define_data;
+			return create_llvm_type(define_data.value);
+		}
 		default:
 			assert(false);
 	}
@@ -80,14 +83,15 @@ static void generate_define(Node *node, State *state) {
 		return;
 	}
 
-	Value *value = data->define.value;
-	if (value == NULL) {
+	if (data->define.kind != DEFINE_SINGLE) {
 		return;
 	}
 
-	if (value->tag != FUNCTION_VALUE) {
+	Value *value = data->define.value.binding;
+	if (value == NULL) {
 		return;
 	}
+	value = strip_define_data(value);
 
 	LLVMValueRef expression_llvm_value = generate_value(value, state);
 	if (define.extern_) {
@@ -132,8 +136,9 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 	switch (identifier_data->identifier.kind) {
 		case IDENTIFIER_VARIABLE: {
 			Node *variable = get_data(&state->context, node)->identifier.variable_definition;
-			Value *variable_type = get_data(&state->context, variable)->variable.type;
-			LLVMValueRef variable_llvm_value = hmget(state->variables, variable);
+			Node_Data *variable_data = get_data(&state->context, variable);
+			Value *variable_type = variable_data->variable.type;
+			LLVMValueRef variable_llvm_value = hmget(state->variables, variable_data);
 			LLVMValueRef loaded_llvm_value = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(variable_type), variable_llvm_value, "");
 			return loaded_llvm_value;
 		}
@@ -142,7 +147,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			return state->function_arguments[argument];
 		}
 		case IDENTIFIER_VALUE: {
-			return generate_value(identifier_data->identifier.value, state);
+			return generate_value(strip_define_data(identifier_data->identifier.value), state);
 		}
 		default:
 			assert(false);
@@ -158,7 +163,7 @@ static LLVMValueRef generate_string(Node *node, State *state) {
 	LLVMValueRef global = LLVMBuildGlobalString(state->llvm_builder, string_value, "");
 	LLVMValueRef llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8Type(), 0), "");
 
-	return llvm_value; 
+	return llvm_value;
 }
 
 static LLVMValueRef generate_number(Node *node, State *state) {
@@ -191,7 +196,9 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 		LLVMBuildStore(state->llvm_builder, llvm_value, allocated_variable_llvm);
 	}
 
-	hmput(state->variables, node, allocated_variable_llvm);
+	Node_Data *node_data = get_data(&state->context, node);
+
+	hmput(state->variables, node_data, allocated_variable_llvm);
 
 	return NULL;
 }
@@ -258,7 +265,7 @@ static LLVMValueRef generate_function(Value *value, State *state) {
 	size_t saved_generic_id = state->context.generic_id;
 	state->context.generic_id = function.generic_id;
 
-	if (hmget(state->context.compile_only_functions, value)) {
+	if (function.compile_only) {
 		return NULL;
 	}
 
@@ -288,6 +295,8 @@ static LLVMValueRef generate_function(Value *value, State *state) {
 	return llvm_function;
 }
 
+int printf(const char *, ...);
+
 static LLVMValueRef generate_value(Value *value, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -298,6 +307,8 @@ static LLVMValueRef generate_value(Value *value, State *state) {
 	switch (value->tag) {
 		case FUNCTION_VALUE:
 			result = generate_function(value, state);
+			break;
+		case MODULE_VALUE:
 			break;
 		default:
 			assert(false);

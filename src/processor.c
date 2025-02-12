@@ -124,13 +124,14 @@ static void pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 				}
 			}
 
-			for (long int j = 0; j < arrlen(value->generics); j++) {
+			while (value->tag == DEFINE_DATA_VALUE) {
 				for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
 					Node *define_node = lookup_define(context, node->identifier.value).node;
-					if (value->generics[j].node == define_node) {
-						pattern_match(node->identifier.generics[i], value->generics[j].bindings[i].binding, context, generics, match_result);
+					if (value->define_data.define_node == define_node) {
+						pattern_match(node->identifier.generics[i], value->define_data.bindings[i].binding, context, generics, match_result);
 					}
 				}
+				value = value->define_data.value;
 			}
 			break;
 		}
@@ -172,12 +173,30 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		}
 	}
 
-	Value* cached_type = get_type(context, node);
-	if (cached_type != NULL) {
-		return (Process_Define_Result) {
-			.value = get_data(context, node)->define.value,
-			.type = cached_type
-		};
+	Node_Data *cached_data = get_data(context, node);
+	if (cached_data != NULL) {
+		if (cached_data->define.kind == DEFINE_SINGLE) {
+			return (Process_Define_Result) {
+				.value = cached_data->define.value.binding,
+				.type = cached_data->define.value.type
+			};
+		} else if (cached_data->define.kind == DEFINE_GENERIC) {
+			for (long int i = 0; i < arrlen(cached_data->define.generic_values); i++) {
+				if (arrlen(generics) == arrlen(cached_data->define.generic_values[i].generics)) {
+					for (long int j = 0; j < arrlen(cached_data->define.generic_values[i].generics); j++) {
+						if (value_equal(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
+							Generic_Binding binding = cached_data->define.generic_values[i].value;
+							return (Process_Define_Result) {
+								.value = binding.binding,
+								.type = binding.type
+							};
+						}
+					}
+				}
+			}
+		} else {
+			assert(false);
+		}
 	}
 
 	Value **saved_call_argument_types = context->call_argument_types;
@@ -199,7 +218,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 
 	if (define.generic_constraint != NULL) {
 		process_node(context, define.generic_constraint);
-		Value *result = evaluate(context, define.generic_constraint);
+		Value *result = strip_define_data(evaluate(context, define.generic_constraint));
 		if (!result->boolean.value) {
 			return (Process_Define_Result) {};
 		}
@@ -209,11 +228,10 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	Value *type = get_type(context, define.expression);
 	Value *value = evaluate(context, define.expression);
 
-	Value_Generic value_generic = {
-		.node = node,
-		.bindings = generics
-	};
-	arrpush(value->generics, value_generic);
+	Value *wrapped_value = value_new(DEFINE_DATA_VALUE);
+	wrapped_value->define_data.value = value;
+	wrapped_value->define_data.define_node = node;
+	wrapped_value->define_data.bindings = generics;
 
 	context->generic_id = saved_generic_id;
 	(void) arrpop(context->scopes);
@@ -221,15 +239,34 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 
 	context->call_argument_types = saved_call_argument_types;
 
-	Node_Data *data = node_data_new(DEFINE_NODE);
-	if (arrlen(generics) == 0) {
-		data->define.value = value;
-		set_type(context, node, type);
+	Generic_Binding binding = {
+		.binding = wrapped_value,
+		.type = type
+	};
+
+	Node_Data *data;
+	if (cached_data != NULL) {
+		data = cached_data;
+	} else {
+		data = node_data_new(DEFINE_NODE);
+		set_data(context, node, data);
 	}
-	set_data(context, node, data);
+
+	if (arrlen(generics) == 0) {
+		data->define.kind = DEFINE_SINGLE;
+		data->define.value = binding;
+	} else {
+		data->define.kind = DEFINE_GENERIC;
+		Generic_Value generic_value = {
+			.value = binding,
+			.generics = generics
+		};
+
+		arrpush(data->define.generic_values, generic_value);
+	}
 
 	return (Process_Define_Result) {
-		.value = value,
+		.value = wrapped_value,
 		.type = type
 	};
 }
@@ -305,7 +342,7 @@ static void process_identifier(Context *context, Node *node) {
 	Value *type = NULL;
 	if (identifier.module != NULL) {
 		process_node(context, identifier.module);
-		Value *module_value = evaluate(context, identifier.module);
+		Value *module_value = strip_define_data(evaluate(context, identifier.module));
 		for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
 			Node *statement = module_value->module.body->block.statements[i];
 			if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
@@ -492,7 +529,7 @@ static void process_if(Context *context, Node *node) {
 
 	process_node(context, if_.condition);
 	if (if_.static_) {
-		Value *evaluated = evaluate(context, if_.condition);
+		Value *evaluated = strip_define_data(evaluate(context, if_.condition));
 
 		Node_Data *data = node_data_new(IF_NODE);
 		data->if_.static_condition = evaluated->boolean.value;
@@ -535,9 +572,11 @@ static void process_function(Context *context, Node *node) {
 	}
 	context->current_function = current_function_saved;
 
+	Node_Data *data = node_data_new(FUNCTION_NODE);
 	if (context->compile_only) {
-		hmput(context->compile_only_function_nodes, node, true);
+		data->function.compile_only = true;
 	}
+	set_data(context, node, data);
 
 	context->compile_only = compile_only_parent;
 }
@@ -663,9 +702,7 @@ void process_node(Context *context, Node *node) {
 
 Context process(Node *root) {
 	Context context = {
-		.root = root,
 		.current_function = NULL,
-		.current_value = value_new(NONE_VALUE),
 		.call_argument_types = NULL
 	};
 
