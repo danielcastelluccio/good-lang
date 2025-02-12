@@ -33,7 +33,7 @@ def X<T: type> = mod {
 	};
 };
 
-def bar = fn<T: type>(t: T) -> {
+def bar<T: type> = fn(t: T) -> {
 	return;
 };
 
