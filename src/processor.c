@@ -108,11 +108,11 @@ typedef struct {
 
 typedef struct { char *key; Value *value; } *Pattern_Match_Result;
 
-static void pattern_match(Node *node, Value *value, Generic_Argument *generics, Pattern_Match_Result *match_result) {
+static void pattern_match(Node *node, Value *value, Context *context, Generic_Argument *generics, Pattern_Match_Result *match_result) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (value->tag == POINTER_TYPE_VALUE) {
-				pattern_match(node->pointer.inner, value->pointer_type.inner, generics, match_result);
+				pattern_match(node->pointer.inner, value->pointer_type.inner, context, generics, match_result);
 			}
 			break;
 		}
@@ -121,6 +121,15 @@ static void pattern_match(Node *node, Value *value, Generic_Argument *generics, 
 				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
 					shput(*match_result, generics[i].identifier, value);
 					break;
+				}
+			}
+
+			for (long int j = 0; j < arrlen(value->generics); j++) {
+				for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
+					Node *define_node = lookup_define(context, node->identifier.value).node;
+					if (value->generics[j].node == define_node) {
+						pattern_match(node->identifier.generics[i], value->generics[j].bindings[i].binding, context, generics, match_result);
+					}
 				}
 			}
 			break;
@@ -142,7 +151,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 				for (long int i = 0; i < arrlen(function_type.arguments); i++) {
 					Node *argument = function_type.arguments[i].type;
 					Value *argument_value = context->call_argument_types[i];
-					pattern_match(argument, argument_value, define.generics, &result);
+					pattern_match(argument, argument_value, context, define.generics, &result);
 				}
 
 				generics = NULL;
@@ -199,6 +208,12 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	process_node(context, define.expression);
 	Value *type = get_type(context, define.expression);
 	Value *value = evaluate(context, define.expression);
+
+	Value_Generic value_generic = {
+		.node = node,
+		.bindings = generics
+	};
+	arrpush(value->generics, value_generic);
 
 	context->generic_id = saved_generic_id;
 	(void) arrpop(context->scopes);
@@ -450,14 +465,18 @@ static void process_variable(Context *context, Node *node) {
 
 	Value *type = NULL;
 	if (variable.type != NULL) {
+		process_node(context, variable.type);
 		type = evaluate(context, variable.type);
 	}
 
-	process_node(context, variable.value);
+	if (variable.value != NULL) {
+		process_node(context, variable.value);
+	}
+
 	Value *value_type = get_type(context, variable.value);
 	if (type == NULL) {
 		type = value_type;
-	} else {
+	} else if (value_type != NULL) {
 		if (!value_equal(type, value_type)) {
 			handle_type_error(node, type, value_type);
 		}

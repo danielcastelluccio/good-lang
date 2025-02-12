@@ -197,8 +197,10 @@ static Node *parse_variable(Lexer *lexer) {
 		variable->variable.type = parse_expression(lexer);
 	}
 
-	consume_check(lexer, EQUALS);
-	variable->variable.value = parse_expression(lexer);
+	if (lexer_next(lexer, false).kind == EQUALS) {
+		consume_check(lexer, EQUALS);
+		variable->variable.value = parse_expression(lexer);
+	}
 	return variable;
 }
 

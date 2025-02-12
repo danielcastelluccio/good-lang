@@ -6,6 +6,7 @@
 
 Value *value_new(Value_Tag tag) {
 	Value *value = malloc(sizeof(Value));
+	memset(value, 0, sizeof(Value));
 	value->tag = tag;
 	return value;
 }

@@ -69,6 +69,11 @@ typedef struct {
 	char *identifier;
 } Internal_Value;
 
+typedef struct {
+	Node *node;
+	Generic_Binding *bindings; // stb_ds
+} Value_Generic;
+
 struct Value {
 	Value_Tag tag;
 	union {
@@ -80,6 +85,7 @@ struct Value {
 		Boolean_Value boolean;
 		Internal_Value internal;
 	};
+	Value_Generic *generics;
 };
 
 Value *value_new(Value_Tag tag);

@@ -132,7 +132,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 	switch (identifier_data->identifier.kind) {
 		case IDENTIFIER_VARIABLE: {
 			Node *variable = get_data(&state->context, node)->identifier.variable_definition;
-			Value *variable_type = get_data(&state->context, node)->variable.type;
+			Value *variable_type = get_data(&state->context, variable)->variable.type;
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable);
 			LLVMValueRef loaded_llvm_value = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(variable_type), variable_llvm_value, "");
 			return loaded_llvm_value;
@@ -185,9 +185,11 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 	assert(node->kind == VARIABLE_NODE);
 	Variable_Node variable = node->variable;
 
-	LLVMValueRef llvm_value = generate_node(variable.value, state);
 	LLVMValueRef allocated_variable_llvm = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(get_data(&state->context, node)->variable.type), "");
-	LLVMBuildStore(state->llvm_builder, llvm_value, allocated_variable_llvm);
+	if (variable.value != NULL) {
+		LLVMValueRef llvm_value = generate_node(variable.value, state);
+		LLVMBuildStore(state->llvm_builder, llvm_value, allocated_variable_llvm);
+	}
 
 	hmput(state->variables, node, allocated_variable_llvm);
 
