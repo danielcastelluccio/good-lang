@@ -33,13 +33,13 @@ def X<T: type> = mod {
 	};
 };
 
-def bar<T: type> = fn(t: T) -> {
+def bar = fn<T: type>(t: T) -> {
 	return;
 };
 
 def extern main = fn() -> {
-	foo(<uint>)(5);
-	foo(<*[]byte>)("this is so cool\0");
+	foo(5);
+	foo("this is so cool\0");
 
 	def XString = X(<*[]byte>);
 	XString::foo2(<uint>)();

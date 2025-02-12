@@ -88,7 +88,7 @@ static void handle_type_error(Node *node, Value *wanted, Value *given) {
 	print_type(wanted, wanted_string);
 	char given_string[64] = {};
 	print_type(given, given_string);
-	handle_semantic_error(node->location, "Expected '%s', but got '%s'", wanted_string, given_string); 
+	handle_semantic_error(node->location, "Expected '%s', but got '%s'", wanted_string, given_string);
 }
 
 static void process_block(Context *context, Node *node) {
@@ -106,11 +106,61 @@ typedef struct {
 	Value *type;
 } Process_Define_Result;
 
+typedef struct { char *key; Value *value; } *Pattern_Match_Result;
+
+static void pattern_match(Node *node, Value *value, Generic_Argument *generics, Pattern_Match_Result *match_result) {
+	switch (node->kind) {
+		case POINTER_NODE: {
+			if (value->tag == POINTER_TYPE_VALUE) {
+				pattern_match(node->pointer.inner, value->pointer_type.inner, generics, match_result);
+			}
+			break;
+		}
+		case IDENTIFIER_NODE: {
+			for (long int i = 0; i < arrlen(generics); i++) {
+				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
+					shput(*match_result, generics[i].identifier, value);
+					break;
+				}
+			}
+			break;
+		}
+		default:
+			break;
+	}
+}
+
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics) {
 	Define_Node define = node->define;
 
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
-		return (Process_Define_Result) {};
+		if (define.expression->kind == FUNCTION_NODE) {
+			Function_Type_Node function_type = define.expression->function.function_type->function_type;
+			if (context->call_argument_types != NULL) {
+				Pattern_Match_Result result = NULL;
+				assert(arrlen(context->call_argument_types) <= arrlen(function_type.arguments));
+				for (long int i = 0; i < arrlen(function_type.arguments); i++) {
+					Node *argument = function_type.arguments[i].type;
+					Value *argument_value = context->call_argument_types[i];
+					pattern_match(argument, argument_value, define.generics, &result);
+				}
+
+				generics = NULL;
+				for (long int i = 0; i < arrlen(define.generics); i++) {
+					Value *type_type = value_new(INTERNAL_VALUE);
+					type_type->internal.identifier = "type";
+					Generic_Binding binding = {
+						.type = type_type, // not always true if we are matching for array len?
+						.binding = shget(result, define.generics[i].identifier)
+					};
+					arrpush(generics, binding);
+				}
+			}
+		}
+
+		if (arrlen(generics) == 0) {
+			return (Process_Define_Result) {};
+		}
 	}
 
 	Value* cached_type = get_type(context, node);
@@ -120,6 +170,9 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 			.type = cached_type
 		};
 	}
+
+	Value **saved_call_argument_types = context->call_argument_types;
+	context->call_argument_types = NULL;
 
 	Scope *saved_scopes = context->scopes;
 	if (scopes != NULL) context->scopes = scopes;
@@ -151,6 +204,8 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	(void) arrpop(context->scopes);
 	if (scopes != NULL) context->scopes = saved_scopes;
 
+	context->call_argument_types = saved_call_argument_types;
+
 	Node_Data *data = node_data_new(DEFINE_NODE);
 	if (arrlen(generics) == 0) {
 		data->define.value = value;
@@ -167,13 +222,27 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 static void process_call(Context *context, Node *node) {
 	Call_Node call = node->call;
 
+	Value **argument_types = NULL;
+	for (long int i = 0; i < arrlen(call.arguments); i++) {
+		context->wanted_type = NULL;
+		process_node(context, call.arguments[i]);
+		Value *type = get_type(context, call.arguments[i]);;
+		arrpush(argument_types, type);
+
+		reset_node(context, node);
+	}
+	Value **saved_call_argument_types = context->call_argument_types;
+	context->call_argument_types = argument_types;
+
 	process_node(context, call.function);
 	Value *function_type = get_type(context, call.function);
 	if (function_type->tag != FUNCTION_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type(function_type, given_string);
-		handle_semantic_error(node->location, "Expected function pointer, but got '%s'", given_string); 
+		handle_semantic_error(node->location, "Expected function pointer, but got '%s'", given_string);
 	}
+
+	context->call_argument_types = saved_call_argument_types;
 
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
 		Value *wanted_type = NULL;
@@ -228,6 +297,10 @@ static void process_identifier(Context *context, Node *node) {
 				Process_Define_Result result = process_define(context, statement, module_value->module.scopes, generics);
 				type = result.type;
 				value = result.value;
+
+				if (type == NULL) {
+					handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
+				}
 				break;
 			}
 		}
@@ -253,6 +326,10 @@ static void process_identifier(Context *context, Node *node) {
 			Process_Define_Result result = process_define(context, lookup_define_result.node, new_scopes, generics);
 			type = result.type;
 			value = result.value;
+
+			if (type == NULL) {
+				handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
+			}
 		}
 
 		if (context->current_function != NULL) {
@@ -284,7 +361,7 @@ static void process_identifier(Context *context, Node *node) {
 	}
 
 	if (type == NULL) {
-		handle_semantic_error(node->location, "Identifier '%s' not found", identifier.value); 
+		handle_semantic_error(node->location, "Identifier '%s' not found", identifier.value);
 	}
 
 	if (value != NULL) {
@@ -305,30 +382,6 @@ static void process_module(Context *context, Node *node) {
 	process_node(context, module.body);
 	set_type(context, node, value_new(MODULE_TYPE_VALUE));
 }
-
-// static void process_module_access(Context *context, Node *node) {
-// 	Module_Access_Node module_access = node->module_access;
-// 	
-// 	process_node(context, module_access.module);
-// 	Value *module_value = evaluate(context, module_access.module);
-// 
-// 	Value *type = NULL;
-// 	Value *value = NULL;
-// 	for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
-// 		Node *statement = module_value->module.body->block.statements[i];
-// 		if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, module_access.identifier) == 0) {
-// 			Process_Define_Result result = process_define(context, statement, module_value->module.scopes, NULL);
-// 			type = result.type;
-// 			value = result.value;
-// 		}
-// 	}
-// 
-// 	Node_Data *data = node_data_new(MODULE_ACCESS_NODE);
-// 	data->module_access.value = value;
-// 
-// 	set_data(context, node, data);
-// 	set_type(context, node, type);
-// }
 
 static void process_string(Context *context, Node *node) {
 	String_Node string = node->string;
@@ -593,7 +646,8 @@ Context process(Node *root) {
 	Context context = {
 		.root = root,
 		.current_function = NULL,
-		.current_value = value_new(NONE_VALUE)
+		.current_value = value_new(NONE_VALUE),
+		.call_argument_types = NULL
 	};
 
 	process_node(&context, root);

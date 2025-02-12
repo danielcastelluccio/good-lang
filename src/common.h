@@ -162,6 +162,7 @@ typedef struct {
 	Scope *scopes; // stb_ds
 	bool compile_only;
 	Value *wanted_type;
+	Value **call_argument_types;
 	size_t generic_id;
 	size_t generic_id_counter;
 } Context;
@@ -171,5 +172,7 @@ void set_type(Context *context, Node *node, Value *value);
 
 Node_Data *get_data(Context *context, Node *node);
 void set_data(Context *context, Node *node, Node_Data *value);
+
+void reset_node(Context *context, Node *node);
 
 #endif

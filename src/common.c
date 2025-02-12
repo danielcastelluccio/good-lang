@@ -67,3 +67,19 @@ void set_data(Context *context, Node *node, Node_Data *value) {
 	}
 	hmput(*node_datas, node, value);
 }
+
+void reset_node(Context *context, Node *node) {
+	Node_Types *node_types = hmget(context->node_types, context->generic_id);
+	if (node_types == NULL) {
+		node_types = malloc(sizeof(Node_Types *));
+		hmput(context->node_types, context->generic_id, node_types);
+	}
+	(void) hmdel(*node_types, node);
+
+	Node_Datas *node_datas = hmget(context->node_datas, context->generic_id);
+	if (node_datas == NULL) {
+		node_datas = malloc(sizeof(Node_Datas *));
+		hmput(context->node_datas, context->generic_id, node_datas);
+	}
+	(void) hmdel(*node_datas, node);
+}
