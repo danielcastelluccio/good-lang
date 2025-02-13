@@ -170,6 +170,7 @@ static LLVMValueRef generate_number(Node *node, State *state) {
 	assert(node->kind == NUMBER_NODE);
 	Number_Node number = node->number;
 	Value *type = get_data(&state->context, node)->number.type;
+	type = strip_define_data(type);
 
 	assert(type->tag == INTERNAL_VALUE);
 

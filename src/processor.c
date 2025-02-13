@@ -78,6 +78,10 @@ static void print_type(Value *value, char *buffer) {
 			sprintf(buffer, "()");
 			break;
 		}
+		case DEFINE_DATA_VALUE: {
+			print_type(value->define_data.value, buffer);
+			break;
+		}
 		default:
 			assert(false);
 	}
@@ -504,6 +508,9 @@ static void process_variable(Context *context, Node *node) {
 	if (variable.type != NULL) {
 		process_node(context, variable.type);
 		type = evaluate(context, variable.type);
+		context->wanted_type = type;
+	} else {
+		context->wanted_type = NULL;
 	}
 
 	if (variable.value != NULL) {
