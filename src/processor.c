@@ -161,10 +161,9 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 
 				generics = NULL;
 				for (long int i = 0; i < arrlen(define.generics); i++) {
-					Value *type_type = value_new(INTERNAL_VALUE);
-					type_type->internal.identifier = "type";
+					process_node(context, define.generics[i].type);
 					Generic_Binding binding = {
-						.type = type_type, // not always true if we are matching for array len?
+						.type = evaluate(context, define.generics[i].type),
 						.binding = shget(result, define.generics[i].identifier)
 					};
 					arrpush(generics, binding);
@@ -341,28 +340,12 @@ static void process_identifier(Context *context, Node *node) {
 		arrpush(generics, binding);
 	}
 
-
 	Value *value = NULL;
 	Value *type = NULL;
-	if (identifier.module != NULL) {
-		process_node(context, identifier.module);
-		Value *module_value = strip_define_data(evaluate(context, identifier.module));
-		for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
-			Node *statement = module_value->module.body->block.statements[i];
-			if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
-				Process_Define_Result result = process_define(context, statement, module_value->module.scopes, generics);
-				type = result.type;
-				value = result.value;
-
-				if (type == NULL) {
-					handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
-				}
-				break;
-			}
-		}
-	} else if (strcmp(identifier.value, "byte") == 0
+	if (identifier.module == NULL &&
+			(strcmp(identifier.value, "byte") == 0
 			|| strcmp(identifier.value, "uint") == 0
-			|| strcmp(identifier.value, "type") == 0) {
+			|| strcmp(identifier.value, "type") == 0)) {
 		value = value_new(INTERNAL_VALUE);
 		value->internal.identifier = identifier.value;
 
@@ -370,6 +353,21 @@ static void process_identifier(Context *context, Node *node) {
 		type->internal.identifier = "type";
 	}
 	else {
+		Node *define_node = NULL;
+		Scope *define_scopes = NULL;
+		if (identifier.module != NULL) {
+			process_node(context, identifier.module);
+			Value *module_value = strip_define_data(evaluate(context, identifier.module));
+			for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
+				Node *statement = module_value->module.body->block.statements[i];
+				if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
+					define_node = statement;
+					define_scopes = module_value->module.scopes;
+					break;
+				}
+			}
+		}
+
 		Lookup_Define_Result lookup_define_result = lookup_define(context, identifier.value);
 		if (lookup_define_result.node != NULL) {
 			Scope *new_scopes = NULL;
@@ -379,13 +377,20 @@ static void process_identifier(Context *context, Node *node) {
 				if (lookup_define_result.scope == &context->scopes[i]) break;
 			}
 
-			Process_Define_Result result = process_define(context, lookup_define_result.node, new_scopes, generics);
+			define_node = lookup_define_result.node;
+			define_scopes = new_scopes;
+		}
+
+		if (define_node != NULL) {
+			bool compile_only_parent = context->compile_only;
+			Process_Define_Result result = process_define(context, define_node, define_scopes, generics);
 			type = result.type;
 			value = result.value;
 
 			if (type == NULL) {
 				handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
 			}
+			context->compile_only = compile_only_parent;
 		}
 
 		if (context->current_function != NULL) {
