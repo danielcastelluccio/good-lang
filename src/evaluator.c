@@ -26,6 +26,16 @@ bool value_equal(Value *value1, Value *value2) {
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
 		}
+		case STRUCTURE_VALUE: {
+			if (arrlen(value1->structure_type.items) != arrlen(value2->structure_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(value1->structure_type.items); i++) {
+				if (strcmp(value1->structure_type.items[i].identifier, value2->structure_type.items[i].identifier) != 0) return false;
+				if (!value_equal(value1->structure_type.items[i].type, value2->structure_type.items[i].type)) return false;
+			}
+
+			return true;
+		}
 		case DEFINE_DATA_VALUE: {
 			return value_equal(value1->define_data.value, value2->define_data.value);
 		}

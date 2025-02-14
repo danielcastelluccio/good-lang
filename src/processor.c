@@ -64,37 +64,48 @@ static Generic_Binding lookup_generic_binding(Context *context, char *identifier
 	exit(1); \
 }
 
-static void print_type(Value *value, char *buffer) {
+static int print_type(Value *value, char *buffer) {
+	char *buffer_start = buffer;
 	switch (value->tag) {
 		case POINTER_TYPE_VALUE: {
-			sprintf(buffer, "*");
-			print_type(value->pointer_type.inner, buffer + 1);
+			buffer += sprintf(buffer, "*");
+			buffer += print_type(value->pointer_type.inner, buffer);
 			break;
 		}
 		case ARRAY_TYPE_VALUE: {
-			sprintf(buffer, "[]");
-			print_type(value->array_type.inner, buffer + 2);
+			buffer += sprintf(buffer, "[]");
+			buffer += print_type(value->array_type.inner, buffer);
 			break;
 		}
 		case INTERNAL_VALUE: {
-			sprintf(buffer, "%s", value->internal.identifier);
+			buffer += sprintf(buffer, "%s", value->internal.identifier);
 			break;
 		}
 		case STRUCTURE_VALUE: {
-			sprintf(buffer, "struct{...}");
+			buffer += sprintf(buffer, "struct{");
+			for (long int i = 0; i < arrlen(value->structure_type.items); i++) {
+				buffer += sprintf(buffer, "%s:", value->structure_type.items[i].identifier);
+				buffer += print_type(value->structure_type.items[i].type, buffer);
+				if (i < arrlen(value->structure_type.items) - 1) {
+					buffer += sprintf(buffer, ",");
+				}
+			}
+			buffer += sprintf(buffer, "}");
 			break;
 		}
 		case NONE_VALUE: {
-			sprintf(buffer, "()");
+			buffer += sprintf(buffer, "()");
 			break;
 		}
 		case DEFINE_DATA_VALUE: {
-			print_type(value->define_data.value, buffer);
+			buffer += print_type(value->define_data.value, buffer);
 			break;
 		}
 		default:
 			assert(false);
 	}
+
+	return buffer - buffer_start;
 }
 
 static void handle_type_error(Node *node, Value *wanted, Value *given) {
@@ -411,6 +422,11 @@ static void process_identifier(Context *context, Node *node) {
 				data->identifier.variable_definition = variable_node;
 
 				type = get_data(context, variable_node)->variable.type;
+				if (data->identifier.want_pointer) {
+					Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+					pointer_type->pointer_type.inner = type;
+					type = pointer_type;
+				}
 
 				if (context->temporary_context.assign_value != NULL) {
 					Value *value_type = get_type(context, context->temporary_context.assign_value);
@@ -429,6 +445,11 @@ static void process_identifier(Context *context, Node *node) {
 					data->identifier.argument_index = i;
 
 					type = get_data(context, current_function_type)->function_type.value->function_type.arguments[i].type;
+					if (data->identifier.want_pointer) {
+						Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+						pointer_type->pointer_type.inner = type;
+						type = pointer_type;
+					}
 					break;
 				}
 			}
@@ -540,9 +561,7 @@ static void process_reference(Context *context, Node *node) {
 	Temporary_Context temporary_context = { .want_pointer = true };
 	process_node_context(context, temporary_context, reference.node);
 
-	Value *pointer_type = value_new(POINTER_TYPE_VALUE);
-	pointer_type->pointer_type.inner = get_type(context, reference.node);
-	set_type(context, node, pointer_type);
+	set_type(context, node, get_type(context, reference.node));
 }
 
 static void process_structure_access(Context *context, Node *node) {
@@ -550,8 +569,15 @@ static void process_structure_access(Context *context, Node *node) {
 
 	process_node(context, structure_access.structure);
 
-	Value *structure_pointer_type = get_type(context, structure_access.structure);
-	structure_pointer_type = strip_define_data(structure_pointer_type);
+	Value *structure_pointer_type = strip_define_data(get_type(context, structure_access.structure));
+	if (structure_pointer_type->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, structure_access.structure);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, structure_access.structure);
+
+		structure_pointer_type = strip_define_data(get_type(context, structure_access.structure));
+	}
 
 	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCTURE_VALUE) {
 		char given_string[64] = {};
@@ -570,6 +596,7 @@ static void process_structure_access(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(STRUCTURE_ACCESS_NODE);
 	data->structure_access.structure_value = structure_type;
+	data->structure_access.want_pointer = context->temporary_context.want_pointer;
 
 	if (context->temporary_context.assign_value != NULL) {
 		Value *value_type = get_type(context, context->temporary_context.assign_value);
@@ -578,6 +605,12 @@ static void process_structure_access(Context *context, Node *node) {
 		}
 		data->structure_access.assign_value = context->temporary_context.assign_value;
 	} else {
+		if (data->structure_access.want_pointer) {
+			Value *pointer_item_type = value_new(POINTER_TYPE_VALUE);
+			pointer_item_type->pointer_type.inner = item_type;
+			item_type = pointer_item_type;
+		}
+
 		set_type(context, node, item_type);
 	}
 	set_data(context, node, data);
@@ -621,6 +654,21 @@ static void process_assign(Context *context, Node *node) {
 	process_node(context, assign.value);
 	Temporary_Context temporary_context = { .assign_value = assign.value };
 	process_node_context(context, temporary_context, assign.container);
+}
+
+static void process_return(Context *context, Node *node) {
+	Return_Node return_ = node->return_;
+
+	if (return_.value != NULL) {
+		Value *return_type = get_data(context, context->current_function->function.function_type)->function_type.value->function_type.return_type;
+		Temporary_Context temporary_context = { .wanted_type = return_type };
+		process_node_context(context, temporary_context, return_.value);
+
+		Value *type = get_type(context, return_.value);
+		if (!value_equal(return_type, type)) {
+			handle_type_error(node, return_type, type);
+		}
+	}
 }
 
 static void process_if(Context *context, Node *node) {
@@ -779,6 +827,7 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		}
 		case RETURN_NODE: {
+			process_return(context, node);
 			break;
 		}
 		case IF_NODE: {

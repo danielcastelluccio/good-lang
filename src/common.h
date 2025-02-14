@@ -170,6 +170,7 @@ typedef struct {
 typedef struct {
 	Value *structure_value;
 	Node *assign_value;
+	bool want_pointer;
 } Structure_Access_Data;
 
 typedef struct {

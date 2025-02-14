@@ -164,7 +164,12 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 		}
 		case IDENTIFIER_ARGUMENT: {
 			size_t argument = get_data(&state->context, node)->identifier.argument_index;
-			return state->function_arguments[argument];
+			LLVMValueRef value_pointer = state->function_arguments[argument];
+			if (identifier_data->identifier.want_pointer) {
+				return value_pointer;
+			} else {
+				return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(get_type(&state->context, node)), value_pointer, "");
+			}
 		}
 		case IDENTIFIER_VALUE: {
 			return generate_value(strip_define_data(identifier_data->identifier.value), state);
@@ -232,13 +237,23 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 		LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
 		return NULL;
 	} else {
-		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), element_pointer, "");
+		if (data.want_pointer) {
+			return element_pointer;
+		} else  {
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), element_pointer, "");
+		}
 	}
 }
 
 static LLVMValueRef generate_return(Node *node, State *state) {
 	assert(node->kind == RETURN_NODE);
-	LLVMBuildRetVoid(state->llvm_builder);
+	Return_Node return_ = node->return_;
+
+	if (return_.value != NULL) {
+		LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
+	} else {
+		LLVMBuildRetVoid(state->llvm_builder);
+	}
 	return NULL;
 }
 
@@ -346,13 +361,16 @@ static LLVMValueRef generate_function(Value *value, State *state) {
 
 	LLVMValueRef *saved_function_arguments = state->function_arguments;
 	state->function_arguments = NULL;
-	for (long int i = 0; i < LLVMCountParams(llvm_function); i++) {
-		arrpush(state->function_arguments, LLVMGetParam(llvm_function, i));
-	}
 
 	if (function.body != NULL) {
 		LLVMBasicBlockRef entry = LLVMAppendBasicBlock(llvm_function, "");
 		LLVMPositionBuilderAtEnd(state->llvm_builder, entry);
+
+		for (long int i = 0; i < LLVMCountParams(llvm_function); i++) {
+			LLVMValueRef allocated = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(function.type->function_type.arguments[i].type), "");
+			LLVMBuildStore(state->llvm_builder, LLVMGetParam(llvm_function, i), allocated);
+			arrpush(state->function_arguments, allocated);
+		}
 
 		generate_node(function.body, state);
 	}
