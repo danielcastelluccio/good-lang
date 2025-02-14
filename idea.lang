@@ -148,5 +148,17 @@ def put = fn<T: type; follows(T, Map)>(map: T, ) -> {
 
 
 
+def print$(fmt: string, T..: type) = fn(args: T..) -> {
+
+};
+
+print#("%\n")(value);
+print(<"%\n">)(value);
+
+def print$(fmt: string, T..: type) = fn(fmt: string, args: T..) -> {
+
+};
+
+print("%\n", value);
 
 

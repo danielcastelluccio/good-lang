@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -153,6 +154,14 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			}
 			result = create_token(GREATER, lexer);
 			break;
+		case '#':
+			if (lexer->source[lexer->position] == '(') {
+				result = create_token(HASHTAG_OPEN_PARENTHESIS, lexer);
+				increment_position(lexer);
+				break;
+			}
+			assert(false);
+			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
 				if (lexer->source[lexer->position] == '.') {
@@ -278,6 +287,8 @@ char *token_to_string(Token_Kind kind) {
 			return "(<";
 		case GREATER_CLOSED_PARENTHESIS:
 			return ">)";
+		case HASHTAG_OPEN_PARENTHESIS:
+			return "#(";
 		case PERIOD:
 			return ".";
 		case PERIOD_PERIOD:

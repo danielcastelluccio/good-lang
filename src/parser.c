@@ -65,20 +65,20 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 	identifier->identifier.value = token.string;
 
 	identifier->identifier.generics = NULL;
-	if (lexer_next(lexer, false).kind == OPEN_PARENTHESIS_LESS) {
-		consume_check(lexer, OPEN_PARENTHESIS_LESS);
-		while (lexer_next(lexer, false).kind != GREATER_CLOSED_PARENTHESIS) {
+	if (lexer_next(lexer, false).kind == HASHTAG_OPEN_PARENTHESIS) {
+		consume_check(lexer, HASHTAG_OPEN_PARENTHESIS);
+		while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
 			arrput(identifier->identifier.generics, parse_expression(lexer));
 
 			Token_Data token = lexer_next(lexer, false);
 			if (token.kind == COMMA) {
 				lexer_next(lexer, true);
-			} else if (token.kind == GREATER_CLOSED_PARENTHESIS) {
+			} else if (token.kind == CLOSED_PARENTHESIS) {
 			} else {
 				handle_token_error_no_expected(token);
 			}
 		}
-		consume_check(lexer, GREATER_CLOSED_PARENTHESIS);
+		consume_check(lexer, CLOSED_PARENTHESIS);
 	}
 
 	return identifier;
@@ -137,10 +137,10 @@ static Node *parse_define(Lexer *lexer) {
 
 	Node *constraint = NULL;
 	Generic_Argument *generics = NULL;
-	if (lexer_next(lexer, false).kind == LESS) {
-		consume_check(lexer, LESS);
+	if (lexer_next(lexer, false).kind == HASHTAG_OPEN_PARENTHESIS) {
+		consume_check(lexer, HASHTAG_OPEN_PARENTHESIS);
 
-		while (lexer_next(lexer, false).kind != GREATER) {
+		while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
 			Token_Data identifier = consume_check(lexer, IDENTIFIER);
 			consume_check(lexer, COLON);
 			Node *type = parse_expression(lexer);
@@ -154,7 +154,7 @@ static Node *parse_define(Lexer *lexer) {
 			Token_Data token = lexer_next(lexer, false);
 			if (token.kind == COMMA) {
 				lexer_next(lexer, true);
-			} else if (token.kind == GREATER) {
+			} else if (token.kind == CLOSED_PARENTHESIS) {
 			} else if (token.kind == SEMICOLON) {
 				consume_check(lexer, SEMICOLON);
 				constraint = parse_expression(lexer);
@@ -163,7 +163,7 @@ static Node *parse_define(Lexer *lexer) {
 			}
 		}
 
-		consume_check(lexer, GREATER);
+		consume_check(lexer, CLOSED_PARENTHESIS);
 	}
 
 	consume_check(lexer, EQUALS);
