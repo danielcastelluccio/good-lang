@@ -21,6 +21,7 @@ typedef struct Value Value;
 typedef enum {
 	FUNCTION_VALUE,
 	FUNCTION_TYPE_VALUE,
+	STRUCTURE_VALUE,
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	BOOLEAN_VALUE,
@@ -32,22 +33,30 @@ typedef enum {
 } Value_Tag;
 
 typedef struct {
+	char *identifier;
+	Value *type;
+} Identifier_Value_Pair;
+
+typedef struct {
 	Value *type;
 	Node *body;
 	size_t generic_id;
 	bool compile_only;
 } Function_Value;
 
-typedef struct {
-	char *identifier;
-	Value *type;
-} Function_Argument_Value;
+typedef Identifier_Value_Pair Function_Argument_Value;
 
 typedef struct {
 	Function_Argument_Value *arguments; // stb_ds
 	Value *return_type;
 	bool variadic;
 } Function_Type_Value;
+
+typedef Identifier_Value_Pair Structure_Item_Value;
+
+typedef struct {
+	Structure_Item_Value *items;
+} Structure_Type_Value;
 
 typedef struct {
 	Node *body;
@@ -81,6 +90,7 @@ struct Value {
 	Value_Tag tag;
 	union {
 		Function_Value function;
+		Structure_Type_Value structure_type;
 		Module_Value module;
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
@@ -104,6 +114,8 @@ typedef struct {
 		size_t argument_index;
 		Value *value;
 	};
+	bool want_pointer;
+	Node *assign_value;
 } Identifier_Node_Data;
 
 typedef struct {
@@ -156,6 +168,11 @@ typedef struct {
 } Module_Access_Data;
 
 typedef struct {
+	Value *structure_value;
+	Node *assign_value;
+} Structure_Access_Data;
+
+typedef struct {
 	Node_Kind kind;
 	union {
 		Identifier_Node_Data identifier;
@@ -168,6 +185,7 @@ typedef struct {
 		Function_Data function;
 		Function_Type_Data function_type;
 		Module_Access_Data module_access;
+		Structure_Access_Data structure_access;
 	};
 } Node_Data;
 
@@ -178,15 +196,21 @@ typedef struct { Node *key; Value *value; } *Node_Types;
 typedef struct { Node *key; Node_Data *value; } *Node_Datas;
 
 typedef struct {
+	Node *assign_value;
+	Value *wanted_type;
+	bool want_pointer;
+	Value **call_argument_types;
+} Temporary_Context;
+
+typedef struct {
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
 	Node *current_function;
 	Scope *scopes; // stb_ds
 	bool compile_only;
-	Value *wanted_type;
-	Value **call_argument_types;
 	size_t generic_id;
 	size_t generic_id_counter;
+	Temporary_Context temporary_context;
 } Context;
 
 Value *get_type(Context *context, Node *node);

@@ -124,6 +124,60 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 	return binary_operator;
 }
 
+static Node *parse_structure_access(Lexer *lexer, Node *structure) {
+	Token_Data first_token = lexer_next(lexer, true);
+
+	Node *structure_access = ast_new(STRUCTURE_ACCESS_NODE, first_token.location);
+	structure_access->structure_access.structure = structure;
+
+	structure_access->structure_access.item = consume_check(lexer, IDENTIFIER).string;
+
+	return structure_access;
+}
+
+static Node *parse_assign(Lexer *lexer, Node *structure) {
+	Token_Data first_token = lexer_next(lexer, true);
+
+	Node *assign = ast_new(ASSIGN_NODE, first_token.location);
+	assign->assign.container = structure;
+	assign->assign.value = parse_expression(lexer);
+
+	return assign;
+}
+
+static Node *parse_structure(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+
+	consume_check(lexer, OPEN_CURLY_BRACE);
+
+	Struct_Item *items = NULL;
+	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
+		Token_Data identifier = consume_check(lexer, IDENTIFIER);
+		consume_check(lexer, COLON);
+		Node *type = parse_expression(lexer);
+
+		Struct_Item item = {
+			.identifier = identifier.string,
+			.type = type
+		};
+		arrput(items, item);
+
+		Token_Data token = lexer_next(lexer, false);
+		if (token.kind == COMMA) {
+			lexer_next(lexer, true);
+		} else if (token.kind == CLOSED_CURLY_BRACE) {
+		} else {
+			handle_token_error_no_expected(token);
+		}
+	}
+	consume_check(lexer, CLOSED_CURLY_BRACE);
+
+	Node *structure = ast_new(STRUCTURE_NODE, first_token.location);
+	structure->structure.items = items;
+
+	return structure;
+}
+
 static Node *parse_define(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 
@@ -170,6 +224,8 @@ static Node *parse_define(Lexer *lexer) {
 
 	Node *expression = parse_expression(lexer);
 
+	consume_check(lexer, SEMICOLON);
+
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 	define->define.identifier = identifier.string;
 	define->define.expression = expression;
@@ -184,6 +240,9 @@ static Node *parse_return(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
 	return_->return_.value = parse_expression_or_nothing(lexer);
+
+	consume_check(lexer, SEMICOLON);
+
 	return return_;
 }
 
@@ -201,6 +260,8 @@ static Node *parse_variable(Lexer *lexer) {
 		consume_check(lexer, EQUALS);
 		variable->variable.value = parse_expression(lexer);
 	}
+
+	consume_check(lexer, SEMICOLON);
 	return variable;
 }
 
@@ -307,9 +368,40 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 }
 
 static Node *parse_statement(Lexer *lexer) {
-	Node *expression = parse_expression(lexer);
-	consume_check(lexer, SEMICOLON);
-	return expression;
+	Token_Data token = lexer_next(lexer, false);
+	Node *result = NULL;
+	switch (token.kind) {
+		case KEYWORD: {
+			char *value = token.string;
+			if (strcmp(value, "def") == 0) result = parse_define(lexer);
+			else if (strcmp(value, "return") == 0) result = parse_return(lexer);
+			else if (strcmp(value, "var") == 0) result = parse_variable(lexer);
+			break;
+		}
+		default:
+			break;
+	}
+
+	if (result == NULL) {
+		result = parse_expression(lexer);
+
+		bool operating = true;
+		while (operating) {
+			Token_Data next = lexer_next(lexer, false);
+			switch (next.kind) {
+				case EQUALS:
+					result = parse_assign(lexer, result);
+					break;
+				default:
+					operating = false;
+					break;
+			}
+		}
+
+		consume_check(lexer, SEMICOLON);
+	}
+
+	return result;
 }
 
 static Node *parse_expression(Lexer *lexer) {
@@ -331,9 +423,7 @@ static Node *parse_expression(Lexer *lexer) {
 		case KEYWORD: {
 			char *value = token.string;
 			if (strcmp(value, "fn") == 0) result = parse_function_or_function_type(lexer);
-			else if (strcmp(value, "def") == 0) result = parse_define(lexer);
-			else if (strcmp(value, "return") == 0) result = parse_return(lexer);
-			else if (strcmp(value, "var") == 0) result = parse_variable(lexer);
+			else if (strcmp(value, "struct") == 0) result = parse_structure(lexer);
 			else if (strcmp(value, "if") == 0) result = parse_if(lexer);
 			else if (strcmp(value, "mod") == 0) result = parse_module(lexer);
 			else {
@@ -353,6 +443,15 @@ static Node *parse_expression(Lexer *lexer) {
 			pointer->pointer.inner = parse_expression(lexer);
 
 			result = pointer;
+			break;
+		}
+		case AMPERSAND: {
+			Token_Data first_token = consume_check(lexer, AMPERSAND);
+
+			Node *reference = ast_new(REFERENCE_NODE, first_token.location);
+			reference->reference.node = parse_expression(lexer);
+
+			result = reference;
 			break;
 		}
 		case OPEN_BRACE: {
@@ -378,6 +477,9 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case EQUAL_EQUALS:
 				result = parse_binary_operator(lexer, result);
+				break;
+			case PERIOD:
+				result = parse_structure_access(lexer, result);
 				break;
 			case COLON_COLON:
 				consume_check(lexer, COLON_COLON);

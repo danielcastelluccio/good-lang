@@ -53,6 +53,21 @@ Value *evaluate(Context *context, Node *node) {
 
 			return function_value;
 		}
+		case STRUCTURE_NODE: {
+			Structure_Node structure = node->structure;
+
+			Value *structure_value = value_new(STRUCTURE_VALUE);
+			structure_value->structure_type.items = NULL;
+			for (long int i = 0; i < arrlen(structure.items); i++) {
+				Structure_Item_Value item = {
+					.identifier = structure.items[i].identifier,
+					.type = evaluate(context, structure.items[i].type)
+				};
+				arrput(structure_value->structure_type.items, item);
+			}
+
+			return structure_value;
+		}
 		case MODULE_NODE: {
 			Module_Node module = node->module;
 			Value *module_value = value_new(MODULE_VALUE);

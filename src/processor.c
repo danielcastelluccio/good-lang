@@ -5,6 +5,12 @@
 
 #include "evaluator.h"
 
+void process_node_context(Context *context, Temporary_Context temporary_context, Node *node);
+
+void process_node(Context *context, Node *node) {
+	process_node_context(context, (Temporary_Context) {}, node);
+}
+
 typedef struct {
 	Node *node;
 	Scope *scope;
@@ -72,6 +78,10 @@ static void print_type(Value *value, char *buffer) {
 		}
 		case INTERNAL_VALUE: {
 			sprintf(buffer, "%s", value->internal.identifier);
+			break;
+		}
+		case STRUCTURE_VALUE: {
+			sprintf(buffer, "struct{...}");
 			break;
 		}
 		case NONE_VALUE: {
@@ -144,18 +154,21 @@ static void pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 	}
 }
 
-static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics) {
+static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Define_Node define = node->define;
+
+	size_t saved_saved_generic_id = context->generic_id;
+	context->generic_id = generic_id;
 
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
 		if (define.expression->kind == FUNCTION_NODE) {
 			Function_Type_Node function_type = define.expression->function.function_type->function_type;
-			if (context->call_argument_types != NULL) {
+			if (context->temporary_context.call_argument_types != NULL) {
 				Pattern_Match_Result result = NULL;
-				assert(arrlen(context->call_argument_types) <= arrlen(function_type.arguments));
+				assert(arrlen(context->temporary_context.call_argument_types) <= arrlen(function_type.arguments));
 				for (long int i = 0; i < arrlen(function_type.arguments); i++) {
 					Node *argument = function_type.arguments[i].type;
-					Value *argument_value = context->call_argument_types[i];
+					Value *argument_value = context->temporary_context.call_argument_types[i];
 					pattern_match(argument, argument_value, context, define.generics, &result);
 				}
 
@@ -179,6 +192,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	Node_Data *cached_data = get_data(context, node);
 	if (cached_data != NULL) {
 		if (cached_data->define.kind == DEFINE_SINGLE) {
+			context->generic_id = saved_saved_generic_id;
 			return (Process_Define_Result) {
 				.value = cached_data->define.value.binding,
 				.type = cached_data->define.value.type
@@ -189,6 +203,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 					for (long int j = 0; j < arrlen(cached_data->define.generic_values[i].generics); j++) {
 						if (value_equal(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
 							Generic_Binding binding = cached_data->define.generic_values[i].value;
+							context->generic_id = saved_saved_generic_id;
 							return (Process_Define_Result) {
 								.value = binding.binding,
 								.type = binding.type
@@ -201,9 +216,6 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 			assert(false);
 		}
 	}
-
-	Value **saved_call_argument_types = context->call_argument_types;
-	context->call_argument_types = NULL;
 
 	Scope *saved_scopes = context->scopes;
 	if (scopes != NULL) context->scopes = scopes;
@@ -219,13 +231,13 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		shput(arrlast(context->scopes).generic_bindings, define.generics[i].identifier, generics[i]);
 	}
 
-	if (define.generic_constraint != NULL) {
-		process_node(context, define.generic_constraint);
-		Value *result = strip_define_data(evaluate(context, define.generic_constraint));
-		if (!result->boolean.value) {
-			return (Process_Define_Result) {};
-		}
-	}
+	// if (define.generic_constraint != NULL) {
+	// 	process_node(context, define.generic_constraint);
+	// 	Value *result = strip_define_data(evaluate(context, define.generic_constraint));
+	// 	if (!result->boolean.value) {
+	// 		return (Process_Define_Result) {};
+	// 	}
+	// }
 
 	process_node(context, define.expression);
 	Value *type = get_type(context, define.expression);
@@ -239,8 +251,6 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	context->generic_id = saved_generic_id;
 	(void) arrpop(context->scopes);
 	if (scopes != NULL) context->scopes = saved_scopes;
-
-	context->call_argument_types = saved_call_argument_types;
 
 	Generic_Binding binding = {
 		.binding = wrapped_value,
@@ -268,6 +278,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		arrpush(data->define.generic_values, generic_value);
 	}
 
+	context->generic_id = saved_saved_generic_id;
 	return (Process_Define_Result) {
 		.value = wrapped_value,
 		.type = type
@@ -279,17 +290,16 @@ static void process_call(Context *context, Node *node) {
 
 	Value **argument_types = NULL;
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
-		context->wanted_type = NULL;
-		process_node(context, call.arguments[i]);
+		Temporary_Context temporary_context = { .wanted_type = NULL };
+		process_node_context(context, temporary_context, call.arguments[i]);
 		Value *type = get_type(context, call.arguments[i]);;
 		arrpush(argument_types, type);
 
 		reset_node(context, node);
 	}
-	Value **saved_call_argument_types = context->call_argument_types;
-	context->call_argument_types = argument_types;
 
-	process_node(context, call.function);
+	Temporary_Context temporary_context = { .call_argument_types = argument_types };
+	process_node_context(context, temporary_context, call.function);
 	Value *function_type = get_type(context, call.function);
 	if (function_type->tag != FUNCTION_TYPE_VALUE) {
 		char given_string[64] = {};
@@ -297,16 +307,14 @@ static void process_call(Context *context, Node *node) {
 		handle_semantic_error(node->location, "Expected function pointer, but got '%s'", given_string);
 	}
 
-	context->call_argument_types = saved_call_argument_types;
-
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
 		Value *wanted_type = NULL;
 		if (i < arrlen(function_type->function_type.arguments) - 1 || !function_type->function_type.variadic) {
 			wanted_type = function_type->function_type.arguments[i].type;
 		}
 
-		context->wanted_type = wanted_type;
-		process_node(context, call.arguments[i]);
+		Temporary_Context temporary_context = { .wanted_type = wanted_type };
+		process_node_context(context, temporary_context, call.arguments[i]);
 		Value *type = get_type(context, call.arguments[i]);;
 
 		if (wanted_type != NULL && !value_equal(wanted_type, type)) {
@@ -324,6 +332,7 @@ static void process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
 
 	Node_Data *data = node_data_new(IDENTIFIER_NODE);
+	data->identifier.want_pointer = context->temporary_context.want_pointer;
 
 	Generic_Binding *generics = NULL;
 	for (long int i = 0; i < arrlen(identifier.generics); i++) {
@@ -355,6 +364,7 @@ static void process_identifier(Context *context, Node *node) {
 	else {
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
+		size_t generic_id = context->generic_id;
 		if (identifier.module != NULL) {
 			process_node(context, identifier.module);
 			Value *module_value = strip_define_data(evaluate(context, identifier.module));
@@ -363,6 +373,7 @@ static void process_identifier(Context *context, Node *node) {
 				if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
 					define_node = statement;
 					define_scopes = module_value->module.scopes;
+					generic_id = module_value->module.generic_id;
 					break;
 				}
 			}
@@ -383,7 +394,7 @@ static void process_identifier(Context *context, Node *node) {
 
 		if (define_node != NULL) {
 			bool compile_only_parent = context->compile_only;
-			Process_Define_Result result = process_define(context, define_node, define_scopes, generics);
+			Process_Define_Result result = process_define(context, define_node, define_scopes, generics, generic_id);
 			type = result.type;
 			value = result.value;
 
@@ -400,6 +411,15 @@ static void process_identifier(Context *context, Node *node) {
 				data->identifier.variable_definition = variable_node;
 
 				type = get_data(context, variable_node)->variable.type;
+
+				if (context->temporary_context.assign_value != NULL) {
+					Value *value_type = get_type(context, context->temporary_context.assign_value);
+					if (!value_equal(type, value_type)) {
+						handle_type_error(node, type, value_type);
+					}
+
+					data->identifier.assign_value = context->temporary_context.assign_value;
+				}
 			}
 
 			Node *current_function_type = context->current_function->function.function_type;
@@ -442,6 +462,17 @@ static void process_module(Context *context, Node *node) {
 	Module_Node module = node->module;
 	process_node(context, module.body);
 	set_type(context, node, value_new(MODULE_TYPE_VALUE));
+}
+
+static void process_structure(Context *context, Node *node) {
+	Structure_Node structure = node->structure;
+	for (long int i = 0; i < arrlen(structure.items); i++) {
+		process_node(context, structure.items[i].type);
+	}
+
+	Value *value = value_new(INTERNAL_VALUE);
+	value->internal.identifier = "type";
+	set_type(context, node, value);
 }
 
 static void process_string(Context *context, Node *node) {
@@ -491,7 +522,7 @@ static void process_string(Context *context, Node *node) {
 }
 
 static void process_number(Context *context, Node *node) {
-	Value *wanted_type = context->wanted_type;
+	Value *wanted_type = context->temporary_context.wanted_type;
 	if (wanted_type == NULL) {
 		wanted_type = value_new(INTERNAL_VALUE);
 		wanted_type->internal.identifier = "uint";
@@ -503,23 +534,71 @@ static void process_number(Context *context, Node *node) {
 	set_type(context, node, wanted_type);
 }
 
+static void process_reference(Context *context, Node *node) {
+	Reference_Node reference = node->reference;
+
+	Temporary_Context temporary_context = { .want_pointer = true };
+	process_node_context(context, temporary_context, reference.node);
+
+	Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+	pointer_type->pointer_type.inner = get_type(context, reference.node);
+	set_type(context, node, pointer_type);
+}
+
+static void process_structure_access(Context *context, Node *node) {
+	Structure_Access_Node structure_access = node->structure_access;
+
+	process_node(context, structure_access.structure);
+
+	Value *structure_pointer_type = get_type(context, structure_access.structure);
+	structure_pointer_type = strip_define_data(structure_pointer_type);
+
+	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCTURE_VALUE) {
+		char given_string[64] = {};
+		print_type(structure_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected structure pointer, but got '%s'", given_string);
+	}
+
+	Value *structure_type = strip_define_data(structure_pointer_type->pointer_type.inner);
+
+	Value *item_type = NULL;
+	for (long int i = 0; i < arrlen(structure_type->structure_type.items); i++) {
+		if (strcmp(structure_type->structure_type.items[i].identifier, structure_access.item) == 0) {
+			item_type = structure_type->structure_type.items[i].type;
+		}
+	}
+
+	Node_Data *data = node_data_new(STRUCTURE_ACCESS_NODE);
+	data->structure_access.structure_value = structure_type;
+
+	if (context->temporary_context.assign_value != NULL) {
+		Value *value_type = get_type(context, context->temporary_context.assign_value);
+		if (!value_equal(item_type, value_type)) {
+			handle_type_error(node, item_type, value_type);
+		}
+		data->structure_access.assign_value = context->temporary_context.assign_value;
+	} else {
+		set_type(context, node, item_type);
+	}
+	set_data(context, node, data);
+}
+
 static void process_variable(Context *context, Node *node) {
 	Variable_Node variable = node->variable;
 
 	Scope *scope = &arrlast(context->scopes);
 	shput(scope->variables, variable.identifier, node);
 
+	Temporary_Context temporary_context = {};
 	Value *type = NULL;
 	if (variable.type != NULL) {
 		process_node(context, variable.type);
 		type = evaluate(context, variable.type);
-		context->wanted_type = type;
-	} else {
-		context->wanted_type = NULL;
+		temporary_context.wanted_type = type;
 	}
 
 	if (variable.value != NULL) {
-		process_node(context, variable.value);
+		process_node_context(context, temporary_context, variable.value);
 	}
 
 	Value *value_type = get_type(context, variable.value);
@@ -534,6 +613,14 @@ static void process_variable(Context *context, Node *node) {
 	Node_Data *data = node_data_new(VARIABLE_NODE);
 	data->variable.type = type;
 	set_data(context, node, data);
+}
+
+static void process_assign(Context *context, Node *node) {
+	Assign_Node assign = node->assign;
+
+	process_node(context, assign.value);
+	Temporary_Context temporary_context = { .assign_value = assign.value };
+	process_node_context(context, temporary_context, assign.container);
 }
 
 static void process_if(Context *context, Node *node) {
@@ -641,15 +728,18 @@ static void process_array(Context *context, Node *node) {
 	set_type(context, node, value);
 }
 
-void process_node(Context *context, Node *node) {
+void process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
 	Value* type = get_type(context, node);
 	if (type != NULL) {
 		return;
 	}
 
+	Temporary_Context saved_temporary_context = context->temporary_context;
+	context->temporary_context = temporary_context;
+
 	switch (node->kind) {
 		case DEFINE_NODE: {
-			process_define(context, node, NULL, NULL);
+			process_define(context, node, NULL, NULL, context->generic_id);
 			break;
 		}
 		case BLOCK_NODE: {
@@ -672,11 +762,23 @@ void process_node(Context *context, Node *node) {
 			process_number(context, node);
 			break;
 		}
-		case RETURN_NODE: {
+		case REFERENCE_NODE: {
+			process_reference(context, node);
+			break;
+		}
+		case STRUCTURE_ACCESS_NODE: {
+			process_structure_access(context, node);
 			break;
 		}
 		case VARIABLE_NODE: {
 			process_variable(context, node);
+			break;
+		}
+		case ASSIGN_NODE: {
+			process_assign(context, node);
+			break;
+		}
+		case RETURN_NODE: {
 			break;
 		}
 		case IF_NODE: {
@@ -707,16 +809,19 @@ void process_node(Context *context, Node *node) {
 			process_module(context, node);
 			break;
 		}
+		case STRUCTURE_NODE: {
+			process_structure(context, node);
+			break;
+		}
 		default:
 			assert(false);
 	}
+
+	context->temporary_context = saved_temporary_context;
 }
 
 Context process(Node *root) {
-	Context context = {
-		.current_function = NULL,
-		.call_argument_types = NULL
-	};
+	Context context = {};
 
 	process_node(&context, root);
 

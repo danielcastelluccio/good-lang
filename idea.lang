@@ -161,4 +161,11 @@ def print$(fmt: string, T..: type) = fn(fmt: string, args: T..) -> {
 
 print("%\n", value);
 
+def foo#(X: type) = fn(foo: Foo$(X), x: X) {
+};
+
+var foo_var: Foo$(uint32);
+// Foo$(uint32), uint
+foo(foo_var, 4);
+
 

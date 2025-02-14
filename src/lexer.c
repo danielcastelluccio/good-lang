@@ -65,6 +65,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "else") == 0) return true;
 	else if (strcmp(identifier, "static") == 0) return true;
 	else if (strcmp(identifier, "mod") == 0) return true;
+	else if (strcmp(identifier, "struct") == 0) return true;
 	else return false;
 }
 
@@ -119,6 +120,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		case '*':
 			result = create_token(ASTERISK, lexer);
+			break;
+		case '&':
+			result = create_token(AMPERSAND, lexer);
 			break;
 		case '(':
 			if (lexer->source[lexer->position] == '<') {
@@ -279,6 +283,8 @@ char *token_to_string(Token_Kind kind) {
 			return "=";
 		case ASTERISK:
 			return "*";
+		case AMPERSAND:
+			return "&";
 		case LESS:
 			return "<";
 		case GREATER:

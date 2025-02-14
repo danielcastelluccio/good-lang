@@ -58,8 +58,22 @@ typedef struct {
 } Call_Node;
 
 typedef struct {
+	Node *node;
+} Reference_Node;
+
+typedef struct {
+	Node *structure;
+	char *item;
+} Structure_Access_Node;
+
+typedef struct {
 	Node *value;
 } Return_Node;
+
+typedef struct {
+	Node *container;
+	Node *value;
+} Assign_Node;
 
 typedef struct {
 	char *identifier;
@@ -105,6 +119,12 @@ typedef struct {
 	Node *body;
 } Function_Node;
 
+typedef Identifier_Type_Pair Struct_Item;
+
+typedef struct {
+	Struct_Item *items; // stb_ds
+} Structure_Node;
+
 typedef enum {
 	POINTER_NODE,
 	ARRAY_NODE,
@@ -113,7 +133,10 @@ typedef enum {
 	NUMBER_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
+	REFERENCE_NODE,
+	STRUCTURE_ACCESS_NODE,
 	RETURN_NODE,
+	ASSIGN_NODE,
 	VARIABLE_NODE,
 	IF_NODE,
 	MODULE_NODE,
@@ -121,6 +144,7 @@ typedef enum {
 	DEFINE_NODE,
 	BLOCK_NODE,
 	FUNCTION_NODE,
+	STRUCTURE_NODE
 } Node_Kind;
 
 struct Node {
@@ -133,7 +157,10 @@ struct Node {
 		Number_Node number;
 		Identifier_Node identifier;
 		Call_Node call;
+		Reference_Node reference;
+		Structure_Access_Node structure_access;
 		Return_Node return_;
+		Assign_Node assign;
 		Variable_Node variable;
 		If_Node if_;
 		Module_Node module;
@@ -141,6 +168,7 @@ struct Node {
 		Define_Node define;
 		Block_Node block;
 		Function_Node function;
+		Structure_Node structure;
 	};
 	Source_Location location;
 };
