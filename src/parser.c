@@ -107,6 +107,21 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 	return call;
 }
 
+static size_t get_precedence(Binary_Operatory_Node_Kind kind) {
+	switch (kind) {
+		case OPERATOR_ADD:
+		case OPERATOR_SUBTRACT:
+			return 1;
+		case OPERATOR_MULTIPLY:
+		case OPERATOR_DIVIDE:
+			return 2;
+		case OPERATOR_EQUALS:
+			return 0;
+		default:
+			assert(false);
+	}
+}
+
 static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 	Token_Data first_token = lexer_next(lexer, true);
 
@@ -116,12 +131,38 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 		case EQUAL_EQUALS:
 			binary_operator->binary_operator.operator = OPERATOR_EQUALS;
 			break;
+		case PLUS:
+			binary_operator->binary_operator.operator = OPERATOR_ADD;
+			break;
+		case MINUS:
+			binary_operator->binary_operator.operator = OPERATOR_SUBTRACT;
+			break;
+		case ASTERISK:
+			binary_operator->binary_operator.operator = OPERATOR_MULTIPLY;
+			break;
+		case SLASH:
+			binary_operator->binary_operator.operator = OPERATOR_DIVIDE;
+			break;
 		default:
 			assert(false);
 	}
-	binary_operator->binary_operator.right = parse_expression(lexer);
 
-	return binary_operator;
+	bool swap = false;
+	Node *right = parse_expression(lexer);
+	Node **swap_location = &right;
+	while ((*swap_location)->kind == BINARY_OPERATOR_NODE) {
+		swap = get_precedence((*swap_location)->binary_operator.operator) <= get_precedence(binary_operator->binary_operator.operator);
+		swap_location = &(*swap_location)->binary_operator.left;
+	}
+
+	if (swap) {
+		binary_operator->binary_operator.right = *swap_location;
+		*swap_location = binary_operator;
+		return right;
+	} else {
+		binary_operator->binary_operator.right = right;
+		return binary_operator;
+	}
 }
 
 static Node *parse_structure_access(Lexer *lexer, Node *structure) {
@@ -476,6 +517,10 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_call(lexer, result);
 				break;
 			case EQUAL_EQUALS:
+			case PLUS:
+			case MINUS:
+			case ASTERISK:
+			case SLASH:
 				result = parse_binary_operator(lexer, result);
 				break;
 			case PERIOD:

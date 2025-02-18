@@ -121,6 +121,12 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '*':
 			result = create_token(ASTERISK, lexer);
 			break;
+		case '+':
+			result = create_token(PLUS, lexer);
+			break;
+		case '/':
+			result = create_token(SLASH, lexer);
+			break;
 		case '&':
 			result = create_token(AMPERSAND, lexer);
 			break;
@@ -283,6 +289,12 @@ char *token_to_string(Token_Kind kind) {
 			return "=";
 		case ASTERISK:
 			return "*";
+		case PLUS:
+			return "+";
+		case MINUS:
+			return "-";
+		case SLASH:
+			return "/";
 		case AMPERSAND:
 			return "&";
 		case LESS:
@@ -323,7 +335,6 @@ char *token_to_string(Token_Kind kind) {
 			return "Eof";
 		case INVALID:
 			return "Invalid";
-		default:
-			return "Unimplemented";
 	}
+	return "Unimplemented";
 }

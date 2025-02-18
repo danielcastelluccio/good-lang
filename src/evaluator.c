@@ -138,7 +138,7 @@ Value *evaluate(Context *context, Node *node) {
 			return result;
 		}
 		case BINARY_OPERATOR_NODE: {
-			Binary_Operatory_Node binary_operator = node->binary_operator;
+			Binary_Operator_Node binary_operator = node->binary_operator;
 
 			Value *left_value = evaluate(context, binary_operator.left);
 			Value *right_value = evaluate(context, binary_operator.right);

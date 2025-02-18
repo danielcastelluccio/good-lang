@@ -149,7 +149,6 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 		case IDENTIFIER_VARIABLE: {
 			Node *variable = get_data(&state->context, node)->identifier.variable_definition;
 			Node_Data *variable_data = get_data(&state->context, variable);
-			Value *variable_type = variable_data->variable.type;
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable_data);
 			if (identifier_data->identifier.assign_value != NULL) {
 				LLVMBuildStore(state->llvm_builder, generate_node(identifier_data->identifier.assign_value, state), variable_llvm_value);
@@ -158,7 +157,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 				if (identifier_data->identifier.want_pointer) {
 					return variable_llvm_value;
 				} else {
-					return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(variable_type), variable_llvm_value, "");
+					return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type), variable_llvm_value, "");
 				}
 			}
 		}
@@ -168,7 +167,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			if (identifier_data->identifier.want_pointer) {
 				return value_pointer;
 			} else {
-				return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(get_type(&state->context, node)), value_pointer, "");
+				return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type), value_pointer, "");
 			}
 		}
 		case IDENTIFIER_VALUE: {
@@ -242,6 +241,39 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 		} else  {
 			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), element_pointer, "");
 		}
+	}
+}
+
+static bool is_type_signed(Value *type) {
+	(void) type;
+	return false;
+}
+
+static LLVMValueRef generate_binary_operator(Node *node, State *state) {
+	assert(node->kind == BINARY_OPERATOR_NODE);
+	Binary_Operator_Node binary_operator = node->binary_operator;
+	Binary_Operator_Data binary_operator_data = get_data(&state->context, node)->binary_operator;
+
+	LLVMValueRef left_value = generate_node(binary_operator.left, state);
+	LLVMValueRef right_value = generate_node(binary_operator.right, state);
+
+	switch (binary_operator.operator) {
+		case OPERATOR_EQUALS:
+			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, left_value, right_value, "");
+		case OPERATOR_ADD:
+			return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
+		case OPERATOR_SUBTRACT:
+			return LLVMBuildSub(state->llvm_builder, left_value, right_value, "");
+		case OPERATOR_MULTIPLY:
+			return LLVMBuildMul(state->llvm_builder, left_value, right_value, "");
+		case OPERATOR_DIVIDE:
+			if (is_type_signed(binary_operator_data.type)) {
+				return LLVMBuildSDiv(state->llvm_builder, left_value, right_value, "");
+			} else {
+				return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
+			}
+		default:
+			assert(false);
 	}
 }
 
@@ -326,6 +358,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_reference(node, state);
 		case STRUCTURE_ACCESS_NODE:
 			return generate_structure_access(node, state);
+		case BINARY_OPERATOR_NODE:
+			return generate_binary_operator(node, state);
 		case RETURN_NODE:
 			return generate_return(node, state);
 		case ASSIGN_NODE:

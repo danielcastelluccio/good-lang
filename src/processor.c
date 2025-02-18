@@ -475,6 +475,7 @@ static void process_identifier(Context *context, Node *node) {
 		data->identifier.value = value;
 	}
 
+	data->identifier.type = type;
 	set_data(context, node, data);
 	set_type(context, node, type);
 }
@@ -635,6 +636,7 @@ static void process_variable(Context *context, Node *node) {
 	}
 
 	Value *value_type = get_type(context, variable.value);
+	assert(value_type != NULL || type != NULL);
 	if (type == NULL) {
 		type = value_type;
 	} else if (value_type != NULL) {
@@ -690,10 +692,48 @@ static void process_if(Context *context, Node *node) {
 }
 
 static void process_binary_operator(Context *context, Node *node) {
-	Binary_Operatory_Node binary_operator = node->binary_operator;
+	Binary_Operator_Node binary_operator = node->binary_operator;
 
 	process_node(context, binary_operator.left);
 	process_node(context, binary_operator.right);
+
+	Value *left_type = get_type(context, binary_operator.left);
+	assert(left_type != NULL);
+	Value *right_type = get_type(context, binary_operator.right);
+	assert(right_type != NULL);
+	if (!value_equal(left_type, right_type)) {
+		char left_string[64] = {};
+		print_type(left_type, left_string);
+		char right_string[64] = {};
+		print_type(right_type, right_string);
+		handle_semantic_error(node->location, "Mismatched types '%s' and '%s'", left_string, right_string);
+	}
+
+	Value *stripped_type = strip_define_data(left_type);
+	if (stripped_type->tag != INTERNAL_VALUE || strcmp(stripped_type->internal.identifier, "uint") != 0) {
+		char left_string[64] = {};
+		print_type(left_type, left_string);
+		handle_semantic_error(node->location, "Cannot operate on '%s'", left_string);
+	}
+
+	Value *result_type = NULL;
+	switch (binary_operator.operator) {
+		case OPERATOR_EQUALS:
+			result_type = value_new(INTERNAL_VALUE);
+			result_type->internal.identifier = "bool";
+			break;
+		case OPERATOR_ADD:
+		case OPERATOR_SUBTRACT:
+		case OPERATOR_MULTIPLY:
+		case OPERATOR_DIVIDE:
+			result_type = left_type;
+			break;
+	}
+
+	Node_Data *data = node_data_new(BINARY_OPERATOR_NODE);
+	data->binary_operator.type = left_type;
+	set_data(context, node, data);
+	set_type(context, node, result_type);
 }
 
 static void process_function(Context *context, Node *node) {

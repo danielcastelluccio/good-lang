@@ -92,13 +92,19 @@ typedef struct {
 	Node *body;
 } Module_Node;
 
+typedef enum {
+	OPERATOR_EQUALS,
+	OPERATOR_ADD,
+	OPERATOR_SUBTRACT,
+	OPERATOR_MULTIPLY,
+	OPERATOR_DIVIDE
+} Binary_Operatory_Node_Kind;
+
 typedef struct {
 	Node *left;
 	Node *right;
-	enum {
-		OPERATOR_EQUALS
-	} operator;
-} Binary_Operatory_Node;
+	Binary_Operatory_Node_Kind operator;
+} Binary_Operator_Node;
 
 typedef Identifier_Type_Pair Generic_Argument;
 
@@ -164,7 +170,7 @@ struct Node {
 		Variable_Node variable;
 		If_Node if_;
 		Module_Node module;
-		Binary_Operatory_Node binary_operator;
+		Binary_Operator_Node binary_operator;
 		Define_Node define;
 		Block_Node block;
 		Function_Node function;

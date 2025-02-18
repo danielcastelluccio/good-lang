@@ -114,30 +114,31 @@ typedef struct {
 		size_t argument_index;
 		Value *value;
 	};
+	Value *type;
 	bool want_pointer;
 	Node *assign_value;
-} Identifier_Node_Data;
+} Identifier_Data;
 
 typedef struct {
 	Value *type;
-} Variable_Node_Data;
+} Variable_Data;
 
 typedef struct {
 	Value *type;
 	char *value;
-} String_Node_Data;
+} String_Data;
 
 typedef struct {
 	Value *type;
-} Number_Node_Data;
+} Number_Data;
 
 typedef struct {
 	Value *function_type;
-} Call_Node_Data;
+} Call_Data;
 
 typedef struct {
 	bool static_condition;
-} If_Node_Data;
+} If_Data;
 
 typedef struct {
 	Generic_Binding *generics;
@@ -174,19 +175,24 @@ typedef struct {
 } Structure_Access_Data;
 
 typedef struct {
+	Value *type;
+} Binary_Operator_Data;
+
+typedef struct {
 	Node_Kind kind;
 	union {
-		Identifier_Node_Data identifier;
-		Variable_Node_Data variable;
-		String_Node_Data string;
-		Number_Node_Data number;
-		Call_Node_Data call;
-		If_Node_Data if_;
+		Identifier_Data identifier;
+		Variable_Data variable;
+		String_Data string;
+		Number_Data number;
+		Call_Data call;
+		If_Data if_;
 		Define_Data define;
 		Function_Data function;
 		Function_Type_Data function_type;
 		Module_Access_Data module_access;
 		Structure_Access_Data structure_access;
+		Binary_Operator_Data binary_operator;
 	};
 } Node_Data;
 
