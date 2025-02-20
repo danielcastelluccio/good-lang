@@ -176,37 +176,42 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	context->generic_id = generic_id;
 
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
-		if (define.expression->kind == FUNCTION_NODE) {
-			Function_Type_Node function_type = define.expression->function.function_type->function_type;
-			Pattern_Match_Result result = NULL;
-			assert(arrlen(context->temporary_context.call_argument_types) <= arrlen(function_type.arguments));
-			for (long int i = 0; i < arrlen(function_type.arguments); i++) {
-				Node *argument = function_type.arguments[i].type;
-				Value *argument_value = context->temporary_context.call_argument_types[i];
-				pattern_match(argument, argument_value, context, define.generics, &result);
-			}
+		if (context->temporary_context.call_argument_types != NULL || context->temporary_context.call_wanted_type != NULL) {
+			if (define.expression->kind == FUNCTION_NODE) {
+				Function_Type_Node function_type = define.expression->function.function_type->function_type;
+				Pattern_Match_Result result = NULL;
+				if (context->temporary_context.call_argument_types != NULL) {
+					for (long int i = 0; i < arrlen(function_type.arguments) && i < arrlen(context->temporary_context.call_argument_types); i++) {
+						Node *argument = function_type.arguments[i].type;
+						Value *argument_value = context->temporary_context.call_argument_types[i];
+						pattern_match(argument, argument_value, context, define.generics, &result);
+					}
+				}
 
-			Node *return_ = function_type.return_;
-			if (return_ != NULL && context->temporary_context.call_wanted_type != NULL) {
-				pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result);
-			}
+				Node *return_ = function_type.return_;
+				if (return_ != NULL && context->temporary_context.call_wanted_type != NULL) {
+					pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result);
+				}
 
-			generics = NULL;
-			for (long int i = 0; i < arrlen(define.generics); i++) {
-				process_node(context, define.generics[i].type);
+				generics = NULL;
+				for (long int i = 0; i < arrlen(define.generics); i++) {
+					process_node(context, define.generics[i].type);
 
-				Value *binding = shget(result, define.generics[i].identifier);
-				if (binding != NULL) {
-					Generic_Binding generic_binding = {
-						.type = evaluate(context, define.generics[i].type),
-						.binding = binding
-					};
-					arrpush(generics, generic_binding);
+					Value *binding = shget(result, define.generics[i].identifier);
+					if (binding != NULL) {
+						Generic_Binding generic_binding = {
+							.type = evaluate(context, define.generics[i].type),
+							.binding = binding
+						};
+						arrpush(generics, generic_binding);
+					}
 				}
 			}
-		}
 
-		if (arrlen(generics) == 0) {
+			if (arrlen(generics) < arrlen(define.generics)) {
+				return (Process_Define_Result) {};
+			}
+		} else {
 			return (Process_Define_Result) {};
 		}
 	}
@@ -326,6 +331,10 @@ static void process_call(Context *context, Node *node) {
 		char given_string[64] = {};
 		print_type(function_type, given_string);
 		handle_semantic_error(node->location, "Expected function pointer, but got '%s'", given_string);
+	}
+
+	if (arrlen(call.arguments) != arrlen(function_type->function_type.arguments)) {
+		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", arrlen(function_type->function_type.arguments), arrlen(call.arguments));
 	}
 
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
