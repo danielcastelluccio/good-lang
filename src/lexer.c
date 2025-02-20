@@ -29,6 +29,10 @@ static bool is_alphanumeric(char character) {
 	return is_alphabetical(character) || is_numeric(character);
 }
 
+static bool is_alphanumericplus(char character) {
+	return is_alphanumeric(character) || character == '_';
+}
+
 static bool is_whitespace(char character) {
 	return character == ' ' || character == '\n' || character == '\t';
 }
@@ -130,6 +134,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '&':
 			result = create_token(AMPERSAND, lexer);
 			break;
+		case '@':
+			result = create_token(AT, lexer);
+			break;
 		case '(':
 			if (lexer->source[lexer->position] == '<') {
 				result = create_token(OPEN_PARENTHESIS_LESS, lexer);
@@ -221,7 +228,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 				size_t string_start_row = lexer->row;
 				size_t string_start_column = lexer->column - 1;
 
-				while (is_alphanumeric(lexer->source[lexer->position])) {
+				while (is_alphanumericplus(lexer->source[lexer->position])) {
 					increment_position(lexer);
 				}
 
@@ -297,6 +304,8 @@ char *token_to_string(Token_Kind kind) {
 			return "/";
 		case AMPERSAND:
 			return "&";
+		case AT:
+			return "@";
 		case LESS:
 			return "<";
 		case GREATER:

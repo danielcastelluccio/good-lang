@@ -22,6 +22,7 @@ typedef struct {
 	struct { Node_Data *key; LLVMValueRef value; } *variables; // stb_ds
 	LLVMValueRef *function_arguments; // stb_ds
 	LLVMValueRef current_function;
+	LLVMValueRef main_function;
 } State;
 
 static LLVMValueRef generate_node(Node *node, State *state);
@@ -35,7 +36,7 @@ static LLVMTypeRef create_llvm_function_literal_type(Value *value) {
 
 	LLVMTypeRef *arguments = NULL;
 	for (long int i = 0; i < arrlen(function_type.arguments); i++) {
-		arrput(arguments, create_llvm_type(function_type.arguments[i].type));
+		arrpush(arguments, create_llvm_type(function_type.arguments[i].type));
 	}
 
 	LLVMTypeRef return_type = create_llvm_type(function_type.return_type);
@@ -53,7 +54,7 @@ static LLVMTypeRef create_llvm_type(Value *value) {
 		}
 		case ARRAY_TYPE_VALUE: {
 			Array_Type_Value array = value->array_type;
-			return LLVMArrayType(create_llvm_type(array.inner), 0);
+			return LLVMArrayType(create_llvm_type(array.inner), array.size != NULL ? array.size->integer.value : 0);
 		}
 		case FUNCTION_TYPE_VALUE: {
 			return LLVMPointerType(create_llvm_function_literal_type(value), 0);
@@ -67,12 +68,12 @@ static LLVMTypeRef create_llvm_type(Value *value) {
 			else assert(false);
 			break;
 		}
-		case STRUCTURE_VALUE: {
+		case STRUCTURE_TYPE_VALUE: {
 			Structure_Type_Value structure_type = value->structure_type;
 
 			LLVMTypeRef *items = NULL;
 			for (long int i = 0; i < arrlen(structure_type.items); i++) {
-				arrput(items, create_llvm_type(structure_type.items[i].type));
+				arrpush(items, create_llvm_type(structure_type.items[i].type));
 			}
 
 			return LLVMStructType(items, arrlen(items), false);
@@ -105,13 +106,9 @@ static void generate_define(Node *node, State *state) {
 	}
 	value = strip_define_data(value);
 
-	LLVMValueRef expression_llvm_value = generate_value(value, state);
-	if (define.extern_) {
-		if (LLVMIsAFunction(expression_llvm_value)) {
-			LLVMSetValueName(expression_llvm_value, define.identifier);
-		} else {
-			assert(false);
-		}
+	LLVMValueRef llvm_value = generate_value(value, state);
+	if (strcmp(define.identifier, "main") == 0) {
+		state->main_function = llvm_value;
 	}
 }
 
@@ -134,7 +131,7 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 
 	LLVMValueRef *arguments = NULL;
 	for (unsigned int i = 0; i < arrlen(call.arguments); i++) {
-		arrput(arguments, generate_node(call.arguments[i], state));
+		arrpush(arguments, generate_node(call.arguments[i], state));
 	}
 
 	Value *function_type = get_data(&state->context, node)->call.function_type;
@@ -194,15 +191,13 @@ static LLVMValueRef generate_number(Node *node, State *state) {
 	assert(node->kind == NUMBER_NODE);
 	Number_Node number = node->number;
 	Value *type = get_data(&state->context, node)->number.type;
-	type = strip_define_data(type);
+	return LLVMConstInt(create_llvm_type(type), number.integer, false);
+}
 
-	assert(type->tag == INTERNAL_VALUE);
-
-	if (strcmp(type->internal.identifier, "uint") == 0) {
-		return LLVMConstInt(create_llvm_type(type), number.integer, false);
-	} else {
-		assert(false);
-	}
+static LLVMValueRef generate_null(Node *node, State *state) {
+	assert(node->kind == NULL_NODE);
+	Value *type = get_data(&state->context, node)->null_.type;
+	return LLVMConstInt(create_llvm_type(type), 0, false);
 }
 
 static LLVMValueRef generate_reference(Node *node, State *state) {
@@ -231,6 +226,35 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 
 	LLVMValueRef structure_llvm_value = generate_node(structure_access.structure, state);
 	LLVMValueRef element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type), structure_llvm_value, index, "");
+
+	if (data.assign_value != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
+		return NULL;
+	} else {
+		if (data.want_pointer) {
+			return element_pointer;
+		} else  {
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), element_pointer, "");
+		}
+	}
+}
+
+static LLVMValueRef generate_array_access(Node *node, State *state) {
+	assert(node->kind == ARRAY_ACCESS_NODE);
+	Array_Access_Node array_access = node->array_access;
+
+	Array_Access_Data data = get_data(&state->context, node)->array_access;
+	Value *array_type = data.array_value;
+	strip_define_data(array_type);
+
+	Value *type = array_type->array_type.inner;
+
+	LLVMValueRef array_llvm_value = generate_node(array_access.array, state);
+	LLVMValueRef indices[2] = {
+		LLVMConstInt(LLVMInt64Type(), 0, false),
+		generate_node(array_access.index, state)
+	};
+	LLVMValueRef element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_type), array_llvm_value, indices, 2, "");
 
 	if (data.assign_value != NULL) {
 		LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
@@ -326,17 +350,24 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 			}
 		}
 	} else {
-		assert(false);
+		LLVMValueRef value = generate_node(if_.condition, state);
+
+		LLVMBasicBlockRef if_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMBuildCondBr(state->llvm_builder, value, if_block, else_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, if_block);
+		generate_node(if_.if_body, state);
+		LLVMBuildBr(state->llvm_builder, done_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
+		if (if_.else_body != NULL) {
+			generate_node(if_.else_body, state);
+		}
+		LLVMBuildBr(state->llvm_builder, done_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 	}
 
 	return NULL;
-}
-
-static void generate_module(Node *node, State *state) {
-	assert(node->kind == MODULE_NODE);
-	Module_Node module = node->module;
-
-	generate_node(module.body, state);
 }
 
 static LLVMValueRef generate_node(Node *node, State *state) {
@@ -354,10 +385,14 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_string(node, state);
 		case NUMBER_NODE:
 			return generate_number(node, state);
+		case NULL_NODE:
+			return generate_null(node, state);
 		case REFERENCE_NODE:
 			return generate_reference(node, state);
 		case STRUCTURE_ACCESS_NODE:
 			return generate_structure_access(node, state);
+		case ARRAY_ACCESS_NODE:
+			return generate_array_access(node, state);
 		case BINARY_OPERATOR_NODE:
 			return generate_binary_operator(node, state);
 		case RETURN_NODE:
@@ -368,9 +403,6 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_variable(node, state);
 		case IF_NODE:
 			return generate_if(node, state);
-		case MODULE_NODE:
-			generate_module(node, state);
-			return NULL;
 		default:
 			assert(false);
 	}
@@ -393,7 +425,9 @@ static LLVMValueRef generate_function(Value *value, State *state) {
 	LLVMBuilderRef saved_llvm_builder = state->llvm_builder;
 	state->llvm_builder = LLVMCreateBuilder();
 
+	LLVMValueRef saved_current_function = state->current_function;
 	LLVMValueRef *saved_function_arguments = state->function_arguments;
+	state->current_function = llvm_function;
 	state->function_arguments = NULL;
 
 	if (function.body != NULL) {
@@ -410,13 +444,23 @@ static LLVMValueRef generate_function(Value *value, State *state) {
 	}
 
 	state->function_arguments = saved_function_arguments;
+	state->current_function = saved_current_function;
 	state->context.generic_id = saved_generic_id;
 	state->llvm_builder = saved_llvm_builder;
+
+	if (function.extern_name != NULL) {
+		LLVMSetValueName(llvm_function, function.extern_name);
+	}
 
 	return llvm_function;
 }
 
-int printf(const char *, ...);
+static void generate_module(Value *value, State *state) {
+	assert(value->tag == MODULE_VALUE);
+	Module_Value module = value->module;
+
+	generate_node(module.body, state);
+}
 
 static LLVMValueRef generate_value(Value *value, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
@@ -424,14 +468,15 @@ static LLVMValueRef generate_value(Value *value, State *state) {
 		return cached_result;
 	}
 
-	LLVMValueRef result;
+	LLVMValueRef result = NULL;
 	switch (value->tag) {
 		case FUNCTION_VALUE:
 			result = generate_function(value, state);
 			break;
 		case MODULE_VALUE:
+			generate_module(value, state);
 			break;
-		case STRUCTURE_VALUE:
+		case STRUCTURE_TYPE_VALUE:
 			break;
 		default:
 			assert(false);
@@ -441,8 +486,20 @@ static LLVMValueRef generate_value(Value *value, State *state) {
 	return result;
 }
 
+static void generate_main(State *state) {
+	LLVMValueRef llvm_function = LLVMAddFunction(state->llvm_module, "", LLVMFunctionType(LLVMVoidType(), NULL, 0, false));
+
+	LLVMBasicBlockRef entry = LLVMAppendBasicBlock(llvm_function, "");
+	LLVMPositionBuilderAtEnd(state->llvm_builder, entry);
+
+	LLVMBuildCall2(state->llvm_builder, LLVMGlobalGetValueType(state->main_function), state->main_function, NULL, 0, "");
+	LLVMBuildRetVoid(state->llvm_builder);
+
+	LLVMSetValueName(llvm_function, "main");
+}
+
 void build_llvm(Context context, Node *root) {
-	assert(root->kind == BLOCK_NODE);
+	assert(root->kind == MODULE_NODE);
 
 	LLVMContextRef llvm_context = LLVMContextCreate();
     LLVMModuleRef llvm_module = LLVMModuleCreateWithNameInContext("main", llvm_context);
@@ -455,7 +512,8 @@ void build_llvm(Context context, Node *root) {
 		.generated_cache = NULL
 	};
 
-	generate_node(root, &state);
+	generate_node(root->module.body, &state);
+	generate_main(&state);
 
 	LLVMPrintModuleToFile(llvm_module, "main.ll", NULL);
 

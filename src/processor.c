@@ -81,7 +81,7 @@ static int print_type(Value *value, char *buffer) {
 			buffer += sprintf(buffer, "%s", value->internal.identifier);
 			break;
 		}
-		case STRUCTURE_VALUE: {
+		case STRUCTURE_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
 			for (long int i = 0; i < arrlen(value->structure_type.items); i++) {
 				buffer += sprintf(buffer, "%s:", value->structure_type.items[i].identifier);
@@ -168,6 +168,10 @@ static void pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Define_Node define = node->define;
 
+	Scope *saved_scopes = context->scopes;
+	if (scopes != NULL) context->scopes = scopes;
+	arrpush(context->scopes, (Scope) { .node = node });
+
 	size_t saved_saved_generic_id = context->generic_id;
 	context->generic_id = generic_id;
 
@@ -204,6 +208,8 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	if (cached_data != NULL) {
 		if (cached_data->define.kind == DEFINE_SINGLE) {
 			context->generic_id = saved_saved_generic_id;
+			(void) arrpop(context->scopes);
+			if (scopes != NULL) context->scopes = saved_scopes;
 			return (Process_Define_Result) {
 				.value = cached_data->define.value.binding,
 				.type = cached_data->define.value.type
@@ -212,9 +218,11 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 			for (long int i = 0; i < arrlen(cached_data->define.generic_values); i++) {
 				if (arrlen(generics) == arrlen(cached_data->define.generic_values[i].generics)) {
 					for (long int j = 0; j < arrlen(cached_data->define.generic_values[i].generics); j++) {
-						if (value_equal(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
+						if (type_assignable(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
 							Generic_Binding binding = cached_data->define.generic_values[i].value;
 							context->generic_id = saved_saved_generic_id;
+							(void) arrpop(context->scopes);
+							if (scopes != NULL) context->scopes = saved_scopes;
 							return (Process_Define_Result) {
 								.value = binding.binding,
 								.type = binding.type
@@ -227,11 +235,6 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 			assert(false);
 		}
 	}
-
-	Scope *saved_scopes = context->scopes;
-	if (scopes != NULL) context->scopes = scopes;
-
-	arrpush(context->scopes, (Scope) { .node = node });
 	size_t saved_generic_id = context->generic_id;
 
 	if (arrlen(generics) > 0) {
@@ -328,7 +331,7 @@ static void process_call(Context *context, Node *node) {
 		process_node_context(context, temporary_context, call.arguments[i]);
 		Value *type = get_type(context, call.arguments[i]);;
 
-		if (wanted_type != NULL && !value_equal(wanted_type, type)) {
+		if (wanted_type != NULL && !type_assignable(wanted_type, type)) {
 			handle_type_error(node, wanted_type, type);
 		}
 	}
@@ -337,6 +340,17 @@ static void process_call(Context *context, Node *node) {
 	data->call.function_type = function_type;
 	set_data(context, node, data);
 	set_type(context, node, function_type->function_type.return_type);
+}
+
+static Value *create_string_type() {
+	Value *pointer = value_new(POINTER_TYPE_VALUE);
+	Value *array = value_new(ARRAY_TYPE_VALUE);
+	Value *byte = value_new(INTERNAL_VALUE);
+	byte->internal.identifier = "byte";
+	array->array_type.inner = byte;
+	pointer->pointer_type.inner = array;
+
+	return pointer;
 }
 
 static void process_identifier(Context *context, Node *node) {
@@ -365,14 +379,25 @@ static void process_identifier(Context *context, Node *node) {
 	if (identifier.module == NULL &&
 			(strcmp(identifier.value, "byte") == 0
 			|| strcmp(identifier.value, "uint") == 0
+			|| strcmp(identifier.value, "void") == 0
 			|| strcmp(identifier.value, "type") == 0)) {
 		value = value_new(INTERNAL_VALUE);
 		value->internal.identifier = identifier.value;
 
 		type = value_new(INTERNAL_VALUE);
 		type->internal.identifier = "type";
-	}
-	else {
+	} else if (strcmp(identifier.value, "import") == 0) {
+		value = value_new(INTERNAL_VALUE);
+		value->internal.identifier = identifier.value;
+
+		type = value_new(FUNCTION_TYPE_VALUE);
+		Function_Argument_Value argument = {
+			.identifier = "",
+			.type = create_string_type()
+		};
+		arrpush(type->function_type.arguments, argument);
+		type->function_type.return_type = value_new(MODULE_TYPE_VALUE);
+	} else {
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
 		size_t generic_id = context->generic_id;
@@ -383,8 +408,11 @@ static void process_identifier(Context *context, Node *node) {
 				Node *statement = module_value->module.body->block.statements[i];
 				if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
 					define_node = statement;
-					define_scopes = module_value->module.scopes;
 					generic_id = module_value->module.generic_id;
+
+					for (long i = 0; i < arrlen(module_value->module.scopes); i++) {
+						arrpush(define_scopes, module_value->module.scopes[i]);
+					}
 					break;
 				}
 			}
@@ -392,15 +420,13 @@ static void process_identifier(Context *context, Node *node) {
 
 		Lookup_Define_Result lookup_define_result = lookup_define(context, identifier.value);
 		if (lookup_define_result.node != NULL) {
-			Scope *new_scopes = NULL;
 			for (long i = 0; i < arrlen(context->scopes); i++) {
-				arrpush(new_scopes, context->scopes[i]);
+				arrpush(define_scopes, context->scopes[i]);
 
 				if (lookup_define_result.scope == &context->scopes[i]) break;
 			}
 
 			define_node = lookup_define_result.node;
-			define_scopes = new_scopes;
 		}
 
 		if (define_node != NULL) {
@@ -430,7 +456,7 @@ static void process_identifier(Context *context, Node *node) {
 
 				if (context->temporary_context.assign_value != NULL) {
 					Value *value_type = get_type(context, context->temporary_context.assign_value);
-					if (!value_equal(type, value_type)) {
+					if (!type_assignable(type, value_type)) {
 						handle_type_error(node, type, value_type);
 					}
 
@@ -500,13 +526,6 @@ static void process_structure(Context *context, Node *node) {
 static void process_string(Context *context, Node *node) {
 	String_Node string = node->string;
 
-	Value *pointer = value_new(POINTER_TYPE_VALUE);
-	Value *array = value_new(ARRAY_TYPE_VALUE);
-	Value *byte = value_new(INTERNAL_VALUE);
-	byte->internal.identifier = "byte";
-	array->array_type.inner = byte;
-	pointer->pointer_type.inner = array;
-
 	size_t original_length = strlen(string.value);
 	char *new_string = malloc(original_length + 1);
 	memset(new_string, 0, original_length + 1);
@@ -536,11 +555,13 @@ static void process_string(Context *context, Node *node) {
 
 	new_string[new_index] = '\0';
 
+	Value *type = create_string_type();
+
 	Node_Data *data = node_data_new(STRING_NODE);
-	data->string.type = pointer;
+	data->string.type = type;
 	data->string.value = new_string;
 	set_data(context, node, data);
-	set_type(context, node, pointer);
+	set_type(context, node, type);
 }
 
 static void process_number(Context *context, Node *node) {
@@ -552,6 +573,18 @@ static void process_number(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(NUMBER_NODE);
 	data->number.type = wanted_type;
+	set_data(context, node, data);
+	set_type(context, node, wanted_type);
+}
+
+static void process_null(Context *context, Node *node) {
+	Value *wanted_type = context->temporary_context.wanted_type;
+	if (wanted_type == NULL) {
+		assert(false);
+	}
+
+	Node_Data *data = node_data_new(NULL_NODE);
+	data->null_.type = wanted_type;
 	set_data(context, node, data);
 	set_type(context, node, wanted_type);
 }
@@ -580,7 +613,7 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_pointer_type = strip_define_data(get_type(context, structure_access.structure));
 	}
 
-	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCTURE_VALUE) {
+	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCTURE_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type(structure_pointer_type, given_string);
 		handle_semantic_error(node->location, "Expected structure pointer, but got '%s'", given_string);
@@ -600,8 +633,61 @@ static void process_structure_access(Context *context, Node *node) {
 	data->structure_access.want_pointer = context->temporary_context.want_pointer;
 
 	if (context->temporary_context.assign_value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = item_type };
+		process_node_context(context, temporary_context, context->temporary_context.assign_value);
+
 		Value *value_type = get_type(context, context->temporary_context.assign_value);
-		if (!value_equal(item_type, value_type)) {
+		if (!type_assignable(item_type, value_type)) {
+			handle_type_error(node, item_type, value_type);
+		}
+		data->structure_access.assign_value = context->temporary_context.assign_value;
+	} else {
+		if (data->structure_access.want_pointer) {
+			Value *pointer_item_type = value_new(POINTER_TYPE_VALUE);
+			pointer_item_type->pointer_type.inner = item_type;
+			item_type = pointer_item_type;
+		}
+
+		set_type(context, node, item_type);
+	}
+	set_data(context, node, data);
+}
+
+static void process_array_access(Context *context, Node *node) {
+	Array_Access_Node array_access = node->array_access;
+
+	process_node(context, array_access.array);
+	process_node(context, array_access.index);
+
+	Value *array_pointer_type = strip_define_data(get_type(context, array_access.array));
+	if (array_pointer_type->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, array_access.array);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, array_access.array);
+
+		array_pointer_type = strip_define_data(get_type(context, array_access.array));
+	}
+
+	if (array_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_pointer_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
+		char given_string[64] = {};
+		print_type(array_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected array pointer, but got '%s'", given_string);
+	}
+
+	Value *array_type = strip_define_data(array_pointer_type->pointer_type.inner);
+	Value *item_type = array_type->array_type.inner;
+
+	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
+	data->array_access.array_value = array_type;
+	data->array_access.want_pointer = context->temporary_context.want_pointer;
+
+	if (context->temporary_context.assign_value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = item_type };
+		process_node_context(context, temporary_context, context->temporary_context.assign_value);
+
+		Value *value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(item_type, value_type)) {
 			handle_type_error(node, item_type, value_type);
 		}
 		data->structure_access.assign_value = context->temporary_context.assign_value;
@@ -640,7 +726,7 @@ static void process_variable(Context *context, Node *node) {
 	if (type == NULL) {
 		type = value_type;
 	} else if (value_type != NULL) {
-		if (!value_equal(type, value_type)) {
+		if (!type_assignable(type, value_type)) {
 			handle_type_error(node, type, value_type);
 		}
 	}
@@ -653,7 +739,6 @@ static void process_variable(Context *context, Node *node) {
 static void process_assign(Context *context, Node *node) {
 	Assign_Node assign = node->assign;
 
-	process_node(context, assign.value);
 	Temporary_Context temporary_context = { .assign_value = assign.value };
 	process_node_context(context, temporary_context, assign.container);
 }
@@ -667,7 +752,7 @@ static void process_return(Context *context, Node *node) {
 		process_node_context(context, temporary_context, return_.value);
 
 		Value *type = get_type(context, return_.value);
-		if (!value_equal(return_type, type)) {
+		if (!type_assignable(return_type, type)) {
 			handle_type_error(node, return_type, type);
 		}
 	}
@@ -701,7 +786,7 @@ static void process_binary_operator(Context *context, Node *node) {
 	assert(left_type != NULL);
 	Value *right_type = get_type(context, binary_operator.right);
 	assert(right_type != NULL);
-	if (!value_equal(left_type, right_type)) {
+	if (!type_assignable(left_type, right_type)) {
 		char left_string[64] = {};
 		print_type(left_type, left_string);
 		char right_string[64] = {};
@@ -850,12 +935,20 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_number(context, node);
 			break;
 		}
+		case NULL_NODE: {
+			process_null(context, node);
+			break;
+		}
 		case REFERENCE_NODE: {
 			process_reference(context, node);
 			break;
 		}
 		case STRUCTURE_ACCESS_NODE: {
 			process_structure_access(context, node);
+			break;
+		}
+		case ARRAY_ACCESS_NODE: {
+			process_array_access(context, node);
 			break;
 		}
 		case VARIABLE_NODE: {

@@ -23,6 +23,7 @@ typedef struct {
 
 typedef struct {
 	Node *inner;
+	Node *size;
 } Array_Node;
 
 typedef Identifier_Type_Pair Function_Argument;
@@ -65,6 +66,11 @@ typedef struct {
 	Node *structure;
 	char *item;
 } Structure_Access_Node;
+
+typedef struct {
+	Node *array;
+	Node *index;
+} Array_Access_Node;
 
 typedef struct {
 	Node *value;
@@ -123,6 +129,7 @@ typedef struct {
 typedef struct {
 	Node *function_type;
 	Node *body;
+	char *extern_name;
 } Function_Node;
 
 typedef Identifier_Type_Pair Struct_Item;
@@ -137,10 +144,12 @@ typedef enum {
 	FUNCTION_TYPE_NODE,
 	STRING_NODE,
 	NUMBER_NODE,
+	NULL_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
 	REFERENCE_NODE,
 	STRUCTURE_ACCESS_NODE,
+	ARRAY_ACCESS_NODE,
 	RETURN_NODE,
 	ASSIGN_NODE,
 	VARIABLE_NODE,
@@ -165,6 +174,7 @@ struct Node {
 		Call_Node call;
 		Reference_Node reference;
 		Structure_Access_Node structure_access;
+		Array_Access_Node array_access;
 		Return_Node return_;
 		Assign_Node assign;
 		Variable_Node variable;

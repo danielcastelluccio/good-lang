@@ -21,11 +21,15 @@ typedef struct Value Value;
 typedef enum {
 	FUNCTION_VALUE,
 	FUNCTION_TYPE_VALUE,
-	STRUCTURE_VALUE,
+	STRUCTURE_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	BOOLEAN_VALUE,
 	MODULE_VALUE,
+	POINTER_VALUE,
+	ARRAY_VALUE,
+	BYTE_VALUE,
+	INTEGER_VALUE,
 	MODULE_TYPE_VALUE,
 	DEFINE_DATA_VALUE,
 	NONE_VALUE,
@@ -42,6 +46,7 @@ typedef struct {
 	Node *body;
 	size_t generic_id;
 	bool compile_only;
+	char *extern_name;
 } Function_Value;
 
 typedef Identifier_Value_Pair Function_Argument_Value;
@@ -65,11 +70,29 @@ typedef struct {
 } Module_Value;
 
 typedef struct {
+	Value *value;
+} Pointer_Value;
+
+typedef struct {
+	Value **values;
+	size_t length;
+} Array_Value;
+
+typedef struct {
+	char value;
+} Byte_Value;
+
+typedef struct {
+	long value;
+} Integer_Value;
+
+typedef struct {
 	Value *inner;
 } Pointer_Type_Value;
 
 typedef struct {
 	Value *inner;
+	Value *size;
 } Array_Type_Value;
 
 typedef struct {
@@ -96,6 +119,10 @@ struct Value {
 		Pointer_Type_Value pointer_type;
 		Array_Type_Value array_type;
 		Boolean_Value boolean;
+		Pointer_Value pointer;
+		Array_Value array;
+		Byte_Value byte;
+		Integer_Value integer;
 		Internal_Value internal;
 		Define_Data_Value define_data;
 	};
@@ -131,6 +158,10 @@ typedef struct {
 typedef struct {
 	Value *type;
 } Number_Data;
+
+typedef struct {
+	Value *type;
+} Null_Data;
 
 typedef struct {
 	Value *function_type;
@@ -175,6 +206,12 @@ typedef struct {
 } Structure_Access_Data;
 
 typedef struct {
+	Value *array_value;
+	Node *assign_value;
+	bool want_pointer;
+} Array_Access_Data;
+
+typedef struct {
 	Value *type;
 } Binary_Operator_Data;
 
@@ -185,6 +222,7 @@ typedef struct {
 		Variable_Data variable;
 		String_Data string;
 		Number_Data number;
+		Null_Data null_;
 		Call_Data call;
 		If_Data if_;
 		Define_Data define;
@@ -192,6 +230,7 @@ typedef struct {
 		Function_Type_Data function_type;
 		Module_Access_Data module_access;
 		Structure_Access_Data structure_access;
+		Array_Access_Data array_access;
 		Binary_Operator_Data binary_operator;
 	};
 } Node_Data;

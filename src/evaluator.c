@@ -5,6 +5,7 @@
 
 #include "ast.h"
 #include "evaluator.h"
+#include "parser.h"
 
 #include <setjmp.h>
 
@@ -26,7 +27,7 @@ bool value_equal(Value *value1, Value *value2) {
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
 		}
-		case STRUCTURE_VALUE: {
+		case STRUCTURE_TYPE_VALUE: {
 			if (arrlen(value1->structure_type.items) != arrlen(value2->structure_type.items)) return false;
 
 			for (long int i = 0; i < arrlen(value1->structure_type.items); i++) {
@@ -44,6 +45,40 @@ bool value_equal(Value *value1, Value *value2) {
 	}
 }
 
+bool type_assignable(Value *type1, Value *type2) {
+	if (type1->tag != type2->tag) return false;
+
+	switch (type1->tag) {
+		case POINTER_TYPE_VALUE: {
+			if ((type1->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type1->pointer_type.inner->internal.identifier, "void") == 0) || (type2->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type2->pointer_type.inner->internal.identifier, "void") == 0)) {
+				return true;
+			}
+
+			return value_equal(type1->pointer_type.inner, type2->pointer_type.inner);
+		}
+		case ARRAY_TYPE_VALUE: {
+			return value_equal(type1->array_type.inner, type2->array_type.inner);
+		}
+		case INTERNAL_VALUE: {
+			return strcmp(type1->internal.identifier, type2->internal.identifier) == 0;
+		}
+		case STRUCTURE_TYPE_VALUE: {
+			if (arrlen(type1->structure_type.items) != arrlen(type2->structure_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(type1->structure_type.items); i++) {
+				if (strcmp(type1->structure_type.items[i].identifier, type2->structure_type.items[i].identifier) != 0) return false;
+				if (!value_equal(type1->structure_type.items[i].type, type2->structure_type.items[i].type)) return false;
+			}
+
+			return true;
+		}
+		case DEFINE_DATA_VALUE: {
+			return value_equal(type1->define_data.value, type2->define_data.value);
+		}
+		default:
+			assert(false);
+	}
+}
 
 Value *evaluate(Context *context, Node *node) {
 	switch (node->kind) {
@@ -58,22 +93,22 @@ Value *evaluate(Context *context, Node *node) {
 			}
 
 			function_value->function.compile_only = get_data(context, node)->function.compile_only;
-
 			function_value->function.generic_id = context->generic_id;
+			function_value->function.extern_name = function.extern_name;
 
 			return function_value;
 		}
 		case STRUCTURE_NODE: {
 			Structure_Node structure = node->structure;
 
-			Value *structure_value = value_new(STRUCTURE_VALUE);
+			Value *structure_value = value_new(STRUCTURE_TYPE_VALUE);
 			structure_value->structure_type.items = NULL;
 			for (long int i = 0; i < arrlen(structure.items); i++) {
 				Structure_Item_Value item = {
 					.identifier = structure.items[i].identifier,
 					.type = evaluate(context, structure.items[i].type)
 				};
-				arrput(structure_value->structure_type.items, item);
+				arrpush(structure_value->structure_type.items, item);
 			}
 
 			return structure_value;
@@ -86,6 +121,8 @@ Value *evaluate(Context *context, Node *node) {
 			for (long int i = 0; i < arrlen(context->scopes); i++) {
 				arrpush(scopes, context->scopes[i]);
 			}
+
+			arrpush(scopes, (Scope) { .node = module.body });
 
 			module_value->module.body = module.body;
 			module_value->module.generic_id = context->generic_id;
@@ -104,6 +141,7 @@ Value *evaluate(Context *context, Node *node) {
 			Array_Node array = node->array;
 
 			Value *array_type_value = value_new(ARRAY_TYPE_VALUE);
+			if (array.size != NULL) array_type_value->array_type.size = evaluate(context, array.size);
 			array_type_value->array_type.inner = evaluate(context, array.inner);
 			return array_type_value;
 		}
@@ -116,6 +154,38 @@ Value *evaluate(Context *context, Node *node) {
 			assert(false);
 			break;
 		}
+		case STRING_NODE: {
+			String_Data string_data = get_data(context, node)->string;
+			char *string_value = string_data.value;
+			size_t string_length = strlen(string_value);
+
+			Value *pointer = value_new(POINTER_VALUE);
+			Value *array = value_new(ARRAY_VALUE);
+			pointer->pointer.value = array;
+
+			array->array.length = string_length;
+			array->array.values = malloc(sizeof(Value *) * string_length);
+			for (size_t i = 0; i < string_length; i++) {
+				Value *byte = value_new(BYTE_VALUE);
+				byte->byte.value = string_value[i];
+				array->array.values[i] = byte;
+			}
+
+			return pointer;
+		}
+		case NUMBER_NODE: {
+			Number_Node number = node->number;
+			switch (number.tag) {
+				case INTEGER_NUMBER: {
+					Value *value = value_new(INTEGER_VALUE);
+					value->integer.value = number.integer;
+					return value;
+				}
+				default:
+					assert(false);
+			}
+			return NULL;
+		}
 		case CALL_NODE: {
 			Call_Node call = node->call;
 
@@ -123,19 +193,44 @@ Value *evaluate(Context *context, Node *node) {
 
 			Value **arguments = NULL;
 			for (long int i = 0; i < arrlen(call.arguments); i++) {
-				arrput(arguments, evaluate(context, call.arguments[i]));
+				arrpush(arguments, evaluate(context, call.arguments[i]));
 			}
 
-			jmp_buf prev_jmp;
-			memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-			Value *result;
-			if (!setjmp(jmp)) {
-				result = evaluate(context, function->function.body);
-			} else {
-				result = jmp_result;
+			switch (function->tag) {
+				case INTERNAL_VALUE: {
+					char *identifier = function->internal.identifier;
+					if (strcmp(identifier, "import") == 0) {
+						Value *array = arguments[0]->pointer.value;
+						char *source = malloc(array->array.length + 1);
+						source[array->array.length] = '\0';
+						for (size_t i = 0; i < array->array.length; i++) {
+							source[i] = array->array.values[i]->byte.value;
+						}
+
+						Node *file_node = parse_file(source);
+						return evaluate(context, file_node);
+					} else {
+						assert(false);
+					}
+					return NULL;
+				}
+				case FUNCTION_VALUE: {
+					jmp_buf prev_jmp;
+					memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+					Value *result;
+					if (!setjmp(jmp)) {
+						result = evaluate(context, function->function.body);
+					} else {
+						result = jmp_result;
+					}
+					memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+					return result;
+				}
+				default:
+					assert(false);
 			}
-			memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
-			return result;
+
+			return NULL;
 		}
 		case BINARY_OPERATOR_NODE: {
 			Binary_Operator_Node binary_operator = node->binary_operator;

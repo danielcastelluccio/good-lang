@@ -60,6 +60,10 @@ static Node *parse_number(Lexer *lexer) {
 static Node *parse_identifier(Lexer *lexer, Node *module) {
 	Token_Data token = consume_check(lexer, IDENTIFIER);
 
+	if (strcmp(token.string, "null") == 0) {
+		return ast_new(NULL_NODE, token.location);
+	}
+
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
 	identifier->identifier.module = module;
 	identifier->identifier.value = token.string;
@@ -68,7 +72,7 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 	if (lexer_next(lexer, false).kind == HASHTAG_OPEN_PARENTHESIS) {
 		consume_check(lexer, HASHTAG_OPEN_PARENTHESIS);
 		while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
-			arrput(identifier->identifier.generics, parse_expression(lexer));
+			arrpush(identifier->identifier.generics, parse_expression(lexer));
 
 			Token_Data token = lexer_next(lexer, false);
 			if (token.kind == COMMA) {
@@ -91,7 +95,7 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 	call->call.function = function;
 
 	while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
-		arrput(call->call.arguments, parse_expression(lexer));
+		arrpush(call->call.arguments, parse_expression(lexer));
 
 		Token_Data token = lexer_next(lexer, false);
 		if (token.kind == COMMA) {
@@ -176,6 +180,18 @@ static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 	return structure_access;
 }
 
+static Node *parse_array_access(Lexer *lexer, Node *array) {
+	Token_Data first_token = lexer_next(lexer, true);
+
+	Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
+	array_access->array_access.array = array;
+	array_access->array_access.index = parse_expression(lexer);
+
+	consume_check(lexer, CLOSED_BRACE);
+
+	return array_access;
+}
+
 static Node *parse_assign(Lexer *lexer, Node *structure) {
 	Token_Data first_token = lexer_next(lexer, true);
 
@@ -201,7 +217,7 @@ static Node *parse_structure(Lexer *lexer) {
 			.identifier = identifier.string,
 			.type = type
 		};
-		arrput(items, item);
+		arrpush(items, item);
 
 		Token_Data token = lexer_next(lexer, false);
 		if (token.kind == COMMA) {
@@ -222,12 +238,6 @@ static Node *parse_structure(Lexer *lexer) {
 static Node *parse_define(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 
-	bool extern_ = false;
-	Token_Data maybe_extern = lexer_next(lexer, false);
-	if (maybe_extern.kind == KEYWORD && strcmp(maybe_extern.string, "extern") == 0) extern_ = true;
-
-	if (extern_) lexer_next(lexer, true);
-
 	Token_Data identifier = consume_check(lexer, IDENTIFIER);
 
 	Node *constraint = NULL;
@@ -244,7 +254,7 @@ static Node *parse_define(Lexer *lexer) {
 				.identifier = identifier.string,
 				.type = type
 			};
-			arrput(generics, argument);
+			arrpush(generics, argument);
 
 			Token_Data token = lexer_next(lexer, false);
 			if (token.kind == COMMA) {
@@ -270,7 +280,6 @@ static Node *parse_define(Lexer *lexer) {
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 	define->define.identifier = identifier.string;
 	define->define.expression = expression;
-	define->define.extern_ = extern_;
 	define->define.generics = generics;
 	define->define.generic_constraint = constraint;
 
@@ -333,7 +342,7 @@ static Node *parse_block(Lexer *lexer) {
 	Node *block = ast_new(BLOCK_NODE, first_token.location);
 
 	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
-		arrput(block->block.statements, parse_statement(lexer));
+		arrpush(block->block.statements, parse_statement(lexer));
 	}
 
 	consume_check(lexer, CLOSED_CURLY_BRACE);
@@ -369,7 +378,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 				.identifier = identifier.string,
 				.type = type
 			};
-			arrput(arguments, argument);
+			arrpush(arguments, argument);
 		}
 
 		Token_Data token = lexer_next(lexer, false);
@@ -394,14 +403,26 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 	function_type->function_type.return_ = return_;
 	function_type->function_type.variadic = variadic;
 
-	if (lexer_next(lexer, false).kind == MINUS_GREATER) {
-		consume_check(lexer, MINUS_GREATER);
+	bool extern_ = false;
+	char *extern_name = NULL;
+	Token_Data maybe_extern = lexer_next(lexer, false);
+	if (maybe_extern.kind == KEYWORD && strcmp(maybe_extern.string, "extern") == 0) extern_ = true;
 
-		Node *body = parse_expression_or_nothing(lexer);
+	if (extern_) {
+		lexer_next(lexer, true);
+		extern_name = consume_check(lexer, STRING).string;
+	}
 
+	Node *body = NULL;
+	if (!extern_) {
+		body = parse_expression_or_nothing(lexer);
+	}
+
+	if (body != NULL || extern_) {
 		Node *function = ast_new(FUNCTION_NODE, first_token.location);
 		function->function.function_type = function_type;
 		function->function.body = body;
+		function->function.extern_name = extern_name;
 		return function;
 	} else {
 		return function_type;
@@ -497,9 +518,14 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case OPEN_BRACE: {
 			Token_Data first_token = consume_check(lexer, OPEN_BRACE);
+			Node *size = NULL;
+			if (lexer_next(lexer, false).kind != CLOSED_BRACE) {
+				size = parse_expression(lexer);
+			}
 			consume_check(lexer, CLOSED_BRACE);
 
 			Node *array = ast_new(ARRAY_NODE, first_token.location);
+			array->array.size = size;
 			array->array.inner = parse_expression(lexer);
 
 			result = array;
@@ -525,6 +551,9 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case PERIOD:
 				result = parse_structure_access(lexer, result);
+				break;
+			case OPEN_BRACE:
+				result = parse_array_access(lexer, result);
 				break;
 			case COLON_COLON:
 				consume_check(lexer, COLON_COLON);
@@ -555,10 +584,12 @@ Node *parse_file(char *path) {
 
 	Lexer lexer = lexer_create(path, contents, length);
 
-	Node *root = ast_new(BLOCK_NODE, (Source_Location) {});
+	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
+	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
 	while (lexer_next(&lexer, false).kind != END_OF_FILE) {
-		arrput(root->block.statements, parse_statement(&lexer));
+		arrpush(block->block.statements, parse_statement(&lexer));
 	}
+	root->module.body = block;
 
 	return root;
 }
