@@ -160,6 +160,10 @@ typedef struct {
 } Number_Data;
 
 typedef struct {
+	Value *value;
+} Run_Data;
+
+typedef struct {
 	Value *type;
 } Null_Data;
 
@@ -222,6 +226,7 @@ typedef struct {
 		Variable_Data variable;
 		String_Data string;
 		Number_Data number;
+		Run_Data run;
 		Null_Data null_;
 		Call_Data call;
 		If_Data if_;
@@ -241,14 +246,28 @@ typedef struct { Node *key; Value *value; } *Node_Types;
 
 typedef struct { Node *key; Node_Data *value; } *Node_Datas;
 
+typedef struct Context Context;
+
+typedef struct {
+	size_t (*size_fn)(Value *, void *data);
+	void (*build_fn)(Context context, Node *root, void *data);
+	void *data;
+} Codegen;
+
+typedef struct {
+	char *path;
+	Value *value;
+} Cached_File;
+
 typedef struct {
 	Node *assign_value;
 	Value *wanted_type;
 	bool want_pointer;
 	Value **call_argument_types;
+	Value *call_wanted_type;
 } Temporary_Context;
 
-typedef struct {
+struct Context {
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
 	Node *current_function;
@@ -257,7 +276,9 @@ typedef struct {
 	size_t generic_id;
 	size_t generic_id_counter;
 	Temporary_Context temporary_context;
-} Context;
+	Codegen codegen;
+	Cached_File *cached_files; // stb_ds
+};
 
 Value *get_type(Context *context, Node *node);
 void set_type(Context *context, Node *node, Value *value);

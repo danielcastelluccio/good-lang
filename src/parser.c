@@ -358,6 +358,13 @@ static Node *parse_module(Lexer *lexer) {
 	return module;
 }
 
+static Node *parse_run(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *run = ast_new(RUN_NODE, first_token.location);
+	run->run.value = parse_expression(lexer);
+	return run;
+}
+
 static Node *parse_function_or_function_type(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 	consume_check(lexer, OPEN_PARENTHESIS);
@@ -488,6 +495,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (strcmp(value, "struct") == 0) result = parse_structure(lexer);
 			else if (strcmp(value, "if") == 0) result = parse_if(lexer);
 			else if (strcmp(value, "mod") == 0) result = parse_module(lexer);
+			else if (strcmp(value, "run") == 0) result = parse_run(lexer);
 			else {
 				printf("Unhandled keyword '%s'\n", value);
 				exit(1);

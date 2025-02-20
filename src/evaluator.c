@@ -80,6 +80,25 @@ bool type_assignable(Value *type1, Value *type2) {
 	}
 }
 
+Value *get_cached_file(Context *context, char *path) {
+	for (long int i = 0; i < arrlen(context->cached_files); i++) {
+		if (strcmp(context->cached_files[i].path, path) == 0) {
+			return context->cached_files[i].value;
+		}
+	}
+
+	return NULL;
+}
+
+void add_cached_file(Context *context, char *path, Value *value) {
+	Cached_File file = {
+		.path = path,
+		.value = value
+	};
+
+	arrpush(context->cached_files, file);
+}
+
 Value *evaluate(Context *context, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE: {
@@ -207,8 +226,25 @@ Value *evaluate(Context *context, Node *node) {
 							source[i] = array->array.values[i]->byte.value;
 						}
 
+						Value *value = get_cached_file(context, source);
+						if (value != NULL) {
+							return value;
+						}
+
 						Node *file_node = parse_file(source);
-						return evaluate(context, file_node);
+
+						Scope *saved_scopes = context->scopes;
+						context->scopes = NULL;
+						value = evaluate(context, file_node);
+						context->scopes = saved_scopes;
+
+						add_cached_file(context, source, value);
+
+						return value;
+					} else if (strcmp(identifier, "size_of") == 0) {
+						Value *value = value_new(INTEGER_VALUE);
+						value->integer.value = context->codegen.size_fn(arguments[0], context->codegen.data);
+						return value;
 					} else {
 						assert(false);
 					}

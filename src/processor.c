@@ -178,23 +178,30 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
 		if (define.expression->kind == FUNCTION_NODE) {
 			Function_Type_Node function_type = define.expression->function.function_type->function_type;
-			if (context->temporary_context.call_argument_types != NULL) {
-				Pattern_Match_Result result = NULL;
-				assert(arrlen(context->temporary_context.call_argument_types) <= arrlen(function_type.arguments));
-				for (long int i = 0; i < arrlen(function_type.arguments); i++) {
-					Node *argument = function_type.arguments[i].type;
-					Value *argument_value = context->temporary_context.call_argument_types[i];
-					pattern_match(argument, argument_value, context, define.generics, &result);
-				}
+			Pattern_Match_Result result = NULL;
+			assert(arrlen(context->temporary_context.call_argument_types) <= arrlen(function_type.arguments));
+			for (long int i = 0; i < arrlen(function_type.arguments); i++) {
+				Node *argument = function_type.arguments[i].type;
+				Value *argument_value = context->temporary_context.call_argument_types[i];
+				pattern_match(argument, argument_value, context, define.generics, &result);
+			}
 
-				generics = NULL;
-				for (long int i = 0; i < arrlen(define.generics); i++) {
-					process_node(context, define.generics[i].type);
-					Generic_Binding binding = {
+			Node *return_ = function_type.return_;
+			if (return_ != NULL && context->temporary_context.call_wanted_type != NULL) {
+				pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result);
+			}
+
+			generics = NULL;
+			for (long int i = 0; i < arrlen(define.generics); i++) {
+				process_node(context, define.generics[i].type);
+
+				Value *binding = shget(result, define.generics[i].identifier);
+				if (binding != NULL) {
+					Generic_Binding generic_binding = {
 						.type = evaluate(context, define.generics[i].type),
-						.binding = shget(result, define.generics[i].identifier)
+						.binding = binding
 					};
-					arrpush(generics, binding);
+					arrpush(generics, generic_binding);
 				}
 			}
 		}
@@ -312,7 +319,7 @@ static void process_call(Context *context, Node *node) {
 		reset_node(context, node);
 	}
 
-	Temporary_Context temporary_context = { .call_argument_types = argument_types };
+	Temporary_Context temporary_context = { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
 	process_node_context(context, temporary_context, call.function);
 	Value *function_type = get_type(context, call.function);
 	if (function_type->tag != FUNCTION_TYPE_VALUE) {
@@ -397,6 +404,21 @@ static void process_identifier(Context *context, Node *node) {
 		};
 		arrpush(type->function_type.arguments, argument);
 		type->function_type.return_type = value_new(MODULE_TYPE_VALUE);
+	} else if (strcmp(identifier.value, "size_of") == 0) {
+		value = value_new(INTERNAL_VALUE);
+		value->internal.identifier = identifier.value;
+
+		Value *type_type = value_new(INTERNAL_VALUE);
+		type_type->internal.identifier = "type";
+
+		type = value_new(FUNCTION_TYPE_VALUE);
+		Function_Argument_Value argument = {
+			.identifier = "",
+			.type = type_type
+		};
+		arrpush(type->function_type.arguments, argument);
+		type->function_type.return_type = value_new(INTERNAL_VALUE);
+		type->function_type.return_type->internal.identifier = "uint";
 	} else {
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
@@ -587,6 +609,18 @@ static void process_null(Context *context, Node *node) {
 	data->null_.type = wanted_type;
 	set_data(context, node, data);
 	set_type(context, node, wanted_type);
+}
+
+static void process_run(Context *context, Node *node) {
+	Run_Node run = node->run;
+
+	process_node(context, run.value);
+	Value *value = evaluate(context, run.value);
+
+	Node_Data *data = node_data_new(RUN_NODE);
+	data->run.value = value;
+	set_data(context, node, data);
+	set_type(context, node, get_type(context, run.value));
 }
 
 static void process_reference(Context *context, Node *node) {
@@ -939,6 +973,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_null(context, node);
 			break;
 		}
+		case RUN_NODE: {
+			process_run(context, node);
+			break;
+		}
 		case REFERENCE_NODE: {
 			process_reference(context, node);
 			break;
@@ -1002,8 +1040,8 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 	context->temporary_context = saved_temporary_context;
 }
 
-Context process(Node *root) {
-	Context context = {};
+Context process(Node *root, Codegen codegen) {
+	Context context = { .codegen = codegen };
 
 	process_node(&context, root);
 

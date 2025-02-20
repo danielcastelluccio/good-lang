@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include <llvm-c/Core.h>
 #include <llvm-c/Target.h>
@@ -200,6 +201,12 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 	return LLVMConstInt(create_llvm_type(type), 0, false);
 }
 
+static LLVMValueRef generate_run(Node *node, State *state) {
+	assert(node->kind == RUN_NODE);
+	Value *value = get_data(&state->context, node)->run.value;
+	return generate_value(value, state);
+}
+
 static LLVMValueRef generate_reference(Node *node, State *state) {
 	assert(node->kind == REFERENCE_NODE);
 	Reference_Node reference = node->reference;
@@ -387,6 +394,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_number(node, state);
 		case NULL_NODE:
 			return generate_null(node, state);
+		case RUN_NODE:
+			return generate_run(node, state);
 		case REFERENCE_NODE:
 			return generate_reference(node, state);
 		case STRUCTURE_ACCESS_NODE:
@@ -462,6 +471,14 @@ static void generate_module(Value *value, State *state) {
 	generate_node(module.body, state);
 }
 
+static LLVMValueRef generate_integer(Value *value, State *state) {
+	(void) state;
+	assert(value->tag == INTEGER_VALUE);
+	Integer_Value integer = value->integer;
+
+	return LLVMConstInt(LLVMInt64Type(), integer.value, false);
+}
+
 static LLVMValueRef generate_value(Value *value, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -475,6 +492,9 @@ static LLVMValueRef generate_value(Value *value, State *state) {
 			break;
 		case MODULE_VALUE:
 			generate_module(value, state);
+			break;
+		case INTEGER_VALUE:
+			result = generate_integer(value, state);
 			break;
 		case STRUCTURE_TYPE_VALUE:
 			break;
@@ -498,11 +518,23 @@ static void generate_main(State *state) {
 	LLVMSetValueName(llvm_function, "main");
 }
 
-void build_llvm(Context context, Node *root) {
+typedef struct {
+	LLVMContextRef context;
+	LLVMModuleRef module;
+	LLVMTargetMachineRef target_machine;
+} LLVM_Data;
+
+size_t size_llvm(Value *value, void *data) {
+	LLVMTypeRef llvm_type = create_llvm_type(value);
+	return LLVMStoreSizeOfType(LLVMCreateTargetDataLayout(((LLVM_Data *) data)->target_machine), llvm_type);
+}
+
+void build_llvm(Context context, Node *root, void *data) {
 	assert(root->kind == MODULE_NODE);
 
-	LLVMContextRef llvm_context = LLVMContextCreate();
-    LLVMModuleRef llvm_module = LLVMModuleCreateWithNameInContext("main", llvm_context);
+	LLVMContextRef llvm_context = ((LLVM_Data *) data)->context;
+	LLVMModuleRef llvm_module = ((LLVM_Data *) data)->module;
+    LLVMTargetMachineRef llvm_target_machine = ((LLVM_Data *) data)->target_machine;
     LLVMBuilderRef llvm_builder = LLVMCreateBuilderInContext(llvm_context);
 
 	State state = {
@@ -516,6 +548,22 @@ void build_llvm(Context context, Node *root) {
 	generate_main(&state);
 
 	LLVMPrintModuleToFile(llvm_module, "main.ll", NULL);
+	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.o", LLVMObjectFile, NULL);
+	
+	char *args[] = {
+		"gcc",
+		"-no-pie",
+		"output.o",
+		"-o",
+		"output",
+		NULL
+	};
+	execvp(args[0], args);
+}
+
+Codegen llvm_codegen() {
+	LLVMContextRef llvm_context = LLVMContextCreate();
+    LLVMModuleRef llvm_module = LLVMModuleCreateWithNameInContext("main", llvm_context);
 
 	LLVMInitializeAllTargetInfos();
 	LLVMInitializeAllTargets();
@@ -524,12 +572,21 @@ void build_llvm(Context context, Node *root) {
 	LLVMInitializeAllAsmPrinters();
 
 	LLVMTargetRef target;
-	char* error;
-	LLVMGetTargetFromTriple(LLVMGetDefaultTargetTriple(), &target, &error);
-	LLVMTargetMachineRef targetMachine = LLVMCreateTargetMachine(
+	LLVMGetTargetFromTriple(LLVMGetDefaultTargetTriple(), &target, NULL);
+	LLVMTargetMachineRef target_machine = LLVMCreateTargetMachine(
     	target, LLVMGetDefaultTargetTriple(), "generic", "",
     	LLVMCodeGenLevelDefault, LLVMRelocDefault, LLVMCodeModelDefault
 	);
 	LLVMSetTarget(llvm_module, LLVMGetDefaultTargetTriple());
-	LLVMTargetMachineEmitToFile(targetMachine, llvm_module, "output.o", LLVMObjectFile, &error);
+
+	LLVM_Data *data = malloc(sizeof(LLVM_Data));
+	data->context = llvm_context;
+	data->module = llvm_module;
+	data->target_machine = target_machine;
+
+	return (Codegen) {
+		.size_fn = size_llvm,
+		.build_fn = build_llvm,
+		.data = data
+	};
 }

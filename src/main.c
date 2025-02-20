@@ -12,8 +12,11 @@ int main(int argc, char **argv) {
 
 	char *source = argv[1];
 	Node *root = parse_file(source);
-	Context context = process(root);
-	build_llvm(context, root);
+
+	Codegen codegen = llvm_codegen();
+
+	Context context = process(root, codegen);
+	codegen.build_fn(context, root, codegen.data);
 
 	return 0;
 }

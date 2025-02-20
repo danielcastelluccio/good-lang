@@ -1,3 +1,3 @@
 #include "common.h"
 
-Context process(Node *root);
+Context process(Node *root, Codegen codegen);

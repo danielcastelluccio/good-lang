@@ -48,6 +48,10 @@ typedef struct {
 } Number_Node;
 
 typedef struct {
+	Node *value;
+} Run_Node;
+
+typedef struct {
 	Node *module;
 	char *value;
 	Node **generics; // stb_ds
@@ -145,6 +149,7 @@ typedef enum {
 	STRING_NODE,
 	NUMBER_NODE,
 	NULL_NODE,
+	RUN_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
 	REFERENCE_NODE,
@@ -170,6 +175,7 @@ struct Node {
 		Function_Type_Node function_type;
 		String_Node string;
 		Number_Node number;
+		Run_Node run;
 		Identifier_Node identifier;
 		Call_Node call;
 		Reference_Node reference;
