@@ -74,6 +74,10 @@ static bool is_keyword(char *identifier) {
 	else return false;
 }
 
+static bool is_comment(Lexer *lexer) {
+	return lexer->position < lexer->source_length - 1 && lexer->source[lexer->position] == '/' && lexer->source[lexer->position + 1] == '/';
+}
+
 Token_Data lexer_next(Lexer *lexer, bool advance) {
 	if (lexer->has_cached) {
 		lexer->has_cached = !advance;
@@ -84,10 +88,16 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		return create_token(END_OF_FILE, lexer);
 	}
 
-	while (is_whitespace(lexer->source[lexer->position])) {
+	bool is_current_comment = false;
+	while (is_whitespace(lexer->source[lexer->position]) || is_comment(lexer) || is_current_comment) {
 		if (lexer->source[lexer->position] == '\n') {
 			lexer->row++;
 			lexer->column = 0;
+			is_current_comment = false;
+		}
+
+		if (is_comment(lexer)) {
+			is_current_comment = true;
 		}
 
 		increment_position(lexer);
