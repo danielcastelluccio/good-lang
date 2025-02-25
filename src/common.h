@@ -266,6 +266,7 @@ typedef struct {
 
 typedef struct {
 	Node *assign_value;
+	Node *assign_node;
 	Value *wanted_type;
 	bool want_pointer;
 	Value **call_argument_types;

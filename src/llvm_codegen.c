@@ -198,7 +198,7 @@ static LLVMValueRef generate_number(Node *node, State *state) {
 static LLVMValueRef generate_null(Node *node, State *state) {
 	assert(node->kind == NULL_NODE);
 	Value *type = get_data(&state->context, node)->null_.type;
-	return LLVMConstInt(create_llvm_type(type), 0, false);
+	return LLVMConstNull(create_llvm_type(type));
 }
 
 static LLVMValueRef generate_structure(Node *node, State *state) {

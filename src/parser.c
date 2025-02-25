@@ -31,7 +31,7 @@ static Node *parse_statement(Lexer *lexer);
 static Node *parse_expression(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
-	if (lexer_next(lexer, false).kind == SEMICOLON) {
+	if (lexer_next(lexer, false).kind == SEMICOLON || lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE) {
 		return NULL;
 	}
 

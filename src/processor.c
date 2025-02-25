@@ -503,9 +503,12 @@ static void process_identifier(Context *context, Node *node) {
 				}
 
 				if (context->temporary_context.assign_value != NULL) {
+					Temporary_Context temporary_context = { .wanted_type = type };
+					process_node_context(context, temporary_context, context->temporary_context.assign_value);
+
 					Value *value_type = get_type(context, context->temporary_context.assign_value);
 					if (!type_assignable(type, value_type)) {
-						handle_type_error(node, type, value_type);
+						handle_type_error(context->temporary_context.assign_node, type, value_type);
 					}
 
 					data->identifier.assign_value = context->temporary_context.assign_value;
@@ -614,7 +617,11 @@ static void process_string(Context *context, Node *node) {
 
 static void process_number(Context *context, Node *node) {
 	Value *wanted_type = context->temporary_context.wanted_type;
-	if (wanted_type == NULL) {
+	bool invalid_wanted_type = false;
+	if (wanted_type == NULL) invalid_wanted_type = true;
+	else if (wanted_type->tag != INTERNAL_VALUE || strcmp(wanted_type->internal.identifier, "uint") != 0) invalid_wanted_type = true;
+
+	if (invalid_wanted_type) {
 		wanted_type = value_new(INTERNAL_VALUE);
 		wanted_type->internal.identifier = "uint";
 	}
@@ -721,7 +728,7 @@ static void process_structure_access(Context *context, Node *node) {
 
 		Value *value_type = get_type(context, context->temporary_context.assign_value);
 		if (!type_assignable(item_type, value_type)) {
-			handle_type_error(node, item_type, value_type);
+			handle_type_error(context->temporary_context.assign_node, item_type, value_type);
 		}
 		data->structure_access.assign_value = context->temporary_context.assign_value;
 	} else {
@@ -771,7 +778,7 @@ static void process_array_access(Context *context, Node *node) {
 
 		Value *value_type = get_type(context, context->temporary_context.assign_value);
 		if (!type_assignable(item_type, value_type)) {
-			handle_type_error(node, item_type, value_type);
+			handle_type_error(context->temporary_context.assign_node, item_type, value_type);
 		}
 		data->structure_access.assign_value = context->temporary_context.assign_value;
 	} else {
@@ -822,7 +829,7 @@ static void process_variable(Context *context, Node *node) {
 static void process_assign(Context *context, Node *node) {
 	Assign_Node assign = node->assign;
 
-	Temporary_Context temporary_context = { .assign_value = assign.value };
+	Temporary_Context temporary_context = { .assign_value = assign.value, .assign_node = node };
 	process_node_context(context, temporary_context, assign.container);
 }
 

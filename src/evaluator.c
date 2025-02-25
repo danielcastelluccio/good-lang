@@ -37,6 +37,24 @@ bool value_equal(Value *value1, Value *value2) {
 
 			return true;
 		}
+		case FUNCTION_TYPE_VALUE: {
+			if (arrlen(value1->function_type.arguments) != arrlen(value2->function_type.arguments)) return false;
+			for (long int i = 0; i < arrlen(value1->function_type.arguments); i++) {
+				if (strcmp(value1->function_type.arguments[i].identifier, value2->function_type.arguments[i].identifier) != 0) return false;
+				if (!value_equal(value1->function_type.arguments[i].type, value2->function_type.arguments[i].type)) return false;
+			}
+
+			if ((value1->function_type.return_type == NULL && value2->function_type.return_type != NULL) || (value1->function_type.return_type != NULL && value2->function_type.return_type == NULL)) return false;
+			if (value1->function_type.return_type != NULL) {
+				if (!value_equal(value1->function_type.return_type, value2->function_type.return_type)) {
+					return false;
+				}
+			}
+
+			if (value1->function_type.variadic != value2->function_type.variadic) return false;
+
+			return true;
+		}
 		case DEFINE_DATA_VALUE: {
 			return value_equal(value1->define_data.value, value2->define_data.value);
 		}
@@ -53,31 +71,12 @@ bool type_assignable(Value *type1, Value *type2) {
 			if ((type1->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type1->pointer_type.inner->internal.identifier, "void") == 0) || (type2->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type2->pointer_type.inner->internal.identifier, "void") == 0)) {
 				return true;
 			}
-
-			return value_equal(type1->pointer_type.inner, type2->pointer_type.inner);
-		}
-		case ARRAY_TYPE_VALUE: {
-			return value_equal(type1->array_type.inner, type2->array_type.inner);
-		}
-		case INTERNAL_VALUE: {
-			return strcmp(type1->internal.identifier, type2->internal.identifier) == 0;
-		}
-		case STRUCTURE_TYPE_VALUE: {
-			if (arrlen(type1->structure_type.items) != arrlen(type2->structure_type.items)) return false;
-
-			for (long int i = 0; i < arrlen(type1->structure_type.items); i++) {
-				if (strcmp(type1->structure_type.items[i].identifier, type2->structure_type.items[i].identifier) != 0) return false;
-				if (!value_equal(type1->structure_type.items[i].type, type2->structure_type.items[i].type)) return false;
-			}
-
-			return true;
-		}
-		case DEFINE_DATA_VALUE: {
-			return value_equal(type1->define_data.value, type2->define_data.value);
 		}
 		default:
-			assert(false);
+			break;
 	}
+
+	return value_equal(type1, type2);
 }
 
 Value *get_cached_file(Context *context, char *path) {
@@ -116,6 +115,10 @@ Value *evaluate(Context *context, Node *node) {
 			function_value->function.extern_name = function.extern_name;
 
 			return function_value;
+		}
+		case FUNCTION_TYPE_NODE: {
+			Value *function_type_value = get_data(context, node)->function_type.value;
+			return function_type_value;
 		}
 		case STRUCTURE_TYPE_NODE: {
 			Structure_Type_Node structure_type = node->structure_type;
