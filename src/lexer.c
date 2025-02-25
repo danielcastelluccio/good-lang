@@ -149,11 +149,6 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(AT, lexer);
 			break;
 		case '(':
-			if (lexer->source[lexer->position] == '<') {
-				result = create_token(OPEN_PARENTHESIS_LESS, lexer);
-				increment_position(lexer);
-				break;
-			}
 			result = create_token(OPEN_PARENTHESIS, lexer);
 			break;
 		case ')':
@@ -175,20 +170,10 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(LESS, lexer);
 			break;
 		case '>':
-			if (lexer->source[lexer->position] == ')') {
-				result = create_token(GREATER_CLOSED_PARENTHESIS, lexer);
-				increment_position(lexer);
-				break;
-			}
 			result = create_token(GREATER, lexer);
 			break;
 		case '#':
-			if (lexer->source[lexer->position] == '(') {
-				result = create_token(HASHTAG_OPEN_PARENTHESIS, lexer);
-				increment_position(lexer);
-				break;
-			}
-			assert(false);
+			result = create_token(HASHTAG, lexer);
 			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
@@ -321,12 +306,8 @@ char *token_to_string(Token_Kind kind) {
 			return "<";
 		case GREATER:
 			return ">";
-		case OPEN_PARENTHESIS_LESS:
-			return "(<";
-		case GREATER_CLOSED_PARENTHESIS:
-			return ">)";
-		case HASHTAG_OPEN_PARENTHESIS:
-			return "#(";
+		case HASHTAG:
+			return "#";
 		case PERIOD:
 			return ".";
 		case PERIOD_PERIOD:

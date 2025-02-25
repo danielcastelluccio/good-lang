@@ -117,15 +117,15 @@ Value *evaluate(Context *context, Node *node) {
 
 			return function_value;
 		}
-		case STRUCTURE_NODE: {
-			Structure_Node structure = node->structure;
+		case STRUCTURE_TYPE_NODE: {
+			Structure_Type_Node structure_type = node->structure_type;
 
 			Value *structure_value = value_new(STRUCTURE_TYPE_VALUE);
 			structure_value->structure_type.items = NULL;
-			for (long int i = 0; i < arrlen(structure.items); i++) {
+			for (long int i = 0; i < arrlen(structure_type.items); i++) {
 				Structure_Item_Value item = {
-					.identifier = structure.items[i].identifier,
-					.type = evaluate(context, structure.items[i].type)
+					.identifier = structure_type.items[i].identifier,
+					.type = evaluate(context, structure_type.items[i].type)
 				};
 				arrpush(structure_value->structure_type.items, item);
 			}

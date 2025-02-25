@@ -560,10 +560,10 @@ static void process_module(Context *context, Node *node) {
 	set_type(context, node, value_new(MODULE_TYPE_VALUE));
 }
 
-static void process_structure(Context *context, Node *node) {
-	Structure_Node structure = node->structure;
-	for (long int i = 0; i < arrlen(structure.items); i++) {
-		process_node(context, structure.items[i].type);
+static void process_structure_type(Context *context, Node *node) {
+	Structure_Type_Node structure_type = node->structure_type;
+	for (long int i = 0; i < arrlen(structure_type.items); i++) {
+		process_node(context, structure_type.items[i].type);
 	}
 
 	Value *value = value_new(INTERNAL_VALUE);
@@ -633,6 +633,29 @@ static void process_null(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(NULL_NODE);
 	data->null_.type = wanted_type;
+	set_data(context, node, data);
+	set_type(context, node, wanted_type);
+}
+
+static void process_structure(Context *context, Node *node) {
+	Structure_Node structure = node->structure;
+
+	Value *wanted_type = context->temporary_context.wanted_type;
+	if (wanted_type == NULL) {
+		assert(false);
+	}
+
+	Value *stripped_wanted_type = strip_define_data(wanted_type);
+
+	assert(stripped_wanted_type->tag == STRUCTURE_TYPE_VALUE);
+
+	for (long int i = 0; i < arrlen(structure.values); i++) {
+		Temporary_Context temporary_context = { .wanted_type = stripped_wanted_type->structure_type.items[i].type };
+		process_node_context(context, temporary_context, structure.values[i]);
+	}
+
+	Node_Data *data = node_data_new(STRUCTURE_NODE);
+	data->structure.type = wanted_type;
 	set_data(context, node, data);
 	set_type(context, node, wanted_type);
 }
@@ -999,6 +1022,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_null(context, node);
 			break;
 		}
+		case STRUCTURE_NODE: {
+			process_structure(context, node);
+			break;
+		}
 		case RUN_NODE: {
 			process_run(context, node);
 			break;
@@ -1055,8 +1082,8 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_module(context, node);
 			break;
 		}
-		case STRUCTURE_NODE: {
-			process_structure(context, node);
+		case STRUCTURE_TYPE_NODE: {
+			process_structure_type(context, node);
 			break;
 		}
 		default:

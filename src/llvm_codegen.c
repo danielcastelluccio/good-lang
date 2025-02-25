@@ -201,6 +201,22 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 	return LLVMConstInt(create_llvm_type(type), 0, false);
 }
 
+static LLVMValueRef generate_structure(Node *node, State *state) {
+	assert(node->kind == STRUCTURE_NODE);
+	Structure_Node structure = node->structure;
+
+	Value *type = get_data(&state->context, node)->structure.type;
+	type = strip_define_data(type);
+
+	LLVMValueRef structure_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type), "");
+	for (long int i = 0; i < arrlen(type->structure_type.items); i++) {
+		LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type), structure_value, i, "");
+		LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
+	}
+
+	return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), structure_value, "");
+}
+
 static LLVMValueRef generate_run(Node *node, State *state) {
 	assert(node->kind == RUN_NODE);
 	Value *value = get_data(&state->context, node)->run.value;
@@ -219,7 +235,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 
 	Structure_Access_Data data = get_data(&state->context, node)->structure_access;
 	Value *structure_type = data.structure_value;
-	strip_define_data(structure_type);
+	structure_type = strip_define_data(structure_type);
 
 	unsigned int index = 0;
 	Value *type = NULL;
@@ -394,6 +410,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_number(node, state);
 		case NULL_NODE:
 			return generate_null(node, state);
+		case STRUCTURE_NODE:
+			return generate_structure(node, state);
 		case RUN_NODE:
 			return generate_run(node, state);
 		case REFERENCE_NODE:

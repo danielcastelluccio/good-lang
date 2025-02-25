@@ -160,6 +160,10 @@ typedef struct {
 } Number_Data;
 
 typedef struct {
+	Value *type;
+} Structure_Data;
+
+typedef struct {
 	Value *value;
 } Run_Data;
 
@@ -226,6 +230,7 @@ typedef struct {
 		Variable_Data variable;
 		String_Data string;
 		Number_Data number;
+		Structure_Data structure;
 		Run_Data run;
 		Null_Data null_;
 		Call_Data call;

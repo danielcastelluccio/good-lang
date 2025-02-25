@@ -48,6 +48,10 @@ typedef struct {
 } Number_Node;
 
 typedef struct {
+	Node **values; // stb_ds
+} Structure_Node;
+
+typedef struct {
 	Node *value;
 } Run_Node;
 
@@ -140,7 +144,7 @@ typedef Identifier_Type_Pair Struct_Item;
 
 typedef struct {
 	Struct_Item *items; // stb_ds
-} Structure_Node;
+} Structure_Type_Node;
 
 typedef enum {
 	POINTER_NODE,
@@ -149,6 +153,7 @@ typedef enum {
 	STRING_NODE,
 	NUMBER_NODE,
 	NULL_NODE,
+	STRUCTURE_NODE,
 	RUN_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
@@ -164,7 +169,7 @@ typedef enum {
 	DEFINE_NODE,
 	BLOCK_NODE,
 	FUNCTION_NODE,
-	STRUCTURE_NODE
+	STRUCTURE_TYPE_NODE
 } Node_Kind;
 
 struct Node {
@@ -175,6 +180,7 @@ struct Node {
 		Function_Type_Node function_type;
 		String_Node string;
 		Number_Node number;
+		Structure_Node structure;
 		Run_Node run;
 		Identifier_Node identifier;
 		Call_Node call;
@@ -190,7 +196,7 @@ struct Node {
 		Define_Node define;
 		Block_Node block;
 		Function_Node function;
-		Structure_Node structure;
+		Structure_Type_Node structure_type;
 	};
 	Source_Location location;
 };
