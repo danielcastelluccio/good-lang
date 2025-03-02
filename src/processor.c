@@ -12,21 +12,63 @@ void process_node(Context *context, Node *node) {
 }
 
 typedef struct {
+	union {
+		struct {
+			Node *node;
+			Scope *scope;
+		} define;
+		Node *variable;
+		Value *generic;
+		size_t argument;
+	};
+	Value *type;
+	enum {
+		LOOKUP_RESULT_FAIL,
+		LOOKUP_RESULT_DEFINE,
+		LOOKUP_RESULT_VARIABLE,
+		LOOKUP_RESULT_ARGUMENT,
+		LOOKUP_RESULT_GENERIC
+	} tag;
+} Lookup_Result;
+
+typedef struct {
 	Node *node;
 	Scope *scope;
 } Lookup_Define_Result;
 
-static Lookup_Define_Result lookup_define(Context *context, char *identifier) {
+static Lookup_Result lookup(Context *context, char *identifier) {
+	bool found_function = false;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
-		Scope *scope = &context->scopes[i];
+		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
+
+		Node *variable = shget(scope->variables, identifier);
+		if (variable != NULL) {
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_VARIABLE, .variable = variable, .type = get_data(context, variable)->variable.type };
+		}
+
+		if (!found_function && scope->node->kind == FUNCTION_NODE) {
+			found_function = true;
+
+			Node *current_function_type = scope->node->function.function_type;
+			for (long int i = 0; i < arrlen(current_function_type->function_type.arguments); i++) {
+				if (strcmp(current_function_type->function_type.arguments[i].identifier, identifier) == 0) {
+					return (Lookup_Result) { .tag = LOOKUP_RESULT_ARGUMENT, .argument = i, .type = get_data(context, current_function_type)->function_type.value->function_type.arguments[i].type };
+				}
+			}
+		}
+
+		Generic_Binding binding = shget(scope->generic_bindings, identifier);
+		if (binding.type != NULL) {
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_GENERIC, .generic = binding.binding, .type = binding.type };
+		}
 
 		Node *node = scope->node;
 		switch (node->kind) {
 			case BLOCK_NODE:
 				for (long int i = 0; i < arrlen(node->block.statements); i++) {
-					Node *statement = node->block.statements[i];
+					Node *statement = node->block.statements[arrlen(node->block.statements) - i - 1];
 					if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
-						return (Lookup_Define_Result) { .node = statement, .scope = scope };
+						return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE, .define = { .node = statement, .scope = scope } };
 					}
 				}
 				break;
@@ -34,29 +76,8 @@ static Lookup_Define_Result lookup_define(Context *context, char *identifier) {
 				break;
 		}
 	}
-	return (Lookup_Define_Result) {};
-}
 
-static Node *lookup_variable(Context *context, char *identifier) {
-	for (long int i = 0; i < arrlen(context->scopes); i++) {
-		Scope *scope = &context->scopes[i];
-		Node *variable = shget(scope->variables, identifier);
-		if (variable != NULL) {
-			return variable;
-		}
-	}
-	return NULL;
-}
-
-static Generic_Binding lookup_generic_binding(Context *context, char *identifier) {
-	for (long int i = 0; i < arrlen(context->scopes); i++) {
-		Scope *scope = &context->scopes[i];
-		Generic_Binding binding = shget(scope->generic_bindings, identifier);
-		if (binding.type != NULL) {
-			return binding;
-		}
-	}
-	return (Generic_Binding) {};
+	return (Lookup_Result) { .tag = LOOKUP_RESULT_FAIL };
 }
 
 #define handle_semantic_error(/* Source_Location */ location, /* char * */ fmt, ...) { \
@@ -158,8 +179,9 @@ static bool pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 
 			while (value->tag == DEFINE_DATA_VALUE) {
 				for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
-					Node *define_node = lookup_define(context, node->identifier.value).node;
-					if (value->define_data.define_node == define_node) {
+					Lookup_Result result = lookup(context, node->identifier.value);
+					assert(result.tag == LOOKUP_RESULT_DEFINE);
+					if (value->define_data.define_node == result.define.node) {
 						if (!pattern_match(node->identifier.generics[i], value->define_data.bindings[i].binding, context, generics, match_result)) {
 							return false;
 						};
@@ -466,15 +488,15 @@ static void process_identifier(Context *context, Node *node) {
 			}
 		}
 
-		Lookup_Define_Result lookup_define_result = lookup_define(context, identifier.value);
-		if (lookup_define_result.node != NULL) {
+		Lookup_Result lookup_result = lookup(context, identifier.value);
+		if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
 			for (long i = 0; i < arrlen(context->scopes); i++) {
 				arrpush(define_scopes, context->scopes[i]);
 
-				if (lookup_define_result.scope == &context->scopes[i]) break;
+				if (lookup_result.define.scope == &context->scopes[i]) break;
 			}
 
-			define_node = lookup_define_result.node;
+			define_node = lookup_result.define.node;
 		}
 
 		if (define_node != NULL) {
@@ -489,53 +511,45 @@ static void process_identifier(Context *context, Node *node) {
 			context->compile_only = compile_only_parent;
 		}
 
-		if (context->current_function != NULL) {
-			Node *variable_node = lookup_variable(context, identifier.value);
-			if (variable_node != NULL) {
-				data->identifier.kind = IDENTIFIER_VARIABLE;
-				data->identifier.variable_definition = variable_node;
+		if (lookup_result.tag == LOOKUP_RESULT_VARIABLE) {
+			data->identifier.kind = IDENTIFIER_VARIABLE;
+			data->identifier.variable_definition = lookup_result.variable;
 
-				type = get_data(context, variable_node)->variable.type;
-				if (data->identifier.want_pointer) {
-					Value *pointer_type = value_new(POINTER_TYPE_VALUE);
-					pointer_type->pointer_type.inner = type;
-					type = pointer_type;
-				}
-
-				if (context->temporary_context.assign_value != NULL) {
-					Temporary_Context temporary_context = { .wanted_type = type };
-					process_node_context(context, temporary_context, context->temporary_context.assign_value);
-
-					Value *value_type = get_type(context, context->temporary_context.assign_value);
-					if (!type_assignable(type, value_type)) {
-						handle_type_error(context->temporary_context.assign_node, type, value_type);
-					}
-
-					data->identifier.assign_value = context->temporary_context.assign_value;
-				}
+			type = lookup_result.type;
+			if (data->identifier.want_pointer) {
+				Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+				pointer_type->pointer_type.inner = type;
+				type = pointer_type;
 			}
 
-			Node *current_function_type = context->current_function->function.function_type;
-			for (long int i = 0; i < arrlen(current_function_type->function_type.arguments); i++) {
-				if (strcmp(current_function_type->function_type.arguments[i].identifier, identifier.value) == 0) {
-					data->identifier.kind = IDENTIFIER_ARGUMENT;
-					data->identifier.argument_index = i;
+			if (context->temporary_context.assign_value != NULL) {
+				Temporary_Context temporary_context = { .wanted_type = type };
+				process_node_context(context, temporary_context, context->temporary_context.assign_value);
 
-					type = get_data(context, current_function_type)->function_type.value->function_type.arguments[i].type;
-					if (data->identifier.want_pointer) {
-						Value *pointer_type = value_new(POINTER_TYPE_VALUE);
-						pointer_type->pointer_type.inner = type;
-						type = pointer_type;
-					}
-					break;
+				Value *value_type = get_type(context, context->temporary_context.assign_value);
+				if (!type_assignable(type, value_type)) {
+					handle_type_error(context->temporary_context.assign_node, type, value_type);
 				}
+
+				data->identifier.assign_value = context->temporary_context.assign_value;
 			}
 		}
 
-		Generic_Binding generic_binding = lookup_generic_binding(context, identifier.value);
-		if (generic_binding.binding != NULL) {
-			value = generic_binding.binding;
-			type = generic_binding.type;
+		if (lookup_result.tag == LOOKUP_RESULT_ARGUMENT) {
+			data->identifier.kind = IDENTIFIER_ARGUMENT;
+			data->identifier.argument_index = lookup_result.argument;
+
+			type = lookup_result.type;
+			if (data->identifier.want_pointer) {
+				Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+				pointer_type->pointer_type.inner = type;
+				type = pointer_type;
+			}
+		}
+
+		if (lookup_result.tag == LOOKUP_RESULT_GENERIC) {
+			value = lookup_result.generic;
+			type = lookup_result.type;
 		}
 	}
 
@@ -837,7 +851,15 @@ static void process_return(Context *context, Node *node) {
 	Return_Node return_ = node->return_;
 
 	if (return_.value != NULL) {
-		Value *return_type = get_data(context, context->current_function->function.function_type)->function_type.value->function_type.return_type;
+		Node *current_function = NULL;
+		for (long int i = 0; i < arrlen(context->scopes); i++) {
+			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+			if (scope_node->kind == FUNCTION_NODE) {
+				current_function = scope_node;
+			}
+		}
+
+		Value *return_type = get_data(context, current_function->function.function_type)->function_type.value->function_type.return_type;
 		Temporary_Context temporary_context = { .wanted_type = return_type };
 		process_node_context(context, temporary_context, return_.value);
 
@@ -925,14 +947,11 @@ static void process_function(Context *context, Node *node) {
 
 	set_type(context, node, function_type_value);
 
-	Node *current_function_saved = context->current_function;
-	context->current_function = node;
 	if (function.body != NULL) {
-		arrpush(context->scopes, (Scope) { .node = function.body });
+		arrpush(context->scopes, (Scope) { .node = node });
 		process_node(context, function.body);
 		(void) arrpop(context->scopes);
 	}
-	context->current_function = current_function_saved;
 
 	Node_Data *data = node_data_new(FUNCTION_NODE);
 	if (context->compile_only) {

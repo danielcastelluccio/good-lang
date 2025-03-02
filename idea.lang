@@ -169,3 +169,30 @@ var foo_var: Foo$(uint32);
 foo(foo_var, 4);
 
 
+def get = fn() bool, uint {
+};
+
+var x, y = get();
+
+var x, y = 4, 3;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

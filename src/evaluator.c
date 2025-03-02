@@ -98,6 +98,11 @@ void add_cached_file(Context *context, char *path, Value *value) {
 	arrpush(context->cached_files, file);
 }
 
+#define handle_evaluate_error(/* Source_Location */ location, /* char * */ fmt, ...) { \
+	printf("%s:%zu:%zu: " fmt "\n", location.path, location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
+	exit(1); \
+}
+
 Value *evaluate(Context *context, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE: {
@@ -168,9 +173,13 @@ Value *evaluate(Context *context, Node *node) {
 			return array_type_value;
 		}
 		case IDENTIFIER_NODE: {
-			Value *value = get_data(context, node)->identifier.value;
-			if (value != NULL) {
-				return value;
+			Identifier_Data identifier_data = get_data(context, node)->identifier;
+			if (identifier_data.kind != IDENTIFIER_VALUE) {
+				handle_evaluate_error(node->location, "Cannot evaluate at compile time");
+			}
+
+			if (identifier_data.value != NULL) {
+				return identifier_data.value;
 			}
 
 			assert(false);
