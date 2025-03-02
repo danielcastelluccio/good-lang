@@ -775,27 +775,32 @@ static void process_array_access(Context *context, Node *node) {
 	process_node(context, array_access.array);
 	process_node(context, array_access.index);
 
-	Value *array_pointer_type = strip_define_data(get_type(context, array_access.array));
-	if (array_pointer_type->tag != POINTER_TYPE_VALUE) {
+	Value *array_like_type = strip_define_data(get_type(context, array_access.array));
+	Value *array_like_type_original = array_like_type;
+	if (array_like_type->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, array_access.array);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
 		process_node_context(context, temporary_context, array_access.array);
 
-		array_pointer_type = strip_define_data(get_type(context, array_access.array));
+		array_like_type = strip_define_data(get_type(context, array_access.array));
 	}
 
-	if (array_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_pointer_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
+	if ((array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) && (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != SLICE_TYPE_VALUE)) {
 		char given_string[64] = {};
-		print_type(array_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected array pointer, but got '%s'", given_string);
+		print_type(array_like_type_original, given_string);
+		handle_semantic_error(node->location, "Expected array or slice, but got '%s'", given_string);
 	}
 
-	Value *array_type = strip_define_data(array_pointer_type->pointer_type.inner);
-	Value *item_type = array_type->array_type.inner;
+	Value *item_type = NULL;
+	if (array_like_type->tag == POINTER_TYPE_VALUE) {
+		item_type = array_like_type->pointer_type.inner->array_type.inner;
+	} else {
+		item_type = array_like_type->slice_type.inner;
+	}
 
 	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
-	data->array_access.array_value = array_type;
+	data->array_access.array_like_type = array_like_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
 
 	if (context->temporary_context.assign_value != NULL) {

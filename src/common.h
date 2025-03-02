@@ -228,7 +228,7 @@ typedef struct {
 } Structure_Access_Data;
 
 typedef struct {
-	Value *array_value;
+	Value *array_like_type;
 	Node *assign_value;
 	bool want_pointer;
 } Array_Access_Data;

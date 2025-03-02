@@ -291,24 +291,34 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 	assert(node->kind == ARRAY_ACCESS_NODE);
 	Array_Access_Node array_access = node->array_access;
 
-	Array_Access_Data data = get_data(&state->context, node)->array_access;
-	Value *array_type = data.array_value;
-	strip_define_data(array_type);
+	Array_Access_Data array_access_data = get_data(&state->context, node)->array_access;
+	Value *array_like_type = array_access_data.array_like_type;
+	strip_define_data(array_like_type);
 
-	Value *type = array_type->array_type.inner;
+	Value *type = NULL;
 
 	LLVMValueRef array_llvm_value = generate_node(array_access.array, state);
+	LLVMValueRef element_pointer = NULL;
+
 	LLVMValueRef indices[2] = {
 		LLVMConstInt(LLVMInt64Type(), 0, false),
 		generate_node(array_access.index, state)
 	};
-	LLVMValueRef element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_type), array_llvm_value, indices, 2, "");
+	if (array_like_type->pointer_type.inner->tag == ARRAY_TYPE_VALUE) {
+		type = array_like_type->pointer_type.inner->array_type.inner;
+		element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner), array_llvm_value, indices, 2, "");
+	} else {
+		type = array_like_type->pointer_type.inner->slice_type.inner;
+		LLVMValueRef pointer_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner), array_llvm_value, 1, "");
+		LLVMValueRef pointer_value = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMArrayType(create_llvm_type(type), 0), 0), pointer_pointer, "");
+		element_pointer = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType(create_llvm_type(type), 0), pointer_value, indices, 2, "");
+	}
 
-	if (data.assign_value != NULL) {
-		LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
+	if (array_access_data.assign_value != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(array_access_data.assign_value, state), element_pointer);
 		return NULL;
 	} else {
-		if (data.want_pointer) {
+		if (array_access_data.want_pointer) {
 			return element_pointer;
 		} else  {
 			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), element_pointer, "");
