@@ -24,7 +24,11 @@ typedef struct {
 typedef struct {
 	Node *inner;
 	Node *size;
-} Array_Node;
+} Array_Type_Node;
+
+typedef struct {
+	Node *inner;
+} Slice_Type_Node;
 
 typedef Identifier_Type_Pair Function_Argument;
 
@@ -148,7 +152,8 @@ typedef struct {
 
 typedef enum {
 	POINTER_NODE,
-	ARRAY_NODE,
+	ARRAY_TYPE_NODE,
+	SLICE_TYPE_NODE,
 	FUNCTION_TYPE_NODE,
 	STRING_NODE,
 	NUMBER_NODE,
@@ -176,7 +181,8 @@ struct Node {
 	Node_Kind kind;
 	union {
 		Pointer_Node pointer;
-		Array_Node array;
+		Array_Type_Node array_type;
+		Slice_Type_Node slice_type;
 		Function_Type_Node function_type;
 		String_Node string;
 		Number_Node number;

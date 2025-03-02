@@ -393,19 +393,34 @@ static Node *parse_reference(Lexer *lexer) {
 	return reference;
 }
 
-static Node *parse_array(Lexer *lexer) {
+static Node *parse_array_type_or_slice_type(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, OPEN_BRACE);
-	Node *size = NULL;
-	if (lexer_next(lexer, false).kind != CLOSED_BRACE) {
-		size = parse_expression(lexer);
+	bool slice = false;
+	if (lexer_next(lexer, false).kind == COLON) {
+		consume_check(lexer, COLON);
+		slice = true;
 	}
+
+	Node *size = NULL;
+	if (!slice) {
+		if (lexer_next(lexer, false).kind != CLOSED_BRACE) {
+			size = parse_expression(lexer);
+		}
+	}
+
 	consume_check(lexer, CLOSED_BRACE);
 
-	Node *array = ast_new(ARRAY_NODE, first_token.location);
-	array->array.size = size;
-	array->array.inner = parse_expression(lexer);
-
-	return array;
+	Node *inner = parse_expression(lexer);
+	if (slice) {
+		Node *slice_type = ast_new(SLICE_TYPE_NODE, first_token.location);
+		slice_type->slice_type.inner = inner;
+		return slice_type;
+	} else {
+		Node *array_type = ast_new(ARRAY_TYPE_NODE, first_token.location);
+		array_type->array_type.size = size;
+		array_type->array_type.inner = inner;
+		return array_type;
+	}
 }
 
 static Node *parse_module(Lexer *lexer) {
@@ -577,7 +592,7 @@ static Node *parse_expression(Lexer *lexer) {
 			break;
 		}
 		case OPEN_BRACE: {
-			result = parse_array(lexer);
+			result = parse_array_type_or_slice_type(lexer);
 			break;
 		}
 		default:

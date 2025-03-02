@@ -57,6 +57,15 @@ static LLVMTypeRef create_llvm_type(Value *value) {
 			Array_Type_Value array = value->array_type;
 			return LLVMArrayType(create_llvm_type(array.inner), array.size != NULL ? array.size->integer.value : 0);
 		}
+		case SLICE_TYPE_VALUE: {
+			Slice_Type_Value slice = value->slice_type;
+
+			LLVMTypeRef *items = NULL;
+			arrpush(items, LLVMInt64Type());
+			arrpush(items, LLVMPointerType(LLVMArrayType(create_llvm_type(slice.inner), 0), 0));
+
+			return LLVMStructType(items, arrlen(items), false);
+		}
 		case FUNCTION_TYPE_VALUE: {
 			return LLVMPointerType(create_llvm_function_literal_type(value), 0);
 		}
@@ -179,13 +188,29 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 static LLVMValueRef generate_string(Node *node, State *state) {
 	assert(node->kind == STRING_NODE);
 
-	Node_Data *data = get_data(&state->context, node);
-	char *string_value = data->string.value;
+	String_Data string_data = get_data(&state->context, node)->string;
 
-	LLVMValueRef global = LLVMBuildGlobalString(state->llvm_builder, string_value, "");
-	LLVMValueRef llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8Type(), 0), "");
+	LLVMValueRef global = LLVMAddGlobal(state->llvm_module, LLVMArrayType(LLVMInt8Type(), string_data.length), "");
+	LLVMSetLinkage(global, LLVMPrivateLinkage);
+	LLVMSetGlobalConstant(global, true);
+	LLVMSetUnnamedAddr(global, true);
+	LLVMSetInitializer(global, LLVMConstString(string_data.value, string_data.length, true));
 
-	return llvm_value;
+	LLVMValueRef pointer_llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8Type(), 0), "");
+
+	if (string_data.type->tag == SLICE_TYPE_VALUE) {
+		LLVMValueRef slice_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(string_data.type), "");
+
+		LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(string_data.type), slice_value, 0, "");
+		LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), string_data.length, false), length_pointer);
+
+		LLVMValueRef pointer_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(string_data.type), slice_value, 1, "");
+		LLVMBuildStore(state->llvm_builder, pointer_llvm_value, pointer_pointer);
+
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(string_data.type), slice_value, "");
+	} else {
+		return pointer_llvm_value;
+	}
 }
 
 static LLVMValueRef generate_number(Node *node, State *state) {

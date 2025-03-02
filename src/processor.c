@@ -98,6 +98,11 @@ static int print_type(Value *value, char *buffer) {
 			buffer += print_type(value->array_type.inner, buffer);
 			break;
 		}
+		case SLICE_TYPE_VALUE: {
+			buffer += sprintf(buffer, "[:]");
+			buffer += print_type(value->slice_type.inner, buffer);
+			break;
+		}
 		case INTERNAL_VALUE: {
 			buffer += sprintf(buffer, "%s", value->internal.identifier);
 			break;
@@ -360,7 +365,7 @@ static void process_call(Context *context, Node *node) {
 		Value *type = get_type(context, call.arguments[i]);;
 		arrpush(argument_types, type);
 
-		reset_node(context, node);
+		reset_node(context, call.arguments[i]);
 	}
 
 	Temporary_Context temporary_context = { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
@@ -378,7 +383,7 @@ static void process_call(Context *context, Node *node) {
 
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
 		Value *wanted_type = NULL;
-		if (i < arrlen(function_type->function_type.arguments) - 1 || !function_type->function_type.variadic) {
+		if (i < arrlen(function_type->function_type.arguments) || !function_type->function_type.variadic) {
 			wanted_type = function_type->function_type.arguments[i].type;
 		}
 
@@ -398,14 +403,12 @@ static void process_call(Context *context, Node *node) {
 }
 
 static Value *create_string_type() {
-	Value *pointer = value_new(POINTER_TYPE_VALUE);
-	Value *array = value_new(ARRAY_TYPE_VALUE);
+	Value *slice = value_new(SLICE_TYPE_VALUE);
 	Value *byte = value_new(INTERNAL_VALUE);
 	byte->internal.identifier = "byte";
-	array->array_type.inner = byte;
-	pointer->pointer_type.inner = array;
+	slice->slice_type.inner = byte;
 
-	return pointer;
+	return slice;
 }
 
 static void process_identifier(Context *context, Node *node) {
@@ -592,8 +595,8 @@ static void process_string(Context *context, Node *node) {
 	String_Node string = node->string;
 
 	size_t original_length = strlen(string.value);
-	char *new_string = malloc(original_length + 1);
-	memset(new_string, 0, original_length + 1);
+	char *new_string = malloc(original_length);
+	memset(new_string, 0, original_length);
 
 	size_t original_index = 0;
 	size_t new_index = 0;
@@ -618,13 +621,21 @@ static void process_string(Context *context, Node *node) {
 		}
 	}
 
-	new_string[new_index] = '\0';
+	Value *type = context->temporary_context.wanted_type;
+	bool invalid_type = false;
+	if (type == NULL) invalid_type = true;
+	else if (type->tag == POINTER_TYPE_VALUE && type->pointer_type.inner->tag == ARRAY_TYPE_VALUE && type->pointer_type.inner->array_type.inner->tag == INTERNAL_VALUE && strcmp(type->pointer_type.inner->array_type.inner->internal.identifier, "byte") == 0) {}
+	else if (type->tag == SLICE_TYPE_VALUE && type->slice_type.inner->tag == INTERNAL_VALUE && strcmp(type->slice_type.inner->internal.identifier, "byte") == 0) {}
+	else invalid_type = true;
 
-	Value *type = create_string_type();
+	if (invalid_type) {
+		type = create_string_type();
+	}
 
 	Node_Data *data = node_data_new(STRING_NODE);
 	data->string.type = type;
 	data->string.value = new_string;
+	data->string.length = new_index;
 	set_data(context, node, data);
 	set_type(context, node, type);
 }
@@ -633,7 +644,8 @@ static void process_number(Context *context, Node *node) {
 	Value *wanted_type = context->temporary_context.wanted_type;
 	bool invalid_wanted_type = false;
 	if (wanted_type == NULL) invalid_wanted_type = true;
-	else if (wanted_type->tag != INTERNAL_VALUE || strcmp(wanted_type->internal.identifier, "uint") != 0) invalid_wanted_type = true;
+	else if (wanted_type->tag == INTERNAL_VALUE && strcmp(wanted_type->internal.identifier, "uint") == 0) {}
+	else invalid_wanted_type = true;
 
 	if (invalid_wanted_type) {
 		wanted_type = value_new(INTERNAL_VALUE);
@@ -1001,9 +1013,21 @@ static void process_pointer(Context *context, Node *node) {
 	set_type(context, node, value);
 }
 
-static void process_array(Context *context, Node *node) {
-	Array_Node array = node->array;
-	process_node(context, array.inner);
+static void process_array_type(Context *context, Node *node) {
+	Array_Type_Node array_type = node->array_type;
+	process_node(context, array_type.inner);
+	if (array_type.size != NULL) {
+		process_node(context, array_type.size);
+	}
+
+	Value *value = value_new(INTERNAL_VALUE);
+	value->internal.identifier = "type";
+	set_type(context, node, value);
+}
+
+static void process_slice_type(Context *context, Node *node) {
+	Slice_Type_Node slice_type = node->slice_type;
+	process_node(context, slice_type.inner);
 
 	Value *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
@@ -1100,8 +1124,12 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_pointer(context, node);
 			break;
 		}
-		case ARRAY_NODE: {
-			process_array(context, node);
+		case ARRAY_TYPE_NODE: {
+			process_array_type(context, node);
+			break;
+		}
+		case SLICE_TYPE_NODE: {
+			process_slice_type(context, node);
 			break;
 		}
 		case MODULE_NODE: {

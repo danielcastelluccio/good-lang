@@ -22,7 +22,15 @@ bool value_equal(Value *value1, Value *value2) {
 			return value_equal(value1->pointer_type.inner, value2->pointer_type.inner);
 		}
 		case ARRAY_TYPE_VALUE: {
+			if ((value1->array_type.size == NULL && value2->array_type.size != NULL) || (value1->array_type.size != NULL && value2->array_type.size == NULL)) return false;
+			if (value1->array_type.size != NULL) {
+				if (!value_equal(value1->array_type.size, value2->array_type.size)) return false;
+			}
+
 			return value_equal(value1->array_type.inner, value2->array_type.inner);
+		}
+		case SLICE_TYPE_VALUE: {
+			return value_equal(value1->slice_type.inner, value2->slice_type.inner);
 		}
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
@@ -164,13 +172,20 @@ Value *evaluate(Context *context, Node *node) {
 			pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
 			return pointer_type_value;
 		}
-		case ARRAY_NODE: {
-			Array_Node array = node->array;
+		case ARRAY_TYPE_NODE: {
+			Array_Type_Node array_type = node->array_type;
 
 			Value *array_type_value = value_new(ARRAY_TYPE_VALUE);
-			if (array.size != NULL) array_type_value->array_type.size = evaluate(context, array.size);
-			array_type_value->array_type.inner = evaluate(context, array.inner);
+			if (array_type.size != NULL) array_type_value->array_type.size = evaluate(context, array_type.size);
+			array_type_value->array_type.inner = evaluate(context, array_type.inner);
 			return array_type_value;
+		}
+		case SLICE_TYPE_NODE: {
+			Slice_Type_Node slice_type = node->slice_type;
+
+			Value *slice_type_value = value_new(SLICE_TYPE_VALUE);
+			slice_type_value->slice_type.inner = evaluate(context, slice_type.inner);
+			return slice_type_value;
 		}
 		case IDENTIFIER_NODE: {
 			Identifier_Data identifier_data = get_data(context, node)->identifier;
@@ -188,21 +203,30 @@ Value *evaluate(Context *context, Node *node) {
 		case STRING_NODE: {
 			String_Data string_data = get_data(context, node)->string;
 			char *string_value = string_data.value;
-			size_t string_length = strlen(string_value);
+			size_t string_length = string_data.length;
 
-			Value *pointer = value_new(POINTER_VALUE);
-			Value *array = value_new(ARRAY_VALUE);
-			pointer->pointer.value = array;
-
-			array->array.length = string_length;
-			array->array.values = malloc(sizeof(Value *) * string_length);
+			Value **values = malloc(sizeof(Value *) * string_length);
 			for (size_t i = 0; i < string_length; i++) {
 				Value *byte = value_new(BYTE_VALUE);
 				byte->byte.value = string_value[i];
-				array->array.values[i] = byte;
+				values[i] = byte;
 			}
 
-			return pointer;
+			if (string_data.type->tag == SLICE_TYPE_VALUE) {
+				Value *slice = value_new(SLICE_VALUE);
+				slice->slice.length = string_length;
+				slice->slice.values = values;
+
+				return slice;
+			} else {
+				Value *pointer = value_new(POINTER_VALUE);
+				Value *array = value_new(ARRAY_VALUE);
+				array->array.length = string_length;
+				array->array.values = values;
+				pointer->pointer.value = array;
+
+				return pointer;
+			}
 		}
 		case NUMBER_NODE: {
 			Number_Node number = node->number;
@@ -231,11 +255,11 @@ Value *evaluate(Context *context, Node *node) {
 				case INTERNAL_VALUE: {
 					char *identifier = function->internal.identifier;
 					if (strcmp(identifier, "import") == 0) {
-						Value *array = arguments[0]->pointer.value;
-						char *source = malloc(array->array.length + 1);
-						source[array->array.length] = '\0';
-						for (size_t i = 0; i < array->array.length; i++) {
-							source[i] = array->array.values[i]->byte.value;
+						Value *slice = arguments[0];
+						char *source = malloc(slice->slice.length + 1);
+						source[slice->slice.length] = '\0';
+						for (size_t i = 0; i < slice->slice.length; i++) {
+							source[i] = slice->slice.values[i]->byte.value;
 						}
 
 						Value *value = get_cached_file(context, source);

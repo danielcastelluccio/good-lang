@@ -24,10 +24,12 @@ typedef enum {
 	STRUCTURE_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
+	SLICE_TYPE_VALUE,
 	BOOLEAN_VALUE,
 	MODULE_VALUE,
 	POINTER_VALUE,
 	ARRAY_VALUE,
+	SLICE_VALUE,
 	BYTE_VALUE,
 	INTEGER_VALUE,
 	MODULE_TYPE_VALUE,
@@ -79,6 +81,11 @@ typedef struct {
 } Array_Value;
 
 typedef struct {
+	Value **values;
+	size_t length;
+} Slice_Value;
+
+typedef struct {
 	char value;
 } Byte_Value;
 
@@ -94,6 +101,10 @@ typedef struct {
 	Value *inner;
 	Value *size;
 } Array_Type_Value;
+
+typedef struct {
+	Value *inner;
+} Slice_Type_Value;
 
 typedef struct {
 	bool value;
@@ -118,9 +129,11 @@ struct Value {
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
 		Array_Type_Value array_type;
+		Slice_Type_Value slice_type;
 		Boolean_Value boolean;
 		Pointer_Value pointer;
 		Array_Value array;
+		Slice_Value slice;
 		Byte_Value byte;
 		Integer_Value integer;
 		Internal_Value internal;
@@ -153,6 +166,7 @@ typedef struct {
 typedef struct {
 	Value *type;
 	char *value;
+	size_t length;
 } String_Data;
 
 typedef struct {
