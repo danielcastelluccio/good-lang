@@ -215,7 +215,10 @@ static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 	Token_Data first_token = lexer_next(lexer, true);
 
-	Node *index = parse_expression(lexer);
+	Node *index = NULL;
+	if (lexer_next(lexer, false).kind != COLON) {
+		index = parse_expression(lexer);
+	}
 
 	Node *result = NULL;
 	if (lexer_next(lexer, false).kind == COLON) {
@@ -223,8 +226,10 @@ static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 
 		Node *slice = ast_new(SLICE_NODE, first_token.location);
 		slice->slice.array = array;
-		slice->slice.start_index = index;
-		slice->slice.end_index = parse_expression(lexer);
+		if (index != NULL) {
+			slice->slice.start_index = index;
+			slice->slice.end_index = parse_expression(lexer);
+		}
 
 		result = slice;
 	} else {

@@ -373,8 +373,21 @@ static LLVMValueRef generate_slice(Node *node, State *state) {
 	LLVMValueRef array_llvm_value = generate_node(slice.array, state);
 	LLVMValueRef slice_pointer = NULL;
 
-	LLVMValueRef start = generate_node(slice.start_index, state);
-	LLVMValueRef end = generate_node(slice.end_index, state);
+	LLVMValueRef start = NULL;
+	LLVMValueRef end = NULL;
+	if (slice.start_index != NULL) {
+		start = generate_node(slice.start_index, state);
+		end = generate_node(slice.end_index, state);
+	} else {
+		start = LLVMConstInt(LLVMInt64Type(), 0, false);
+		if (array_like_type->pointer_type.inner->tag == ARRAY_TYPE_VALUE) {
+			end = LLVMConstInt(LLVMInt64Type(), array_like_type->pointer_type.inner->array_type.size->integer.value, false);
+		} else {
+			LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner), array_llvm_value, 0, "");
+			LLVMValueRef length_value = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMArrayType(create_llvm_type(type), 0), 0), length_pointer, "");
+			end = length_value;
+		}
+	}
 
 	LLVMValueRef indices[2] = {
 		LLVMConstInt(LLVMInt64Type(), 0, false),

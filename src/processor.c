@@ -858,8 +858,10 @@ static void process_slice(Context *context, Node *node) {
 	Slice_Node slice = node->slice;
 
 	process_node(context, slice.array);
-	process_node(context, slice.start_index);
-	process_node(context, slice.end_index);
+	if (slice.start_index != NULL) {
+		process_node(context, slice.start_index);
+		process_node(context, slice.end_index);
+	}
 
 	Value *array_like_type = strip_define_data(get_type(context, slice.array));
 	Value *array_like_type_original = array_like_type;
