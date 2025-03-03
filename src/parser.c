@@ -204,16 +204,31 @@ static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 	return structure_access;
 }
 
-static Node *parse_array_access(Lexer *lexer, Node *array) {
+static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 	Token_Data first_token = lexer_next(lexer, true);
 
-	Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
-	array_access->array_access.array = array;
-	array_access->array_access.index = parse_expression(lexer);
+	Node *index = parse_expression(lexer);
+
+	Node *result = NULL;
+	if (lexer_next(lexer, false).kind == COLON) {
+		consume_check(lexer, COLON);
+
+		Node *slice = ast_new(SLICE_NODE, first_token.location);
+		slice->slice.array = array;
+		slice->slice.start_index = index;
+		slice->slice.end_index = parse_expression(lexer);
+
+		result = slice;
+	} else {
+		Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
+		array_access->array_access.array = array;
+		array_access->array_access.index = index;
+
+		result = array_access;
+	}
 
 	consume_check(lexer, CLOSED_BRACE);
-
-	return array_access;
+	return result;
 }
 
 static Node *parse_assign(Lexer *lexer, Node *structure) {
@@ -617,7 +632,7 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_structure_access(lexer, result);
 				break;
 			case OPEN_BRACE:
-				result = parse_array_access(lexer, result);
+				result = parse_array_access_or_slice(lexer, result);
 				break;
 			case COLON_COLON:
 				consume_check(lexer, COLON_COLON);

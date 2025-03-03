@@ -326,6 +326,52 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_slice(Node *node, State *state) {
+	assert(node->kind == SLICE_NODE);
+	Slice_Node slice = node->slice;
+
+	Slice_Data slice_data = get_data(&state->context, node)->slice;
+	Value *array_like_type = slice_data.array_like_type;
+	strip_define_data(array_like_type);
+
+	Value *type = NULL;
+
+	LLVMValueRef array_llvm_value = generate_node(slice.array, state);
+	LLVMValueRef slice_pointer = NULL;
+
+	LLVMValueRef start = generate_node(slice.start_index, state);
+	LLVMValueRef end = generate_node(slice.end_index, state);
+
+	LLVMValueRef indices[2] = {
+		LLVMConstInt(LLVMInt64Type(), 0, false),
+		start
+	};
+	if (array_like_type->pointer_type.inner->tag == ARRAY_TYPE_VALUE) {
+		type = array_like_type->pointer_type.inner->array_type.inner;
+		// element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner), array_llvm_value, indices, 2, "");
+		slice_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner), array_llvm_value, indices, 2, "");
+	} else {
+		type = array_like_type->pointer_type.inner->slice_type.inner;
+		LLVMValueRef pointer_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner), array_llvm_value, 1, "");
+		LLVMValueRef pointer_value = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMArrayType(create_llvm_type(type), 0), 0), pointer_pointer, "");
+		slice_pointer = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType(create_llvm_type(type), 0), pointer_value, indices, 2, "");
+	}
+
+	Value *slice_type = create_slice_type(type);
+
+	LLVMValueRef slice_length = LLVMBuildSub(state->llvm_builder, end, start, "");
+
+	LLVMValueRef slice_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(slice_type), "");
+
+	LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(slice_type), slice_value, 0, "");
+	LLVMBuildStore(state->llvm_builder, slice_length, length_pointer);
+
+	LLVMValueRef pointer_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(slice_type), slice_value, 1, "");
+	LLVMBuildStore(state->llvm_builder, slice_pointer, pointer_pointer);
+
+	return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(slice_type), slice_value, "");
+}
+
 static bool is_type_signed(Value *type) {
 	(void) type;
 	return false;
@@ -455,6 +501,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_structure_access(node, state);
 		case ARRAY_ACCESS_NODE:
 			return generate_array_access(node, state);
+		case SLICE_NODE:
+			return generate_slice(node, state);
 		case BINARY_OPERATOR_NODE:
 			return generate_binary_operator(node, state);
 		case RETURN_NODE:

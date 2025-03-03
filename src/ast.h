@@ -85,6 +85,12 @@ typedef struct {
 } Array_Access_Node;
 
 typedef struct {
+	Node *array;
+	Node *start_index;
+	Node *end_index;
+} Slice_Node;
+
+typedef struct {
 	Node *value;
 } Return_Node;
 
@@ -165,6 +171,7 @@ typedef enum {
 	REFERENCE_NODE,
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
+	SLICE_NODE,
 	RETURN_NODE,
 	ASSIGN_NODE,
 	VARIABLE_NODE,
@@ -193,6 +200,7 @@ struct Node {
 		Reference_Node reference;
 		Structure_Access_Node structure_access;
 		Array_Access_Node array_access;
+		Slice_Node slice;
 		Return_Node return_;
 		Assign_Node assign;
 		Variable_Node variable;

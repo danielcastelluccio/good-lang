@@ -234,6 +234,10 @@ typedef struct {
 } Array_Access_Data;
 
 typedef struct {
+	Value *array_like_type;
+} Slice_Data;
+
+typedef struct {
 	Value *type;
 } Binary_Operator_Data;
 
@@ -255,6 +259,7 @@ typedef struct {
 		Module_Access_Data module_access;
 		Structure_Access_Data structure_access;
 		Array_Access_Data array_access;
+		Slice_Data slice;
 		Binary_Operator_Data binary_operator;
 	};
 } Node_Data;
@@ -308,5 +313,8 @@ void set_data(Context *context, Node *node, Node_Data *value);
 void reset_node(Context *context, Node *node);
 
 Value *strip_define_data(Value *value);
+
+Value *create_string_type();
+Value *create_slice_type(Value *inner);
 
 #endif

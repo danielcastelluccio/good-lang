@@ -402,15 +402,6 @@ static void process_call(Context *context, Node *node) {
 	set_type(context, node, function_type->function_type.return_type);
 }
 
-static Value *create_string_type() {
-	Value *slice = value_new(SLICE_TYPE_VALUE);
-	Value *byte = value_new(INTERNAL_VALUE);
-	byte->internal.identifier = "byte";
-	slice->slice_type.inner = byte;
-
-	return slice;
-}
-
 static void process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
 
@@ -824,6 +815,44 @@ static void process_array_access(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_slice(Context *context, Node *node) {
+	Slice_Node slice = node->slice;
+
+	process_node(context, slice.array);
+	process_node(context, slice.start_index);
+	process_node(context, slice.end_index);
+
+	Value *array_like_type = strip_define_data(get_type(context, slice.array));
+	Value *array_like_type_original = array_like_type;
+	if (array_like_type->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, slice.array);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, slice.array);
+
+		array_like_type = strip_define_data(get_type(context, slice.array));
+	}
+
+	if ((array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) && (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != SLICE_TYPE_VALUE)) {
+		char given_string[64] = {};
+		print_type(array_like_type_original, given_string);
+		handle_semantic_error(node->location, "Expected array or slice, but got '%s'", given_string);
+	}
+
+	Value *item_type = NULL;
+	if (array_like_type->tag == POINTER_TYPE_VALUE) {
+		item_type = array_like_type->pointer_type.inner->array_type.inner;
+	} else {
+		item_type = array_like_type->slice_type.inner;
+	}
+
+	Node_Data *data = node_data_new(SLICE_NODE);
+	data->slice.array_like_type = array_like_type;
+
+	set_type(context, node, create_slice_type(item_type));
+	set_data(context, node, data);
+}
+
 static void process_variable(Context *context, Node *node) {
 	Variable_Node variable = node->variable;
 
@@ -1095,6 +1124,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case ARRAY_ACCESS_NODE: {
 			process_array_access(context, node);
+			break;
+		}
+		case SLICE_NODE: {
+			process_slice(context, node);
 			break;
 		}
 		case VARIABLE_NODE: {

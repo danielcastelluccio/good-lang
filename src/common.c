@@ -96,3 +96,18 @@ Value *strip_define_data(Value *value) {
 	}
 	return value;
 }
+
+Value *create_string_type() {
+	Value *slice = value_new(SLICE_TYPE_VALUE);
+	Value *byte = value_new(INTERNAL_VALUE);
+	byte->internal.identifier = "byte";
+	slice->slice_type.inner = byte;
+
+	return slice;
+}
+
+Value *create_slice_type(Value *inner) {
+	Value *slice_type = value_new(SLICE_TYPE_VALUE);
+	slice_type->slice_type.inner = inner;
+	return slice_type;
+}
