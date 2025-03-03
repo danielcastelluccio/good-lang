@@ -228,6 +228,11 @@ typedef struct {
 } Structure_Access_Data;
 
 typedef struct {
+	Value *type;
+	Node *assign_value;
+} Dereference_Data;
+
+typedef struct {
 	Value *array_like_type;
 	Node *assign_value;
 	bool want_pointer;
@@ -258,6 +263,7 @@ typedef struct {
 		Function_Type_Data function_type;
 		Module_Access_Data module_access;
 		Structure_Access_Data structure_access;
+		Dereference_Data dereference;
 		Array_Access_Data array_access;
 		Slice_Data slice;
 		Binary_Operator_Data binary_operator;

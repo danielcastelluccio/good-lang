@@ -705,6 +705,34 @@ static void process_reference(Context *context, Node *node) {
 	set_type(context, node, get_type(context, reference.node));
 }
 
+static void process_dereference(Context *context, Node *node) {
+	Dereference_Node dereference = node->dereference;
+
+	process_node(context, dereference.node);
+	Value *inner_type = get_type(context, dereference.node);
+	if (inner_type->tag != POINTER_TYPE_VALUE) {
+		char given_string[64] = {};
+		print_type(inner_type, given_string);
+		handle_semantic_error(node->location, "Expected pointer, but got '%s'", given_string);
+	}
+
+	Node_Data *data = node_data_new(DEREFERENCE_NODE);
+	data->dereference.type = inner_type->pointer_type.inner;
+	if (context->temporary_context.assign_value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = inner_type->pointer_type.inner };
+		process_node_context(context, temporary_context, context->temporary_context.assign_value);
+
+		Value *value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(inner_type->pointer_type.inner, value_type)) {
+			handle_type_error(context->temporary_context.assign_node, inner_type->pointer_type.inner, value_type);
+		}
+		data->dereference.assign_value = context->temporary_context.assign_value;
+	} else {
+		set_type(context, node, inner_type->pointer_type.inner);
+	}
+	set_data(context, node, data);
+}
+
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
@@ -1116,6 +1144,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case REFERENCE_NODE: {
 			process_reference(context, node);
+			break;
+		}
+		case DEREFERENCE_NODE: {
+			process_dereference(context, node);
 			break;
 		}
 		case STRUCTURE_ACCESS_NODE: {

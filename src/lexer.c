@@ -136,6 +136,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '*':
 			result = create_token(ASTERISK, lexer);
 			break;
+		case '^':
+			result = create_token(CARET, lexer);
+			break;
 		case '+':
 			result = create_token(PLUS, lexer);
 			break;
@@ -292,6 +295,8 @@ char *token_to_string(Token_Kind kind) {
 			return "=";
 		case ASTERISK:
 			return "*";
+		case CARET:
+			return "^";
 		case PLUS:
 			return "+";
 		case MINUS:

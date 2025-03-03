@@ -112,6 +112,14 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 	return identifier;
 }
 
+static Node *parse_dereference(Lexer *lexer, Node *node) {
+	Token_Data token = consume_check(lexer, CARET);
+
+	Node *derefence = ast_new(DEREFERENCE_NODE, token.location);
+	derefence->dereference.node = node;
+	return derefence;
+}
+
 static Node *parse_call(Lexer *lexer, Node *function) {
 	Token_Data first_token = consume_check(lexer, OPEN_PARENTHESIS);
 
@@ -391,7 +399,7 @@ static Node *parse_block(Lexer *lexer) {
 }
 
 static Node *parse_pointer(Lexer *lexer) {
-	Token_Data first_token = consume_check(lexer, ASTERISK);
+	Token_Data first_token = consume_check(lexer, CARET);
 
 	Node *pointer = ast_new(POINTER_NODE, first_token.location);
 	pointer->pointer.inner = parse_expression(lexer);
@@ -598,7 +606,7 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_block(lexer);
 			break;
 		}
-		case ASTERISK: {
+		case CARET: {
 			result = parse_pointer(lexer);
 			break;
 		}
@@ -637,6 +645,9 @@ static Node *parse_expression(Lexer *lexer) {
 			case COLON_COLON:
 				consume_check(lexer, COLON_COLON);
 				result = parse_identifier(lexer, result);
+				break;
+			case CARET:
+				result = parse_dereference(lexer, result);
 				break;
 			default:
 				operating = false;

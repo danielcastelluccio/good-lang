@@ -75,6 +75,10 @@ typedef struct {
 } Reference_Node;
 
 typedef struct {
+	Node *node;
+} Dereference_Node;
+
+typedef struct {
 	Node *structure;
 	char *item;
 } Structure_Access_Node;
@@ -169,6 +173,7 @@ typedef enum {
 	IDENTIFIER_NODE,
 	CALL_NODE,
 	REFERENCE_NODE,
+	DEREFERENCE_NODE,
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
 	SLICE_NODE,
@@ -198,6 +203,7 @@ struct Node {
 		Identifier_Node identifier;
 		Call_Node call;
 		Reference_Node reference;
+		Dereference_Node dereference;
 		Structure_Access_Node structure_access;
 		Array_Access_Node array_access;
 		Slice_Node slice;

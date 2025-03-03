@@ -254,6 +254,20 @@ static LLVMValueRef generate_reference(Node *node, State *state) {
 	return generate_node(reference.node, state);
 }
 
+static LLVMValueRef generate_dereference(Node *node, State *state) {
+	assert(node->kind == DEREFERENCE_NODE);
+	Dereference_Node dereference = node->dereference;
+	LLVMValueRef pointer_llvm_value = generate_node(dereference.node, state);
+
+	Dereference_Data dereference_data = get_data(&state->context, node)->dereference;
+	if (dereference_data.assign_value != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(dereference_data.assign_value, state), pointer_llvm_value);
+		return NULL;
+	} else {
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(dereference_data.type), pointer_llvm_value, "");
+	}
+}
+
 static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	assert(node->kind == STRUCTURE_ACCESS_NODE);
 	Structure_Access_Node structure_access = node->structure_access;
@@ -497,6 +511,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_run(node, state);
 		case REFERENCE_NODE:
 			return generate_reference(node, state);
+		case DEREFERENCE_NODE:
+			return generate_dereference(node, state);
 		case STRUCTURE_ACCESS_NODE:
 			return generate_structure_access(node, state);
 		case ARRAY_ACCESS_NODE:
