@@ -89,12 +89,16 @@ static int print_type(Value *value, char *buffer) {
 	char *buffer_start = buffer;
 	switch (value->tag) {
 		case POINTER_TYPE_VALUE: {
-			buffer += sprintf(buffer, "*");
+			buffer += sprintf(buffer, "^");
 			buffer += print_type(value->pointer_type.inner, buffer);
 			break;
 		}
 		case ARRAY_TYPE_VALUE: {
-			buffer += sprintf(buffer, "[]");
+			buffer += sprintf(buffer, "[");
+			if (value->array_type.size != NULL) {
+				buffer += print_type(value->array_type.size, buffer);
+			}
+			buffer += sprintf(buffer, "]");
 			buffer += print_type(value->array_type.inner, buffer);
 			break;
 		}
@@ -117,6 +121,10 @@ static int print_type(Value *value, char *buffer) {
 				}
 			}
 			buffer += sprintf(buffer, "}");
+			break;
+		}
+		case INTEGER_VALUE: {
+			buffer += sprintf(buffer, "%li", value->integer.value);
 			break;
 		}
 		case NONE_VALUE: {
