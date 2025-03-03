@@ -160,6 +160,21 @@ Value *evaluate(Context *context, Node *node) {
 
 			return struct_value;
 		}
+		case UNION_TYPE_NODE: {
+			Union_Type_Node union_type = node->union_type;
+
+			Value *union_value = value_new(UNION_TYPE_VALUE);
+			union_value->union_type.items = NULL;
+			for (long int i = 0; i < arrlen(union_type.items); i++) {
+				Struct_Item_Value item = {
+					.identifier = union_type.items[i].identifier,
+					.type = evaluate(context, union_type.items[i].type)
+				};
+				arrpush(union_value->union_type.items, item);
+			}
+
+			return union_value;
+		}
 		case ENUM_TYPE_NODE: {
 			Enum_Type_Node enum_type = node->enum_type;
 

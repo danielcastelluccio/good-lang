@@ -22,6 +22,7 @@ typedef enum {
 	FUNCTION_VALUE,
 	FUNCTION_TYPE_VALUE,
 	STRUCT_TYPE_VALUE,
+	UNION_TYPE_VALUE,
 	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
@@ -62,10 +63,14 @@ typedef struct {
 } Function_Type_Value;
 
 typedef Identifier_Value_Pair Struct_Item_Value;
-
 typedef struct {
 	Struct_Item_Value *items; // stb_ds
 } Struct_Type_Value;
+
+typedef Identifier_Value_Pair Union_Item_Value;
+typedef struct {
+	Union_Item_Value *items; // stb_ds
+} Union_Type_Value;
 
 typedef struct {
 	char **items; // stb_ds
@@ -135,6 +140,7 @@ struct Value {
 	union {
 		Function_Value function;
 		Struct_Type_Value struct_type;
+		Union_Type_Value union_type;
 		Enum_Type_Value enum_type;
 		Module_Value module;
 		Function_Type_Value function_type;

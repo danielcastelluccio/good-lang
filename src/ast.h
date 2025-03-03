@@ -39,10 +39,14 @@ typedef struct {
 } Function_Type_Node;
 
 typedef Identifier_Type_Pair Struct_Item;
-
 typedef struct {
 	Struct_Item *items; // stb_ds
 } Struct_Type_Node;
+
+typedef Identifier_Type_Pair Union_Item;
+typedef struct {
+	Union_Item *items; // stb_ds
+} Union_Type_Node;
 
 typedef struct {
 	char **items; // stb_ds
@@ -170,6 +174,7 @@ typedef enum {
 	SLICE_TYPE_NODE,
 	FUNCTION_TYPE_NODE,
 	STRUCT_TYPE_NODE,
+	UNION_TYPE_NODE,
 	ENUM_TYPE_NODE,
 	STRING_NODE,
 	NUMBER_NODE,
@@ -202,6 +207,7 @@ struct Node {
 		Slice_Type_Node slice_type;
 		Function_Type_Node function_type;
 		Struct_Type_Node struct_type;
+		Union_Type_Node union_type;
 		Enum_Type_Node enum_type;
 		String_Node string;
 		Number_Node number;

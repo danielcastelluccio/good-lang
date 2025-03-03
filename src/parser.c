@@ -287,6 +287,39 @@ static Node *parse_struct_type(Lexer *lexer) {
 	return struct_;
 }
 
+static Node *parse_union_type(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+
+	consume_check(lexer, OPEN_CURLY_BRACE);
+
+	Struct_Item *items = NULL;
+	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
+		Token_Data identifier = consume_check(lexer, IDENTIFIER);
+		consume_check(lexer, COLON);
+		Node *type = parse_expression(lexer);
+
+		Struct_Item item = {
+			.identifier = identifier.string,
+			.type = type
+		};
+		arrpush(items, item);
+
+		Token_Data token = lexer_next(lexer, false);
+		if (token.kind == COMMA) {
+			lexer_next(lexer, true);
+		} else if (token.kind == CLOSED_CURLY_BRACE) {
+		} else {
+			handle_token_error_no_expected(token);
+		}
+	}
+	consume_check(lexer, CLOSED_CURLY_BRACE);
+
+	Node *union_ = ast_new(UNION_TYPE_NODE, first_token.location);
+	union_->union_type.items = items;
+
+	return union_;
+}
+
 static Node *parse_enum_type(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 
@@ -625,6 +658,7 @@ static Node *parse_expression(Lexer *lexer) {
 			char *value = token.string;
 			if (strcmp(value, "fn") == 0) result = parse_function_or_function_type(lexer);
 			else if (strcmp(value, "struct") == 0) result = parse_struct_type(lexer);
+			else if (strcmp(value, "union") == 0) result = parse_union_type(lexer);
 			else if (strcmp(value, "enum") == 0) result = parse_enum_type(lexer);
 			else if (strcmp(value, "if") == 0) result = parse_if(lexer);
 			else if (strcmp(value, "mod") == 0) result = parse_module(lexer);

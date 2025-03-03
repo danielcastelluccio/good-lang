@@ -136,6 +136,18 @@ static int print_type(Value *value, char *buffer) {
 			buffer += sprintf(buffer, "}");
 			break;
 		}
+		case UNION_TYPE_VALUE: {
+			buffer += sprintf(buffer, "union{");
+			for (long int i = 0; i < arrlen(value->union_type.items); i++) {
+				buffer += sprintf(buffer, "%s:", value->union_type.items[i].identifier);
+				buffer += print_type(value->union_type.items[i].type, buffer);
+				if (i < arrlen(value->union_type.items) - 1) {
+					buffer += sprintf(buffer, ",");
+				}
+			}
+			buffer += sprintf(buffer, "}");
+			break;
+		}
 		case ENUM_TYPE_VALUE: {
 			buffer += sprintf(buffer, "enum{");
 			for (long int i = 0; i < arrlen(value->enum_type.items); i++) {
@@ -610,9 +622,20 @@ static void process_module(Context *context, Node *node) {
 }
 
 static void process_struct_type(Context *context, Node *node) {
-	Struct_Type_Node structure_type = node->struct_type;
-	for (long int i = 0; i < arrlen(structure_type.items); i++) {
-		process_node(context, structure_type.items[i].type);
+	Struct_Type_Node struct_type = node->struct_type;
+	for (long int i = 0; i < arrlen(struct_type.items); i++) {
+		process_node(context, struct_type.items[i].type);
+	}
+
+	Value *value = value_new(INTERNAL_VALUE);
+	value->internal.identifier = "type";
+	set_type(context, node, value);
+}
+
+static void process_union_type(Context *context, Node *node) {
+	Union_Type_Node union_type = node->union_type;
+	for (long int i = 0; i < arrlen(union_type.items); i++) {
+		process_node(context, union_type.items[i].type);
 	}
 
 	Value *value = value_new(INTERNAL_VALUE);
@@ -803,10 +826,10 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_pointer_type = strip_define_data(get_type(context, structure_access.structure));
 	}
 
-	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCT_TYPE_VALUE) {
+	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || (strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCT_TYPE_VALUE && strip_define_data(structure_pointer_type->pointer_type.inner)->tag != UNION_TYPE_VALUE)) {
 		char given_string[64] = {};
 		print_type(structure_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected structure pointer, but got '%s'", given_string);
+		handle_semantic_error(node->location, "Expected structure or union, but got '%s'", given_string);
 	}
 
 	Value *structure_type = strip_define_data(structure_pointer_type->pointer_type.inner);
@@ -1264,6 +1287,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case STRUCT_TYPE_NODE: {
 			process_struct_type(context, node);
+			break;
+		}
+		case UNION_TYPE_NODE: {
+			process_union_type(context, node);
 			break;
 		}
 		case ENUM_TYPE_NODE: {
