@@ -38,6 +38,16 @@ typedef struct {
 	bool variadic;
 } Function_Type_Node;
 
+typedef Identifier_Type_Pair Struct_Item;
+
+typedef struct {
+	Struct_Item *items; // stb_ds
+} Struct_Type_Node;
+
+typedef struct {
+	char **items; // stb_ds
+} Enum_Type_Node;
+
 typedef struct {
 	char *value;
 } String_Node;
@@ -154,21 +164,17 @@ typedef struct {
 	char *extern_name;
 } Function_Node;
 
-typedef Identifier_Type_Pair Struct_Item;
-
-typedef struct {
-	Struct_Item *items; // stb_ds
-} Structure_Type_Node;
-
 typedef enum {
 	POINTER_NODE,
 	ARRAY_TYPE_NODE,
 	SLICE_TYPE_NODE,
 	FUNCTION_TYPE_NODE,
+	STRUCT_TYPE_NODE,
+	ENUM_TYPE_NODE,
 	STRING_NODE,
 	NUMBER_NODE,
 	NULL_NODE,
-	STRUCTURE_NODE,
+	STRUCT_NODE,
 	RUN_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
@@ -185,8 +191,7 @@ typedef enum {
 	BINARY_OPERATOR_NODE,
 	DEFINE_NODE,
 	BLOCK_NODE,
-	FUNCTION_NODE,
-	STRUCTURE_TYPE_NODE
+	FUNCTION_NODE
 } Node_Kind;
 
 struct Node {
@@ -196,6 +201,8 @@ struct Node {
 		Array_Type_Node array_type;
 		Slice_Type_Node slice_type;
 		Function_Type_Node function_type;
+		Struct_Type_Node struct_type;
+		Enum_Type_Node enum_type;
 		String_Node string;
 		Number_Node number;
 		Structure_Node structure;
@@ -216,7 +223,6 @@ struct Node {
 		Define_Node define;
 		Block_Node block;
 		Function_Node function;
-		Structure_Type_Node structure_type;
 	};
 	Source_Location location;
 };

@@ -70,6 +70,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "static") == 0) return true;
 	else if (strcmp(identifier, "mod") == 0) return true;
 	else if (strcmp(identifier, "struct") == 0) return true;
+	else if (strcmp(identifier, "enum") == 0) return true;
 	else if (strcmp(identifier, "run") == 0) return true;
 	else return false;
 }

@@ -35,12 +35,21 @@ bool value_equal(Value *value1, Value *value2) {
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
 		}
-		case STRUCTURE_TYPE_VALUE: {
-			if (arrlen(value1->structure_type.items) != arrlen(value2->structure_type.items)) return false;
+		case STRUCT_TYPE_VALUE: {
+			if (arrlen(value1->struct_type.items) != arrlen(value2->struct_type.items)) return false;
 
-			for (long int i = 0; i < arrlen(value1->structure_type.items); i++) {
-				if (strcmp(value1->structure_type.items[i].identifier, value2->structure_type.items[i].identifier) != 0) return false;
-				if (!value_equal(value1->structure_type.items[i].type, value2->structure_type.items[i].type)) return false;
+			for (long int i = 0; i < arrlen(value1->struct_type.items); i++) {
+				if (strcmp(value1->struct_type.items[i].identifier, value2->struct_type.items[i].identifier) != 0) return false;
+				if (!value_equal(value1->struct_type.items[i].type, value2->struct_type.items[i].type)) return false;
+			}
+
+			return true;
+		}
+		case ENUM_TYPE_VALUE: {
+			if (arrlen(value1->enum_type.items) != arrlen(value2->enum_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(value1->enum_type.items); i++) {
+				if (strcmp(value1->enum_type.items[i], value2->enum_type.items[i]) != 0) return false;
 			}
 
 			return true;
@@ -136,20 +145,31 @@ Value *evaluate(Context *context, Node *node) {
 			Value *function_type_value = get_data(context, node)->function_type.value;
 			return function_type_value;
 		}
-		case STRUCTURE_TYPE_NODE: {
-			Structure_Type_Node structure_type = node->structure_type;
+		case STRUCT_TYPE_NODE: {
+			Struct_Type_Node struct_type = node->struct_type;
 
-			Value *structure_value = value_new(STRUCTURE_TYPE_VALUE);
-			structure_value->structure_type.items = NULL;
-			for (long int i = 0; i < arrlen(structure_type.items); i++) {
-				Structure_Item_Value item = {
-					.identifier = structure_type.items[i].identifier,
-					.type = evaluate(context, structure_type.items[i].type)
+			Value *struct_value = value_new(STRUCT_TYPE_VALUE);
+			struct_value->struct_type.items = NULL;
+			for (long int i = 0; i < arrlen(struct_type.items); i++) {
+				Struct_Item_Value item = {
+					.identifier = struct_type.items[i].identifier,
+					.type = evaluate(context, struct_type.items[i].type)
 				};
-				arrpush(structure_value->structure_type.items, item);
+				arrpush(struct_value->struct_type.items, item);
 			}
 
-			return structure_value;
+			return struct_value;
+		}
+		case ENUM_TYPE_NODE: {
+			Enum_Type_Node enum_type = node->enum_type;
+
+			Value *enum_value = value_new(ENUM_TYPE_VALUE);
+			enum_value->enum_type.items = NULL;
+			for (long int i = 0; i < arrlen(enum_type.items); i++) {
+				arrpush(enum_value->enum_type.items, enum_type.items[i]);
+			}
+
+			return enum_value;
 		}
 		case MODULE_NODE: {
 			Module_Node module = node->module;

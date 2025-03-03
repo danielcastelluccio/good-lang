@@ -20,6 +20,7 @@ typedef struct {
 		Node *variable;
 		Value *generic;
 		size_t argument;
+		size_t enum_variant;
 	};
 	Value *type;
 	enum {
@@ -27,7 +28,8 @@ typedef struct {
 		LOOKUP_RESULT_DEFINE,
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_ARGUMENT,
-		LOOKUP_RESULT_GENERIC
+		LOOKUP_RESULT_GENERIC,
+		LOOKUP_RESULT_ENUM_VARIANT
 	} tag;
 } Lookup_Result;
 
@@ -37,6 +39,17 @@ typedef struct {
 } Lookup_Define_Result;
 
 static Lookup_Result lookup(Context *context, char *identifier) {
+	if (context->temporary_context.wanted_type != NULL) {
+		Value *stripped_wanted_type = strip_define_data(context->temporary_context.wanted_type);
+		if (stripped_wanted_type->tag == ENUM_TYPE_VALUE) {
+			for (long int i = 0; i < arrlen(stripped_wanted_type->enum_type.items); i++) {
+				if (strcmp(identifier, stripped_wanted_type->enum_type.items[i]) == 0) {
+					return (Lookup_Result) { .tag = LOOKUP_RESULT_ENUM_VARIANT, .enum_variant = i, .type = context->temporary_context.wanted_type };
+				}
+			}
+		}
+	}
+
 	bool found_function = false;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
@@ -111,12 +124,23 @@ static int print_type(Value *value, char *buffer) {
 			buffer += sprintf(buffer, "%s", value->internal.identifier);
 			break;
 		}
-		case STRUCTURE_TYPE_VALUE: {
+		case STRUCT_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
-			for (long int i = 0; i < arrlen(value->structure_type.items); i++) {
-				buffer += sprintf(buffer, "%s:", value->structure_type.items[i].identifier);
-				buffer += print_type(value->structure_type.items[i].type, buffer);
-				if (i < arrlen(value->structure_type.items) - 1) {
+			for (long int i = 0; i < arrlen(value->struct_type.items); i++) {
+				buffer += sprintf(buffer, "%s:", value->struct_type.items[i].identifier);
+				buffer += print_type(value->struct_type.items[i].type, buffer);
+				if (i < arrlen(value->struct_type.items) - 1) {
+					buffer += sprintf(buffer, ",");
+				}
+			}
+			buffer += sprintf(buffer, "}");
+			break;
+		}
+		case ENUM_TYPE_VALUE: {
+			buffer += sprintf(buffer, "enum{");
+			for (long int i = 0; i < arrlen(value->enum_type.items); i++) {
+				buffer += sprintf(buffer, "%s", value->enum_type.items[i]);
+				if (i < arrlen(value->struct_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -553,6 +577,12 @@ static void process_identifier(Context *context, Node *node) {
 			value = lookup_result.generic;
 			type = lookup_result.type;
 		}
+
+		if (lookup_result.tag == LOOKUP_RESULT_ENUM_VARIANT) {
+			value = value_new(ENUM_VALUE);
+			value->enum_.value = lookup_result.enum_variant;
+			type = lookup_result.type;
+		}
 	}
 
 	if (type == NULL) {
@@ -579,12 +609,18 @@ static void process_module(Context *context, Node *node) {
 	set_type(context, node, value_new(MODULE_TYPE_VALUE));
 }
 
-static void process_structure_type(Context *context, Node *node) {
-	Structure_Type_Node structure_type = node->structure_type;
+static void process_struct_type(Context *context, Node *node) {
+	Struct_Type_Node structure_type = node->struct_type;
 	for (long int i = 0; i < arrlen(structure_type.items); i++) {
 		process_node(context, structure_type.items[i].type);
 	}
 
+	Value *value = value_new(INTERNAL_VALUE);
+	value->internal.identifier = "type";
+	set_type(context, node, value);
+}
+
+static void process_enum_type(Context *context, Node *node) {
 	Value *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
 	set_type(context, node, value);
@@ -669,7 +705,7 @@ static void process_null(Context *context, Node *node) {
 	set_type(context, node, wanted_type);
 }
 
-static void process_structure(Context *context, Node *node) {
+static void process_struct(Context *context, Node *node) {
 	Structure_Node structure = node->structure;
 
 	Value *wanted_type = context->temporary_context.wanted_type;
@@ -679,13 +715,13 @@ static void process_structure(Context *context, Node *node) {
 
 	Value *stripped_wanted_type = strip_define_data(wanted_type);
 
-	assert(stripped_wanted_type->tag == STRUCTURE_TYPE_VALUE || stripped_wanted_type->tag == ARRAY_TYPE_VALUE);
+	assert(stripped_wanted_type->tag == STRUCT_TYPE_VALUE || stripped_wanted_type->tag == ARRAY_TYPE_VALUE);
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {
 		Value *wanted_type = NULL;
 		switch (stripped_wanted_type->tag) {
-			case STRUCTURE_TYPE_VALUE:
-				wanted_type = stripped_wanted_type->structure_type.items[i].type;
+			case STRUCT_TYPE_VALUE:
+				wanted_type = stripped_wanted_type->struct_type.items[i].type;
 				break;
 			case ARRAY_TYPE_VALUE:
 				wanted_type = stripped_wanted_type->array_type.inner;
@@ -697,7 +733,7 @@ static void process_structure(Context *context, Node *node) {
 		process_node_context(context, temporary_context, structure.values[i]);
 	}
 
-	Node_Data *data = node_data_new(STRUCTURE_NODE);
+	Node_Data *data = node_data_new(STRUCT_NODE);
 	data->structure.type = wanted_type;
 	set_data(context, node, data);
 	set_type(context, node, wanted_type);
@@ -767,7 +803,7 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_pointer_type = strip_define_data(get_type(context, structure_access.structure));
 	}
 
-	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCTURE_TYPE_VALUE) {
+	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCT_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type(structure_pointer_type, given_string);
 		handle_semantic_error(node->location, "Expected structure pointer, but got '%s'", given_string);
@@ -776,9 +812,9 @@ static void process_structure_access(Context *context, Node *node) {
 	Value *structure_type = strip_define_data(structure_pointer_type->pointer_type.inner);
 
 	Value *item_type = NULL;
-	for (long int i = 0; i < arrlen(structure_type->structure_type.items); i++) {
-		if (strcmp(structure_type->structure_type.items[i].identifier, structure_access.item) == 0) {
-			item_type = structure_type->structure_type.items[i].type;
+	for (long int i = 0; i < arrlen(structure_type->struct_type.items); i++) {
+		if (strcmp(structure_type->struct_type.items[i].identifier, structure_access.item) == 0) {
+			item_type = structure_type->struct_type.items[i].type;
 		}
 	}
 
@@ -987,7 +1023,8 @@ static void process_binary_operator(Context *context, Node *node) {
 	Binary_Operator_Node binary_operator = node->binary_operator;
 
 	process_node(context, binary_operator.left);
-	process_node(context, binary_operator.right);
+	Temporary_Context temporary_context = { .wanted_type = get_type(context, binary_operator.left) };
+	process_node_context(context, temporary_context, binary_operator.right);
 
 	Value *left_type = get_type(context, binary_operator.left);
 	assert(left_type != NULL);
@@ -1002,7 +1039,9 @@ static void process_binary_operator(Context *context, Node *node) {
 	}
 
 	Value *stripped_type = strip_define_data(left_type);
-	if (stripped_type->tag != INTERNAL_VALUE || strcmp(stripped_type->internal.identifier, "uint") != 0) {
+	if (stripped_type->tag == INTERNAL_VALUE && strcmp(stripped_type->internal.identifier, "uint") == 0) {}
+	else if (stripped_type->tag == ENUM_TYPE_VALUE && binary_operator.operator == OPERATOR_EQUALS) {}
+	else {
 		char left_string[64] = {};
 		print_type(left_type, left_string);
 		handle_semantic_error(node->location, "Cannot operate on '%s'", left_string);
@@ -1155,8 +1194,8 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_null(context, node);
 			break;
 		}
-		case STRUCTURE_NODE: {
-			process_structure(context, node);
+		case STRUCT_NODE: {
+			process_struct(context, node);
 			break;
 		}
 		case RUN_NODE: {
@@ -1223,12 +1262,16 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_slice_type(context, node);
 			break;
 		}
-		case MODULE_NODE: {
-			process_module(context, node);
+		case STRUCT_TYPE_NODE: {
+			process_struct_type(context, node);
 			break;
 		}
-		case STRUCTURE_TYPE_NODE: {
-			process_structure_type(context, node);
+		case ENUM_TYPE_NODE: {
+			process_enum_type(context, node);
+			break;
+		}
+		case MODULE_NODE: {
+			process_module(context, node);
 			break;
 		}
 		default:

@@ -21,7 +21,8 @@ typedef struct Value Value;
 typedef enum {
 	FUNCTION_VALUE,
 	FUNCTION_TYPE_VALUE,
-	STRUCTURE_TYPE_VALUE,
+	STRUCT_TYPE_VALUE,
+	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	SLICE_TYPE_VALUE,
@@ -32,6 +33,7 @@ typedef enum {
 	SLICE_VALUE,
 	BYTE_VALUE,
 	INTEGER_VALUE,
+	ENUM_VALUE,
 	MODULE_TYPE_VALUE,
 	DEFINE_DATA_VALUE,
 	NONE_VALUE,
@@ -59,11 +61,15 @@ typedef struct {
 	bool variadic;
 } Function_Type_Value;
 
-typedef Identifier_Value_Pair Structure_Item_Value;
+typedef Identifier_Value_Pair Struct_Item_Value;
 
 typedef struct {
-	Structure_Item_Value *items;
-} Structure_Type_Value;
+	Struct_Item_Value *items; // stb_ds
+} Struct_Type_Value;
+
+typedef struct {
+	char **items; // stb_ds
+} Enum_Type_Value;
 
 typedef struct {
 	Node *body;
@@ -92,6 +98,10 @@ typedef struct {
 typedef struct {
 	long value;
 } Integer_Value;
+
+typedef struct {
+	long value;
+} Enum_Value;
 
 typedef struct {
 	Value *inner;
@@ -124,7 +134,8 @@ struct Value {
 	Value_Tag tag;
 	union {
 		Function_Value function;
-		Structure_Type_Value structure_type;
+		Struct_Type_Value struct_type;
+		Enum_Type_Value enum_type;
 		Module_Value module;
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
@@ -136,6 +147,7 @@ struct Value {
 		Slice_Value slice;
 		Byte_Value byte;
 		Integer_Value integer;
+		Enum_Value enum_;
 		Internal_Value internal;
 		Define_Data_Value define_data;
 	};

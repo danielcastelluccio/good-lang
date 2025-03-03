@@ -78,15 +78,18 @@ static LLVMTypeRef create_llvm_type(Value *value) {
 			else assert(false);
 			break;
 		}
-		case STRUCTURE_TYPE_VALUE: {
-			Structure_Type_Value structure_type = value->structure_type;
+		case STRUCT_TYPE_VALUE: {
+			Struct_Type_Value struct_type = value->struct_type;
 
 			LLVMTypeRef *items = NULL;
-			for (long int i = 0; i < arrlen(structure_type.items); i++) {
-				arrpush(items, create_llvm_type(structure_type.items[i].type));
+			for (long int i = 0; i < arrlen(struct_type.items); i++) {
+				arrpush(items, create_llvm_type(struct_type.items[i].type));
 			}
 
 			return LLVMStructType(items, arrlen(items), false);
+		}
+		case ENUM_TYPE_VALUE: {
+			return LLVMInt64Type();
 		}
 		case DEFINE_DATA_VALUE: {
 			Define_Data_Value define_data = value->define_data;
@@ -177,6 +180,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 				return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type), value_pointer, "");
 			}
 		}
+		
 		case IDENTIFIER_VALUE: {
 			return generate_value(strip_define_data(identifier_data->identifier.value), state);
 		}
@@ -226,17 +230,17 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 	return LLVMConstNull(create_llvm_type(type));
 }
 
-static LLVMValueRef generate_structure(Node *node, State *state) {
-	assert(node->kind == STRUCTURE_NODE);
+static LLVMValueRef generate_struct(Node *node, State *state) {
+	assert(node->kind == STRUCT_NODE);
 	Structure_Node structure = node->structure;
 
 	Value *type = get_data(&state->context, node)->structure.type;
 	type = strip_define_data(type);
 
 	switch (type->tag) {
-		case STRUCTURE_TYPE_VALUE: {
+		case STRUCT_TYPE_VALUE: {
 			LLVMValueRef structure_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type), "");
-			for (long int i = 0; i < arrlen(type->structure_type.items); i++) {
+			for (long int i = 0; i < arrlen(type->struct_type.items); i++) {
 				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type), structure_value, i, "");
 				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
 			}
@@ -293,21 +297,21 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	Structure_Access_Node structure_access = node->structure_access;
 
 	Structure_Access_Data data = get_data(&state->context, node)->structure_access;
-	Value *structure_type = data.structure_value;
-	structure_type = strip_define_data(structure_type);
+	Value *struct_type = data.structure_value;
+	struct_type = strip_define_data(struct_type);
 
 	unsigned int index = 0;
 	Value *type = NULL;
-	for (long int i = 0; i < arrlen(structure_type->structure_type.items); i++) {
-		if (strcmp(structure_access.item, structure_type->structure_type.items[i].identifier) == 0) {
+	for (long int i = 0; i < arrlen(struct_type->struct_type.items); i++) {
+		if (strcmp(structure_access.item, struct_type->struct_type.items[i].identifier) == 0) {
 			index = i;
-			type = structure_type->structure_type.items[i].type;
+			type = struct_type->struct_type.items[i].type;
 			break;
 		}
 	}
 
 	LLVMValueRef structure_llvm_value = generate_node(structure_access.structure, state);
-	LLVMValueRef element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type), structure_llvm_value, index, "");
+	LLVMValueRef element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(struct_type), structure_llvm_value, index, "");
 
 	if (data.assign_value != NULL) {
 		LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
@@ -538,8 +542,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_number(node, state);
 		case NULL_NODE:
 			return generate_null(node, state);
-		case STRUCTURE_NODE:
-			return generate_structure(node, state);
+		case STRUCT_NODE:
+			return generate_struct(node, state);
 		case RUN_NODE:
 			return generate_run(node, state);
 		case REFERENCE_NODE:
@@ -629,6 +633,14 @@ static LLVMValueRef generate_integer(Value *value, State *state) {
 	return LLVMConstInt(LLVMInt64Type(), integer.value, false);
 }
 
+static LLVMValueRef generate_enum(Value *value, State *state) {
+	(void) state;
+	assert(value->tag == ENUM_VALUE);
+	Enum_Value enum_ = value->enum_;
+
+	return LLVMConstInt(LLVMInt64Type(), enum_.value, false);
+}
+
 static LLVMValueRef generate_value(Value *value, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -646,7 +658,12 @@ static LLVMValueRef generate_value(Value *value, State *state) {
 		case INTEGER_VALUE:
 			result = generate_integer(value, state);
 			break;
-		case STRUCTURE_TYPE_VALUE:
+		case ENUM_VALUE:
+			result = generate_enum(value, state);
+			break;
+		case STRUCT_TYPE_VALUE:
+			break;
+		case ENUM_TYPE_VALUE:
 			break;
 		default:
 			assert(false);
