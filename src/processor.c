@@ -671,10 +671,21 @@ static void process_structure(Context *context, Node *node) {
 
 	Value *stripped_wanted_type = strip_define_data(wanted_type);
 
-	assert(stripped_wanted_type->tag == STRUCTURE_TYPE_VALUE);
+	assert(stripped_wanted_type->tag == STRUCTURE_TYPE_VALUE || stripped_wanted_type->tag == ARRAY_TYPE_VALUE);
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {
-		Temporary_Context temporary_context = { .wanted_type = stripped_wanted_type->structure_type.items[i].type };
+		Value *wanted_type = NULL;
+		switch (stripped_wanted_type->tag) {
+			case STRUCTURE_TYPE_VALUE:
+				wanted_type = stripped_wanted_type->structure_type.items[i].type;
+				break;
+			case ARRAY_TYPE_VALUE:
+				wanted_type = stripped_wanted_type->array_type.inner;
+				break;
+			default:
+				assert(false);
+		}
+		Temporary_Context temporary_context = { .wanted_type = wanted_type };
 		process_node_context(context, temporary_context, structure.values[i]);
 	}
 

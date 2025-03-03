@@ -63,6 +63,9 @@ bool value_equal(Value *value1, Value *value2) {
 
 			return true;
 		}
+		case INTEGER_VALUE: {
+			return value1->integer.value == value2->integer.value;
+		}
 		case DEFINE_DATA_VALUE: {
 			return value_equal(value1->define_data.value, value2->define_data.value);
 		}

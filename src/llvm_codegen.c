@@ -233,13 +233,33 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 	Value *type = get_data(&state->context, node)->structure.type;
 	type = strip_define_data(type);
 
-	LLVMValueRef structure_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type), "");
-	for (long int i = 0; i < arrlen(type->structure_type.items); i++) {
-		LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type), structure_value, i, "");
-		LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
-	}
+	switch (type->tag) {
+		case STRUCTURE_TYPE_VALUE: {
+			LLVMValueRef structure_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type), "");
+			for (long int i = 0; i < arrlen(type->structure_type.items); i++) {
+				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type), structure_value, i, "");
+				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
+			}
 
-	return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), structure_value, "");
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), structure_value, "");
+		}
+		case ARRAY_TYPE_VALUE: {
+			LLVMValueRef array_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type), "");
+			for (long int i = 0; i < type->array_type.size->integer.value; i++) {
+				LLVMValueRef indices[2] = {
+					LLVMConstInt(LLVMInt64Type(), 0, false),
+					LLVMConstInt(LLVMInt64Type(), i, false)
+				};
+
+				LLVMValueRef item_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(type), array_value, indices, 2, "");
+				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
+			}
+
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type), array_value, "");
+		}
+		default:
+			assert(false);
+	}
 }
 
 static LLVMValueRef generate_run(Node *node, State *state) {
