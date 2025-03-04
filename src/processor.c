@@ -168,7 +168,18 @@ static int print_type(Value *value, char *buffer) {
 			break;
 		}
 		case DEFINE_DATA_VALUE: {
-			buffer += print_type(value->define_data.value, buffer);
+			// buffer += print_type(value->define_data.value, buffer);
+			buffer += sprintf(buffer, "%s", value->define_data.define_node->define.identifier);
+			if (arrlen(value->define_data.bindings) > 0) {
+				buffer += sprintf(buffer, "#(");
+				for (long int i = 0; i < arrlen(value->define_data.bindings); i++) {
+					buffer += print_type(value->define_data.bindings[i].binding, buffer);
+					if (i + 1 < arrlen(value->define_data.bindings)) {
+						buffer += sprintf(buffer, ", ");
+					}
+				}
+				buffer += sprintf(buffer, ")");
+			}
 			break;
 		}
 		default:
