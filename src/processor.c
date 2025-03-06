@@ -106,6 +106,11 @@ static int print_type(Value *value, char *buffer) {
 			buffer += print_type(value->pointer_type.inner, buffer);
 			break;
 		}
+		case OPTION_TYPE_VALUE: {
+			buffer += sprintf(buffer, "?");
+			buffer += print_type(value->option_type.inner, buffer);
+			break;
+		}
 		case ARRAY_TYPE_VALUE: {
 			buffer += sprintf(buffer, "[");
 			if (value->array_type.size != NULL) {
@@ -822,6 +827,71 @@ static void process_dereference(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_deoption(Context *context, Node *node) {
+	Deoption_Node deoption = node->deoption;
+
+	process_node(context, deoption.node);
+
+	Value *option_pointer_type = strip_define_data(get_type(context, deoption.node));
+	if (option_pointer_type->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, deoption.node);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, deoption.node);
+
+		option_pointer_type = strip_define_data(get_type(context, deoption.node));
+	}
+
+	if (option_pointer_type->tag != POINTER_TYPE_VALUE || option_pointer_type->pointer_type.inner->tag != OPTION_TYPE_VALUE) {
+		char given_string[64] = {};
+		print_type(option_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected option, but got '%s'", given_string);
+	}
+
+	Node_Data *data = node_data_new(DEOPTION_NODE);
+	data->deoption.type = option_pointer_type->pointer_type.inner->option_type.inner;
+	if (context->temporary_context.assign_value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = data->deoption.type };
+		process_node_context(context, temporary_context, context->temporary_context.assign_value);
+
+		Value *value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(data->deoption.type, value_type)) {
+			handle_type_error(context->temporary_context.assign_node, data->deoption.type, value_type);
+		}
+		data->deoption.assign_value = context->temporary_context.assign_value;
+	} else {
+		set_type(context, node, data->deoption.type);
+	}
+	set_data(context, node, data);
+}
+
+static void process_deoption_present(Context *context, Node *node) {
+	Deoption_Node deoption = node->deoption;
+
+	process_node(context, deoption.node);
+
+	Value *option_pointer_type = strip_define_data(get_type(context, deoption.node));
+	if (option_pointer_type->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, deoption.node);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, deoption.node);
+
+		option_pointer_type = strip_define_data(get_type(context, deoption.node));
+	}
+
+	if (option_pointer_type->tag != POINTER_TYPE_VALUE || option_pointer_type->pointer_type.inner->tag != OPTION_TYPE_VALUE) {
+		char given_string[64] = {};
+		print_type(option_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected option, but got '%s'", given_string);
+	}
+
+	Node_Data *data = node_data_new(DEOPTION_PRESENT_NODE);
+	data->deoption_present.type = option_pointer_type->pointer_type.inner->option_type.inner;
+	set_type(context, node, create_internal_type("bool"));
+	set_data(context, node, data);
+}
+
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
@@ -1169,6 +1239,15 @@ static void process_pointer(Context *context, Node *node) {
 	set_type(context, node, value);
 }
 
+static void process_option(Context *context, Node *node) {
+	Option_Node option = node->option;
+	process_node(context, option.inner);
+
+	Value *value = value_new(INTERNAL_VALUE);
+	value->internal.identifier = "type";
+	set_type(context, node, value);
+}
+
 static void process_array_type(Context *context, Node *node) {
 	Array_Type_Node array_type = node->array_type;
 	process_node(context, array_type.inner);
@@ -1244,6 +1323,14 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_dereference(context, node);
 			break;
 		}
+		case DEOPTION_NODE: {
+			process_deoption(context, node);
+			break;
+		}
+		case DEOPTION_PRESENT_NODE: {
+			process_deoption_present(context, node);
+			break;
+		}
 		case STRUCTURE_ACCESS_NODE: {
 			process_structure_access(context, node);
 			break;
@@ -1286,6 +1373,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case POINTER_NODE: {
 			process_pointer(context, node);
+			break;
+		}
+		case OPTION_NODE: {
+			process_option(context, node);
 			break;
 		}
 		case ARRAY_TYPE_NODE: {

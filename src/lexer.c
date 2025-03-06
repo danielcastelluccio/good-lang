@@ -141,6 +141,14 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '^':
 			result = create_token(CARET, lexer);
 			break;
+		case '?':
+			if (lexer->source[lexer->position] == '?') {
+				result = create_token(QUESTION_QUESTION, lexer);
+				increment_position(lexer);
+				break;
+			}
+			result = create_token(QUESTION, lexer);
+			break;
 		case '+':
 			result = create_token(PLUS, lexer);
 			break;
@@ -299,6 +307,10 @@ char *token_to_string(Token_Kind kind) {
 			return "*";
 		case CARET:
 			return "^";
+		case QUESTION:
+			return "?";
+		case QUESTION_QUESTION:
+			return "??";
 		case PLUS:
 			return "+";
 		case MINUS:

@@ -67,6 +67,15 @@ static LLVMTypeRef create_llvm_type(Value *value, State *state) {
 
 			return LLVMStructType(items, arrlen(items), false);
 		}
+		case OPTION_TYPE_VALUE: {
+			Option_Type_Value option = value->option_type;
+
+			LLVMTypeRef *items = NULL;
+			arrpush(items, LLVMInt1Type());
+			arrpush(items, create_llvm_type(option.inner, state));
+
+			return LLVMStructType(items, arrlen(items), false);
+		}
 		case FUNCTION_TYPE_VALUE: {
 			return LLVMPointerType(create_llvm_function_literal_type(value, state), 0);
 		}
@@ -76,6 +85,7 @@ static LLVMTypeRef create_llvm_type(Value *value, State *state) {
 			if (strcmp(internal.identifier, "byte") == 0) return LLVMInt8Type();
 			else if (strcmp(internal.identifier, "void") == 0) return LLVMVoidType();
 			else if (strcmp(internal.identifier, "uint") == 0) return LLVMInt64Type();
+			else if (strcmp(internal.identifier, "bool") == 0) return LLVMInt1Type();
 			else assert(false);
 			break;
 		}
@@ -239,7 +249,20 @@ static LLVMValueRef generate_number(Node *node, State *state) {
 static LLVMValueRef generate_null(Node *node, State *state) {
 	assert(node->kind == NULL_NODE);
 	Value *type = get_data(&state->context, node)->null_.type;
-	return LLVMConstNull(create_llvm_type(type, state));
+	switch (type->tag) {
+		case POINTER_TYPE_VALUE:
+			return LLVMConstNull(create_llvm_type(type, state));
+		case OPTION_TYPE_VALUE: {
+			LLVMValueRef option_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
+
+			LLVMValueRef present_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), option_value, 0, "");
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 0, false), present_pointer);
+
+			return LLVMConstNull(create_llvm_type(type, state));
+		}
+		default:
+			assert(false);
+	}
 }
 
 static LLVMValueRef generate_struct(Node *node, State *state) {
@@ -302,6 +325,40 @@ static LLVMValueRef generate_dereference(Node *node, State *state) {
 	} else {
 		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(dereference_data.type, state), pointer_llvm_value, "");
 	}
+}
+
+static LLVMValueRef generate_deoption(Node *node, State *state) {
+	assert(node->kind == DEOPTION_NODE);
+	Deoption_Node deoption = node->deoption;
+	LLVMValueRef pointer_llvm_value = generate_node(deoption.node, state);
+
+	Deoption_Data deoption_data = get_data(&state->context, node)->deoption;
+
+	Value *option_type = create_option_type(deoption_data.type);
+
+	LLVMValueRef value_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(option_type, state), pointer_llvm_value, 1, "");
+	if (deoption_data.assign_value != NULL) {
+		LLVMValueRef present_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(option_type, state), pointer_llvm_value, 0, "");
+
+		LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 1, false), present_pointer);
+		LLVMBuildStore(state->llvm_builder, generate_node(deoption_data.assign_value, state), value_pointer);
+		return NULL;
+	} else {
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(deoption_data.type, state), value_pointer, "");
+	}
+}
+
+static LLVMValueRef generate_deoption_present(Node *node, State *state) {
+	assert(node->kind == DEOPTION_PRESENT_NODE);
+	Deoption_Present_Node deoption_present = node->deoption_present;
+	LLVMValueRef pointer_llvm_value = generate_node(deoption_present.node, state);
+
+	Deoption_Data deoption_data = get_data(&state->context, node)->deoption;
+
+	Value *option_type = create_option_type(deoption_data.type);
+
+	LLVMValueRef present_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(option_type, state), pointer_llvm_value, 0, "");
+	return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(create_internal_type("bool"), state), present_pointer, "");
 }
 
 static LLVMValueRef generate_structure_access(Node *node, State *state) {
@@ -567,6 +624,10 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_reference(node, state);
 		case DEREFERENCE_NODE:
 			return generate_dereference(node, state);
+		case DEOPTION_NODE:
+			return generate_deoption(node, state);
+		case DEOPTION_PRESENT_NODE:
+			return generate_deoption_present(node, state);
 		case STRUCTURE_ACCESS_NODE:
 			return generate_structure_access(node, state);
 		case ARRAY_ACCESS_NODE:

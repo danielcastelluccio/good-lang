@@ -25,6 +25,7 @@ typedef enum {
 	UNION_TYPE_VALUE,
 	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
+	OPTION_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	SLICE_TYPE_VALUE,
 	BOOLEAN_VALUE,
@@ -114,6 +115,10 @@ typedef struct {
 
 typedef struct {
 	Value *inner;
+} Option_Type_Value;
+
+typedef struct {
+	Value *inner;
 	Value *size;
 } Array_Type_Value;
 
@@ -145,6 +150,7 @@ struct Value {
 		Module_Value module;
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
+		Option_Type_Value option_type;
 		Array_Type_Value array_type;
 		Slice_Type_Value slice_type;
 		Boolean_Value boolean;
@@ -251,6 +257,15 @@ typedef struct {
 } Dereference_Data;
 
 typedef struct {
+	Value *type;
+	Node *assign_value;
+} Deoption_Data;
+
+typedef struct {
+	Value *type;
+} Deoption_Present_Data;
+
+typedef struct {
 	Value *array_like_type;
 	Node *assign_value;
 	bool want_pointer;
@@ -282,6 +297,8 @@ typedef struct {
 		Module_Access_Data module_access;
 		Structure_Access_Data structure_access;
 		Dereference_Data dereference;
+		Deoption_Data deoption;
+		Deoption_Present_Data deoption_present;
 		Array_Access_Data array_access;
 		Slice_Data slice;
 		Binary_Operator_Data binary_operator;
@@ -340,5 +357,7 @@ Value *strip_define_data(Value *value);
 
 Value *create_string_type();
 Value *create_slice_type(Value *inner);
+Value *create_option_type(Value *inner);
+Value *create_internal_type(char *identifier);
 
 #endif

@@ -120,6 +120,22 @@ static Node *parse_dereference(Lexer *lexer, Node *node) {
 	return derefence;
 }
 
+static Node *parse_deoption(Lexer *lexer, Node *node) {
+	Token_Data token = consume_check(lexer, QUESTION);
+
+	Node *deoption = ast_new(DEOPTION_NODE, token.location);
+	deoption->deoption.node = node;
+	return deoption;
+}
+
+static Node *parse_deoption_present(Lexer *lexer, Node *node) {
+	Token_Data token = consume_check(lexer, QUESTION_QUESTION);
+
+	Node *deoption_present = ast_new(DEOPTION_PRESENT_NODE, token.location);
+	deoption_present->deoption_present.node = node;
+	return deoption_present;
+}
+
 static Node *parse_call(Lexer *lexer, Node *function) {
 	Token_Data first_token = consume_check(lexer, OPEN_PARENTHESIS);
 
@@ -472,6 +488,15 @@ static Node *parse_pointer(Lexer *lexer) {
 	return pointer;
 }
 
+static Node *parse_option(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, QUESTION);
+
+	Node *option = ast_new(OPTION_NODE, first_token.location);
+	option->option.inner = parse_expression(lexer);
+
+	return option;
+}
+
 static Node *parse_reference(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, AMPERSAND);
 
@@ -677,6 +702,10 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_pointer(lexer);
 			break;
 		}
+		case QUESTION: {
+			result = parse_option(lexer);
+			break;
+		}
 		case AMPERSAND: {
 			result = parse_reference(lexer);
 			break;
@@ -715,6 +744,12 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case CARET:
 				result = parse_dereference(lexer, result);
+				break;
+			case QUESTION:
+				result = parse_deoption(lexer, result);
+				break;
+			case QUESTION_QUESTION:
+				result = parse_deoption_present(lexer, result);
 				break;
 			default:
 				operating = false;

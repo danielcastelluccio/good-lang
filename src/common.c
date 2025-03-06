@@ -111,3 +111,15 @@ Value *create_slice_type(Value *inner) {
 	slice_type->slice_type.inner = inner;
 	return slice_type;
 }
+
+Value *create_option_type(Value *inner) {
+	Value *option_type = value_new(OPTION_TYPE_VALUE);
+	option_type->option_type.inner = inner;
+	return option_type;
+}
+
+Value *create_internal_type(char *identifier) {
+	Value *internal_type = value_new(INTERNAL_VALUE);
+	internal_type->internal.identifier = identifier;
+	return internal_type;
+}

@@ -32,6 +32,9 @@ bool value_equal(Value *value1, Value *value2) {
 		case SLICE_TYPE_VALUE: {
 			return value_equal(value1->slice_type.inner, value2->slice_type.inner);
 		}
+		case OPTION_TYPE_VALUE: {
+			return value_equal(value1->option_type.inner, value2->option_type.inner);
+		}
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
 		}
@@ -209,6 +212,13 @@ Value *evaluate(Context *context, Node *node) {
 			Value *pointer_type_value = value_new(POINTER_TYPE_VALUE);
 			pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
 			return pointer_type_value;
+		}
+		case OPTION_NODE: {
+			Option_Node option = node->option;
+
+			Value *option_type_value = value_new(OPTION_TYPE_VALUE);
+			option_type_value->option_type.inner = evaluate(context, option.inner);
+			return option_type_value;
 		}
 		case ARRAY_TYPE_NODE: {
 			Array_Type_Node array_type = node->array_type;

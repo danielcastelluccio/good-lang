@@ -23,6 +23,10 @@ typedef struct {
 
 typedef struct {
 	Node *inner;
+} Option_Node;
+
+typedef struct {
+	Node *inner;
 	Node *size;
 } Array_Type_Node;
 
@@ -91,6 +95,14 @@ typedef struct {
 typedef struct {
 	Node *node;
 } Dereference_Node;
+
+typedef struct {
+	Node *node;
+} Deoption_Node;
+
+typedef struct {
+	Node *node;
+} Deoption_Present_Node;
 
 typedef struct {
 	Node *structure;
@@ -170,6 +182,7 @@ typedef struct {
 
 typedef enum {
 	POINTER_NODE,
+	OPTION_NODE,
 	ARRAY_TYPE_NODE,
 	SLICE_TYPE_NODE,
 	FUNCTION_TYPE_NODE,
@@ -185,6 +198,8 @@ typedef enum {
 	CALL_NODE,
 	REFERENCE_NODE,
 	DEREFERENCE_NODE,
+	DEOPTION_NODE,
+	DEOPTION_PRESENT_NODE,
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
 	SLICE_NODE,
@@ -203,6 +218,7 @@ struct Node {
 	Node_Kind kind;
 	union {
 		Pointer_Node pointer;
+		Option_Node option;
 		Array_Type_Node array_type;
 		Slice_Type_Node slice_type;
 		Function_Type_Node function_type;
@@ -217,6 +233,8 @@ struct Node {
 		Call_Node call;
 		Reference_Node reference;
 		Dereference_Node dereference;
+		Deoption_Node deoption;
+		Deoption_Present_Node deoption_present;
 		Structure_Access_Node structure_access;
 		Array_Access_Node array_access;
 		Slice_Node slice;
