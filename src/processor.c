@@ -744,6 +744,10 @@ static void process_null(Context *context, Node *node) {
 	set_type(context, node, wanted_type);
 }
 
+static void process_boolean(Context *context, Node *node) {
+	set_type(context, node, create_boolean_type());
+}
+
 static void process_struct(Context *context, Node *node) {
 	Structure_Node structure = node->structure;
 
@@ -1123,6 +1127,14 @@ static void process_if(Context *context, Node *node) {
 	}
 }
 
+static void process_while(Context *context, Node *node) {
+	While_Node while_ = node->while_;
+
+	process_node(context, while_.condition);
+
+	process_node(context, while_.body);
+}
+
 static void process_binary_operator(Context *context, Node *node) {
 	Binary_Operator_Node binary_operator = node->binary_operator;
 
@@ -1307,6 +1319,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_null(context, node);
 			break;
 		}
+		case BOOLEAN_NODE: {
+			process_boolean(context, node);
+			break;
+		}
 		case STRUCT_NODE: {
 			process_struct(context, node);
 			break;
@@ -1357,6 +1373,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case IF_NODE: {
 			process_if(context, node);
+			break;
+		}
+		case WHILE_NODE: {
+			process_while(context, node);
 			break;
 		}
 		case BINARY_OPERATOR_NODE: {

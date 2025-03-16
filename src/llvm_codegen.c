@@ -265,6 +265,13 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_boolean(Node *node, State *state) {
+	assert(node->kind == BOOLEAN_NODE);
+	(void) state;
+	Boolean_Node boolean = node->boolean;
+	return LLVMConstInt(LLVMInt1Type(), boolean.value, false);
+}
+
 static LLVMValueRef generate_struct(Node *node, State *state) {
 	assert(node->kind == STRUCT_NODE);
 	Structure_Node structure = node->structure;
@@ -599,6 +606,25 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 	return NULL;
 }
 
+static LLVMValueRef generate_while(Node *node, State *state) {
+	assert(node->kind == WHILE_NODE);
+	While_Node while_ = node->while_;
+
+	LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBuildBr(state->llvm_builder, check_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
+	LLVMValueRef value = generate_node(while_.condition, state);
+	LLVMBuildCondBr(state->llvm_builder, value, body_block, done_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, body_block);
+	generate_node(while_.body, state);
+	LLVMBuildBr(state->llvm_builder, check_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
+
+	return NULL;
+}
+
 static LLVMValueRef generate_node(Node *node, State *state) {
 	switch (node->kind) {
 		case DEFINE_NODE:
@@ -616,6 +642,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_number(node, state);
 		case NULL_NODE:
 			return generate_null(node, state);
+		case BOOLEAN_NODE:
+			return generate_boolean(node, state);
 		case STRUCT_NODE:
 			return generate_struct(node, state);
 		case RUN_NODE:
@@ -644,6 +672,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_variable(node, state);
 		case IF_NODE:
 			return generate_if(node, state);
+		case WHILE_NODE:
+			return generate_while(node, state);
 		default:
 			assert(false);
 	}

@@ -170,16 +170,25 @@ foo(foo_var, 4);
 
 
 def get = fn() bool, uint {
+	return true, 4;
 };
 
 var x, y = get();
 
-var x, y = 4, 3;
+x, y = 4, 3;
 
 
 
 
+def get#(T: type) = fn(): ?T {
+};
 
+var x: ?uint = null;
+x? = 4;
+var y = x?;
+if x?? {
+	var z: uint = xv;
+}
 
 
 

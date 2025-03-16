@@ -70,6 +70,10 @@ typedef struct {
 } Number_Node;
 
 typedef struct {
+	bool value;
+} Boolean_Node;
+
+typedef struct {
 	Node **values; // stb_ds
 } Structure_Node;
 
@@ -143,6 +147,11 @@ typedef struct {
 } If_Node;
 
 typedef struct {
+	Node *condition;
+	Node *body;
+} While_Node;
+
+typedef struct {
 	Node *body;
 } Module_Node;
 
@@ -192,6 +201,7 @@ typedef enum {
 	STRING_NODE,
 	NUMBER_NODE,
 	NULL_NODE,
+	BOOLEAN_NODE,
 	STRUCT_NODE,
 	RUN_NODE,
 	IDENTIFIER_NODE,
@@ -207,6 +217,7 @@ typedef enum {
 	ASSIGN_NODE,
 	VARIABLE_NODE,
 	IF_NODE,
+	WHILE_NODE,
 	MODULE_NODE,
 	BINARY_OPERATOR_NODE,
 	DEFINE_NODE,
@@ -227,6 +238,7 @@ struct Node {
 		Enum_Type_Node enum_type;
 		String_Node string;
 		Number_Node number;
+		Boolean_Node boolean;
 		Structure_Node structure;
 		Run_Node run;
 		Identifier_Node identifier;
@@ -242,6 +254,7 @@ struct Node {
 		Assign_Node assign;
 		Variable_Node variable;
 		If_Node if_;
+		While_Node while_;
 		Module_Node module;
 		Binary_Operator_Node binary_operator;
 		Define_Node define;

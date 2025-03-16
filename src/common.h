@@ -356,6 +356,7 @@ void reset_node(Context *context, Node *node);
 Value *strip_define_data(Value *value);
 
 Value *create_string_type();
+Value *create_boolean_type();
 Value *create_slice_type(Value *inner);
 Value *create_option_type(Value *inner);
 Value *create_internal_type(char *identifier);

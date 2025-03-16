@@ -66,6 +66,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "extern") == 0) return true;
 	else if (strcmp(identifier, "var") == 0) return true;
 	else if (strcmp(identifier, "if") == 0) return true;
+	else if (strcmp(identifier, "while") == 0) return true;
 	else if (strcmp(identifier, "else") == 0) return true;
 	else if (strcmp(identifier, "static") == 0) return true;
 	else if (strcmp(identifier, "mod") == 0) return true;

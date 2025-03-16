@@ -85,6 +85,14 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 	if (strcmp(token.string, "null") == 0) {
 		return ast_new(NULL_NODE, token.location);
+	} else if (strcmp(token.string, "true") == 0) {
+		Node *node = ast_new(BOOLEAN_NODE, token.location);
+		node->boolean.value = true;
+		return node;
+	} else if (strcmp(token.string, "false") == 0) {
+		Node *node = ast_new(BOOLEAN_NODE, token.location);
+		node->boolean.value = false;
+		return node;
 	}
 
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
@@ -465,6 +473,16 @@ static Node *parse_if(Lexer *lexer) {
 	return if_;
 }
 
+static Node *parse_while(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *while_ = ast_new(WHILE_NODE, first_token.location);
+
+	while_->while_.condition = parse_expression(lexer);
+	while_->while_.body = parse_expression(lexer);
+
+	return while_;
+}
+
 static Node *parse_block(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, OPEN_CURLY_BRACE);
 
@@ -686,6 +704,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (strcmp(value, "union") == 0) result = parse_union_type(lexer);
 			else if (strcmp(value, "enum") == 0) result = parse_enum_type(lexer);
 			else if (strcmp(value, "if") == 0) result = parse_if(lexer);
+			else if (strcmp(value, "while") == 0) result = parse_while(lexer);
 			else if (strcmp(value, "mod") == 0) result = parse_module(lexer);
 			else if (strcmp(value, "run") == 0) result = parse_run(lexer);
 			else {

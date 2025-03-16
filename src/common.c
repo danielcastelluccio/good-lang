@@ -106,6 +106,12 @@ Value *create_string_type() {
 	return slice;
 }
 
+Value *create_boolean_type() {
+	Value *boolean = value_new(INTERNAL_VALUE);
+	boolean->internal.identifier = "bool";
+	return boolean;
+}
+
 Value *create_slice_type(Value *inner) {
 	Value *slice_type = value_new(SLICE_TYPE_VALUE);
 	slice_type->slice_type.inner = inner;
