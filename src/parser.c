@@ -423,15 +423,15 @@ static Node *parse_define(Lexer *lexer) {
 	return define;
 }
 
-static Node *parse_return(Lexer *lexer) {
-	Token_Data first_token = consume_check(lexer, KEYWORD);
-	Node *return_ = ast_new(RETURN_NODE, first_token.location);
-	return_->return_.value = parse_expression_or_nothing(lexer);
-
-	consume_check(lexer, SEMICOLON);
-
-	return return_;
-}
+// static Node *parse_return(Lexer *lexer) {
+// 	Token_Data first_token = consume_check(lexer, KEYWORD);
+// 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
+// 	return_->return_.value = parse_expression_or_nothing(lexer);
+//
+// 	consume_check(lexer, SEMICOLON);
+//
+// 	return return_;
+// }
 
 static Node *parse_variable(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
@@ -661,7 +661,7 @@ static Node *parse_statement(Lexer *lexer) {
 		case KEYWORD: {
 			char *value = token.string;
 			if (strcmp(value, "def") == 0) result = parse_define(lexer);
-			else if (strcmp(value, "return") == 0) result = parse_return(lexer);
+			// else if (strcmp(value, "return") == 0) result = parse_return(lexer);
 			else if (strcmp(value, "var") == 0) result = parse_variable(lexer);
 			else if (strcmp(value, "yield") == 0) result = parse_yield(lexer);
 			break;

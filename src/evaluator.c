@@ -15,6 +15,7 @@ jmp_buf jmp;
 Value *jmp_result;
 
 bool value_equal(Value *value1, Value *value2) {
+	if (value2 == NULL) return false;
 	if (value1->tag != value2->tag) return false;
 
 	switch (value1->tag) {
@@ -379,19 +380,19 @@ Value *evaluate(Context *context, Node *node) {
 
 			return value_new(NONE_VALUE);
 		}
-		case RETURN_NODE: {
-			Return_Node return_ = node->return_;
+		// case RETURN_NODE: {
+		// 	Return_Node return_ = node->return_;
 
-			Value *result;
-			if (return_.value != NULL) {
-				result = evaluate(context, return_.value);
-			} else {
-				result = value_new(NONE_VALUE);
-			}
+		// 	Value *result;
+		// 	if (return_.value != NULL) {
+		// 		result = evaluate(context, return_.value);
+		// 	} else {
+		// 		result = value_new(NONE_VALUE);
+		// 	}
 
-			jmp_result = result;
-			longjmp(jmp, 1);
-		}
+		// 	jmp_result = result;
+		// 	longjmp(jmp, 1);
+		// }
 		default:
 			assert(false);
 	}

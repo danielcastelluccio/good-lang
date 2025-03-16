@@ -564,17 +564,17 @@ static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 	}
 }
 
-static LLVMValueRef generate_return(Node *node, State *state) {
-	assert(node->kind == RETURN_NODE);
-	Return_Node return_ = node->return_;
-
-	if (return_.value != NULL) {
-		LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
-	} else {
-		LLVMBuildRetVoid(state->llvm_builder);
-	}
-	return NULL;
-}
+// static LLVMValueRef generate_return(Node *node, State *state) {
+// 	assert(node->kind == RETURN_NODE);
+// 	Return_Node return_ = node->return_;
+//
+// 	if (return_.value != NULL) {
+// 		LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
+// 	} else {
+// 		LLVMBuildRetVoid(state->llvm_builder);
+// 	}
+// 	return NULL;
+// }
 
 static LLVMValueRef generate_assign(Node *node, State *state) {
 	assert(node->kind == ASSIGN_NODE);
@@ -723,8 +723,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_slice(node, state);
 		case BINARY_OPERATOR_NODE:
 			return generate_binary_operator(node, state);
-		case RETURN_NODE:
-			return generate_return(node, state);
+		// case RETURN_NODE:
+		// 	return generate_return(node, state);
 		case ASSIGN_NODE:
 			return generate_assign(node, state);
 		case VARIABLE_NODE:

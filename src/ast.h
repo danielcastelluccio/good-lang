@@ -124,9 +124,9 @@ typedef struct {
 	Node *end_index;
 } Slice_Node;
 
-typedef struct {
-	Node *value;
-} Return_Node;
+// typedef struct {
+// 	Node *value;
+// } Return_Node;
 
 typedef struct {
 	Node *container;
@@ -218,7 +218,7 @@ typedef enum {
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
 	SLICE_NODE,
-	RETURN_NODE,
+	// RETURN_NODE,
 	ASSIGN_NODE,
 	VARIABLE_NODE,
 	YIELD_NODE,
@@ -256,7 +256,7 @@ struct Node {
 		Structure_Access_Node structure_access;
 		Array_Access_Node array_access;
 		Slice_Node slice;
-		Return_Node return_;
+		// Return_Node return_;
 		Assign_Node assign;
 		Variable_Node variable;
 		Yield_Node yield;

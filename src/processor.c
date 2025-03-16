@@ -1178,28 +1178,40 @@ static void process_assign(Context *context, Node *node) {
 	process_node_context(context, temporary_context, assign.container);
 }
 
-static void process_return(Context *context, Node *node) {
-	Return_Node return_ = node->return_;
-
-	if (return_.value != NULL) {
-		Node *current_function = NULL;
-		for (long int i = 0; i < arrlen(context->scopes); i++) {
-			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
-			if (scope_node->kind == FUNCTION_NODE) {
-				current_function = scope_node;
-			}
-		}
-
-		Value *return_type = get_data(context, current_function->function.function_type)->function_type.value->function_type.return_type;
-		Temporary_Context temporary_context = { .wanted_type = return_type };
-		process_node_context(context, temporary_context, return_.value);
-
-		Value *type = get_type(context, return_.value);
-		if (!type_assignable(return_type, type)) {
-			handle_type_error(node, return_type, type);
-		}
-	}
-}
+// static void process_return(Context *context, Node *node) {
+// 	Return_Node return_ = node->return_;
+//
+// 	for (long int i = 0; i < arrlen(context->scopes); i++) {
+// 		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+//
+// 		if (scope_node != NULL) {
+// 			if (scope_node->kind == FUNCTION_NODE) {
+// 				break;
+// 			} else if (scope_node->kind == BLOCK_NODE) {
+// 				arrpush(context->left_blocks, scope_node);
+// 			}
+// 		}
+// 	}
+//
+// 	if (return_.value != NULL) {
+// 		Node *current_function = NULL;
+// 		for (long int i = 0; i < arrlen(context->scopes); i++) {
+// 			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+// 			if (scope_node->kind == FUNCTION_NODE) {
+// 				current_function = scope_node;
+// 			}
+// 		}
+//
+// 		Value *return_type = get_data(context, current_function->function.function_type)->function_type.value->function_type.return_type;
+// 		Temporary_Context temporary_context = { .wanted_type = return_type };
+// 		process_node_context(context, temporary_context, return_.value);
+//
+// 		Value *type = get_type(context, return_.value);
+// 		if (!type_assignable(return_type, type)) {
+// 			handle_type_error(node, return_type, type);
+// 		}
+// 	}
+// }
 
 static void process_if(Context *context, Node *node) {
 	If_Node if_ = node->if_;
@@ -1261,7 +1273,7 @@ static void process_if(Context *context, Node *node) {
 	} else {
 		context->left_blocks = saved_left_blocks;
 		if (if_type != NULL) {
-			handle_semantic_error(node->location, "Expected else expression");
+			handle_semantic_error(node->location, "Expected else");
 		}
 	}
 
@@ -1284,9 +1296,7 @@ static void process_binary_operator(Context *context, Node *node) {
 	process_node_context(context, temporary_context, binary_operator.right);
 
 	Value *left_type = get_type(context, binary_operator.left);
-	assert(left_type != NULL);
 	Value *right_type = get_type(context, binary_operator.right);
-	assert(right_type != NULL);
 	if (!type_assignable(left_type, right_type)) {
 		char left_string[64] = {};
 		print_type_outer(left_type, left_string);
@@ -1340,7 +1350,17 @@ static void process_function(Context *context, Node *node) {
 
 	if (function.body != NULL) {
 		arrpush(context->scopes, (Scope) { .node = node });
-		process_node(context, function.body);
+
+		Temporary_Context temporary_context = { .wanted_type = function_type_value->function_type.return_type };
+		process_node_context(context, temporary_context, function.body);
+
+		if (function_type_value->function_type.return_type != NULL) {
+			Value *returned_type = get_type(context, function.body);
+
+			if (!value_equal(function_type_value->function_type.return_type, returned_type)) {
+				handle_type_error(node, function_type_value->function_type.return_type, returned_type);
+			}
+		}
 		(void) arrpop(context->scopes);
 	}
 
@@ -1511,10 +1531,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_assign(context, node);
 			break;
 		}
-		case RETURN_NODE: {
-			process_return(context, node);
-			break;
-		}
+		// case RETURN_NODE: {
+		// 	process_return(context, node);
+		// 	break;
+		// }
 		case IF_NODE: {
 			process_if(context, node);
 			break;
