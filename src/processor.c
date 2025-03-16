@@ -94,7 +94,7 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 }
 
 #define handle_semantic_error(/* Source_Location */ location, /* char * */ fmt, ...) { \
-	printf("%s:%zu:%zu: " fmt "\n", location.path, location.row, location.column, __VA_ARGS__); \
+	printf("%s:%zu:%zu: " fmt "\n", location.path, location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
 	exit(1); \
 }
 
@@ -1113,18 +1113,49 @@ static void process_if(Context *context, Node *node) {
 	If_Node if_ = node->if_;
 
 	process_node(context, if_.condition);
+
+	Node_Data *data = node_data_new(IF_NODE);
 	if (if_.static_) {
 		Value *evaluated = strip_define_data(evaluate(context, if_.condition));
 
-		Node_Data *data = node_data_new(IF_NODE);
 		data->if_.static_condition = evaluated->boolean.value;
-		set_data(context, node, data);
 	}
 
 	process_node(context, if_.if_body);
+	Value *if_type = get_type(context, if_.if_body);
 	if (if_.else_body != NULL) {
 		process_node(context, if_.else_body);
+
+		Value *else_type = get_type(context, if_.else_body);
+		if (else_type != NULL) {
+			if (if_type == NULL) {
+				handle_semantic_error(node->location, "Expected value from if expression");
+			}
+		}
+
+		if (if_type != NULL) {
+			if (else_type == NULL) {
+				handle_semantic_error(node->location, "Expected value from else expression");
+			}
+
+			if (!value_equal(if_type, else_type)) {
+				char if_string[64] = {};
+				print_type(if_type, if_string);
+				char else_string[64] = {};
+				print_type(else_type, else_string);
+				handle_semantic_error(node->location, "Mismatched types '%s' and '%s'", if_string, else_string);
+			}
+
+			data->if_.type = if_type;
+			set_type(context, node, if_type);
+		}
+	} else {
+		if (if_type != NULL) {
+			handle_semantic_error(node->location, "Expected else expression");
+		}
 	}
+
+	set_data(context, node, data);
 }
 
 static void process_while(Context *context, Node *node) {

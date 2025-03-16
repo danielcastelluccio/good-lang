@@ -576,34 +576,40 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 static LLVMValueRef generate_if(Node *node, State *state) {
 	assert(node->kind == IF_NODE);
 	If_Node if_ = node->if_;
+	If_Data if_data = get_data(&state->context, node)->if_;
 
 	if (if_.static_) {
-		if (get_data(&state->context, node)->if_.static_condition) {
+		if (if_data.static_condition) {
 			generate_node(if_.if_body, state);
 		} else {
 			if (if_.else_body != NULL) {
 				generate_node(if_.else_body, state);
 			}
 		}
+
+		return NULL;
 	} else {
-		LLVMValueRef value = generate_node(if_.condition, state);
+		LLVMValueRef value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(if_data.type, state), "");
+		LLVMValueRef condition = generate_node(if_.condition, state);
 
 		LLVMBasicBlockRef if_block = LLVMAppendBasicBlock(state->current_function, "");
 		LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
 		LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
-		LLVMBuildCondBr(state->llvm_builder, value, if_block, else_block);
+		LLVMBuildCondBr(state->llvm_builder, condition, if_block, else_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, if_block);
-		generate_node(if_.if_body, state);
+		LLVMValueRef if_value = generate_node(if_.if_body, state);
+		LLVMBuildStore(state->llvm_builder, if_value, value);
 		LLVMBuildBr(state->llvm_builder, done_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
 		if (if_.else_body != NULL) {
-			generate_node(if_.else_body, state);
+			LLVMValueRef else_value = generate_node(if_.else_body, state);
+			LLVMBuildStore(state->llvm_builder, else_value, value);
 		}
 		LLVMBuildBr(state->llvm_builder, done_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
-	}
 
-	return NULL;
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.type, state), value, "");
+	}
 }
 
 static LLVMValueRef generate_while(Node *node, State *state) {

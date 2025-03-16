@@ -215,6 +215,7 @@ typedef struct {
 
 typedef struct {
 	bool static_condition;
+	Value *type;
 } If_Data;
 
 typedef struct {
