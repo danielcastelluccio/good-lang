@@ -605,6 +605,8 @@ static LLVMValueRef generate_yield(Node *node, State *state) {
 	Block_Codegen_Data block_codegen_data = hmget(state->blocks, block_data);
 	LLVMBuildStore(state->llvm_builder, generate_node(yield.value, state), block_codegen_data.value);
 	LLVMBuildBr(state->llvm_builder, block_codegen_data.block);
+	LLVMBasicBlockRef block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMPositionBuilderAtEnd(state->llvm_builder, block);
 
 	return NULL;
 }
@@ -625,7 +627,11 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 
 		return NULL;
 	} else {
-		LLVMValueRef value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(if_data.type, state), "");
+		LLVMValueRef value = NULL;
+		if (if_data.type != NULL) {
+			value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(if_data.type, state), "");
+		}
+
 		LLVMValueRef condition = generate_node(if_.condition, state);
 
 		LLVMBasicBlockRef if_block = LLVMAppendBasicBlock(state->current_function, "");
@@ -634,17 +640,25 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 		LLVMBuildCondBr(state->llvm_builder, condition, if_block, else_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, if_block);
 		LLVMValueRef if_value = generate_node(if_.if_body, state);
-		LLVMBuildStore(state->llvm_builder, if_value, value);
+		if (if_data.type != NULL) {
+			LLVMBuildStore(state->llvm_builder, if_value, value);
+		}
 		LLVMBuildBr(state->llvm_builder, done_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
 		if (if_.else_body != NULL) {
 			LLVMValueRef else_value = generate_node(if_.else_body, state);
-			LLVMBuildStore(state->llvm_builder, else_value, value);
+			if (if_data.type != NULL) {
+				LLVMBuildStore(state->llvm_builder, else_value, value);
+			}
 		}
 		LLVMBuildBr(state->llvm_builder, done_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 
-		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.type, state), value, "");
+		if (if_data.type != NULL) {
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.type, state), value, "");
+		} else {
+			return NULL;
+		}
 	}
 }
 
@@ -878,6 +892,7 @@ void build_llvm(Context context, Node *root, void *data) {
 
 	LLVMPrintModuleToFile(llvm_module, "main.ll", NULL);
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.o", LLVMObjectFile, NULL);
+	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.s", LLVMAssemblyFile, NULL);
 	
 	char *args[] = {
 		"gcc",

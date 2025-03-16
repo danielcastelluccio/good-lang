@@ -1095,12 +1095,17 @@ static void process_yield(Context *context, Node *node) {
 		process_node(context, yield.value);
 	}
 
+	size_t levels = yield.levels;
 	Node *block = NULL;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
 		if (scope_node != NULL && scope_node->kind == BLOCK_NODE) {
-			block = scope_node;
-			break;
+			if (levels == 0) {
+				block = scope_node;
+				break;
+			} else {
+				levels--;
+			}
 		}
 	}
 

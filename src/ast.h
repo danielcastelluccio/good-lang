@@ -141,6 +141,7 @@ typedef struct {
 
 typedef struct {
 	Node *value;
+	size_t levels;
 } Yield_Node;
 
 typedef struct {

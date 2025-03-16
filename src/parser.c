@@ -455,7 +455,13 @@ static Node *parse_variable(Lexer *lexer) {
 static Node *parse_yield(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 	Node *yield = ast_new(YIELD_NODE, first_token.location);
+	size_t levels = 0;
+	while (lexer_next(lexer, false).kind == AT) {
+		consume_check(lexer, AT);
+		levels++;
+	}
 	yield->yield.value = parse_expression_or_nothing(lexer);
+	yield->yield.levels = levels;
 	consume_check(lexer, SEMICOLON);
 	return yield;
 }
