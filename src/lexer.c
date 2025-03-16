@@ -75,6 +75,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "enum") == 0) return true;
 	else if (strcmp(identifier, "run") == 0) return true;
 	else if (strcmp(identifier, "yield") == 0) return true;
+	else if (strcmp(identifier, "break") == 0) return true;
 	else return false;
 }
 

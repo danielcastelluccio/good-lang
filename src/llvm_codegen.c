@@ -21,6 +21,11 @@ typedef struct {
 } Block_Codegen_Data;
 
 typedef struct {
+	LLVMBasicBlockRef block;
+	LLVMValueRef value;
+} While_Codegen_Data;
+
+typedef struct {
 	LLVMModuleRef llvm_module;
 	LLVMBuilderRef llvm_builder;
 	LLVMTargetMachineRef llvm_target;
@@ -28,6 +33,7 @@ typedef struct {
 	struct { Value *key; LLVMValueRef value; } *generated_cache; // stb_ds
 	struct { Node_Data *key; LLVMValueRef value; } *variables; // stb_ds
 	struct { Node_Data *key; Block_Codegen_Data value; } *blocks; // stb_ds
+	struct { Node_Data *key; While_Codegen_Data value; } *whiles; // stb_ds
 	LLVMValueRef *function_arguments; // stb_ds
 	LLVMValueRef current_function;
 	LLVMValueRef main_function;
@@ -614,6 +620,22 @@ static LLVMValueRef generate_yield(Node *node, State *state) {
 	return NULL;
 }
 
+static LLVMValueRef generate_break(Node *node, State *state) {
+	assert(node->kind == BREAK_NODE);
+	Break_Node break_ = node->break_;
+	Break_Data break_data = get_data(&state->context, node)->break_;
+	Node_Data *while_data = get_data(&state->context, break_data.while_);
+	While_Codegen_Data while_codegen_data = hmget(state->whiles, while_data);
+	if (break_.value != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(break_.value, state), while_codegen_data.value);
+	}
+	LLVMBuildBr(state->llvm_builder, while_codegen_data.block);
+	LLVMBasicBlockRef block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMPositionBuilderAtEnd(state->llvm_builder, block);
+
+	return NULL;
+}
+
 static LLVMValueRef generate_if(Node *node, State *state) {
 	assert(node->kind == IF_NODE);
 	If_Node if_ = node->if_;
@@ -668,20 +690,43 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 static LLVMValueRef generate_while(Node *node, State *state) {
 	assert(node->kind == WHILE_NODE);
 	While_Node while_ = node->while_;
+	Node_Data *data = get_data(&state->context, node);
+	While_Data while_data = data->while_;
 
 	LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+
+	LLVMValueRef value = NULL;
+	if (while_data.type != NULL) {
+		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(while_data.type, state), "");
+	}
+
+	While_Codegen_Data while_codegen_data = {
+		.block = done_block,
+		.value = value
+	};
+
+	hmput(state->whiles, data, while_codegen_data);
 	LLVMBuildBr(state->llvm_builder, check_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
-	LLVMValueRef value = generate_node(while_.condition, state);
-	LLVMBuildCondBr(state->llvm_builder, value, body_block, done_block);
+	LLVMValueRef condition = generate_node(while_.condition, state);
+	LLVMBuildCondBr(state->llvm_builder, condition, body_block, else_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, body_block);
 	generate_node(while_.body, state);
 	LLVMBuildBr(state->llvm_builder, check_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
+	LLVMValueRef else_value = generate_node(while_.else_body, state);
+	LLVMBuildStore(state->llvm_builder, else_value, value);
+	LLVMBuildBr(state->llvm_builder, done_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 
-	return NULL;
+	if (while_data.type != NULL) {
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(while_data.type, state), value, "");
+	} else {
+		return NULL;
+	}
 }
 
 static LLVMValueRef generate_node(Node *node, State *state) {
@@ -731,6 +776,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_variable(node, state);
 		case YIELD_NODE:
 			return generate_yield(node, state);
+		case BREAK_NODE:
+			return generate_break(node, state);
 		case IF_NODE:
 			return generate_if(node, state);
 		case WHILE_NODE:

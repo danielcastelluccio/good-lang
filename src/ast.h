@@ -145,6 +145,11 @@ typedef struct {
 } Yield_Node;
 
 typedef struct {
+	Node *value;
+	size_t levels;
+} Break_Node;
+
+typedef struct {
 	Node *condition;
 	Node *if_body;
 	Node *else_body;
@@ -154,6 +159,7 @@ typedef struct {
 typedef struct {
 	Node *condition;
 	Node *body;
+	Node *else_body;
 } While_Node;
 
 typedef struct {
@@ -222,6 +228,7 @@ typedef enum {
 	ASSIGN_NODE,
 	VARIABLE_NODE,
 	YIELD_NODE,
+	BREAK_NODE,
 	IF_NODE,
 	WHILE_NODE,
 	MODULE_NODE,
@@ -260,6 +267,7 @@ struct Node {
 		Assign_Node assign;
 		Variable_Node variable;
 		Yield_Node yield;
+		Break_Node break_;
 		If_Node if_;
 		While_Node while_;
 		Module_Node module;

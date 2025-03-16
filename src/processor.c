@@ -1171,6 +1171,59 @@ static void process_yield(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_break(Context *context, Node *node) {
+	Break_Node break_ = node->break_;
+
+	size_t levels = break_.levels;
+	Node *while_ = NULL;
+	for (long int i = 0; i < arrlen(context->scopes); i++) {
+		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+
+		if (scope_node != NULL && scope_node->kind == WHILE_NODE) {
+			if (levels == 0) {
+				while_ = scope_node;
+				break;
+			} else {
+				levels--;
+			}
+		}
+	}
+
+	Node_Data *while_data = get_data(context, while_);
+
+	if (break_.value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = while_data->while_.wanted_type };
+		process_node_context(context, temporary_context, break_.value);
+	}
+
+	Value *type = get_type(context, break_.value);
+	if (while_data->while_.has_type) {
+		if (type != NULL) {
+			if (while_data->while_.type == NULL) {
+				handle_semantic_error(node->location, "Expected no value");
+			} else if (!value_equal(type, while_data->while_.type)) {
+				char previous_string[64] = {};
+				print_type_outer(type, previous_string);
+				char current_string[64] = {};
+				print_type_outer(while_data->while_.type, current_string);
+				handle_semantic_error(node->location, "Mismatched types %s and %s", previous_string, current_string);
+			}
+		}
+
+		if (while_data->while_.type != NULL) {
+			if (type == NULL) {
+				handle_semantic_error(node->location, "Expected value");
+			}
+		}
+	}
+	while_data->while_.type = type;
+	while_data->while_.has_type = true;
+
+	Node_Data *data = node_data_new(BREAK_NODE);
+	data->break_.while_ = while_;
+	set_data(context, node, data);
+}
+
 static void process_assign(Context *context, Node *node) {
 	Assign_Node assign = node->assign;
 
@@ -1283,9 +1336,47 @@ static void process_if(Context *context, Node *node) {
 static void process_while(Context *context, Node *node) {
 	While_Node while_ = node->while_;
 
+	Node_Data *data = node_data_new(WHILE_NODE);
+	data->while_.wanted_type = context->temporary_context.wanted_type;
+	data->while_.type = NULL;
+	set_data(context, node, data);
+
+	arrpush(context->scopes, (Scope) { .node = node });
 	process_node(context, while_.condition);
 
 	process_node(context, while_.body);
+
+	if (while_.else_body != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+		process_node_context(context, temporary_context, while_.else_body);
+
+		Value *type = get_type(context, while_.else_body);
+		if (data->while_.has_type) {
+			if (type != NULL) {
+				if (data->while_.type == NULL) {
+					handle_semantic_error(node->location, "Expected no value in else");
+				} else if (!value_equal(type, data->while_.type)) {
+					char previous_string[64] = {};
+					print_type_outer(type, previous_string);
+					char current_string[64] = {};
+					print_type_outer(data->while_.type, current_string);
+					handle_semantic_error(node->location, "Mismatched types %s and %s", previous_string, current_string);
+				}
+			}
+
+			if (data->while_.type != NULL) {
+				if (type == NULL) {
+					handle_semantic_error(node->location, "Expected value in else");
+				}
+			}
+		}
+	}
+
+	(void) arrpop(context->scopes);
+
+	if (data->while_.has_type && while_.else_body != NULL) {
+		set_type(context, node, data->while_.type);
+	}
 }
 
 static void process_binary_operator(Context *context, Node *node) {
@@ -1525,6 +1616,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case YIELD_NODE: {
 			process_yield(context, node);
+			break;
+		}
+		case BREAK_NODE: {
+			process_break(context, node);
 			break;
 		}
 		case ASSIGN_NODE: {

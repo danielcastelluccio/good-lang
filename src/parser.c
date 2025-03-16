@@ -466,6 +466,20 @@ static Node *parse_yield(Lexer *lexer) {
 	return yield;
 }
 
+static Node *parse_break(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *break_ = ast_new(BREAK_NODE, first_token.location);
+	size_t levels = 0;
+	while (lexer_next(lexer, false).kind == AT) {
+		consume_check(lexer, AT);
+		levels++;
+	}
+	break_->break_.value = parse_expression_or_nothing(lexer);
+	break_->break_.levels = levels;
+	consume_check(lexer, SEMICOLON);
+	return break_;
+}
+
 static Node *parse_if(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 	Node *if_ = ast_new(IF_NODE, first_token.location);
@@ -482,7 +496,7 @@ static Node *parse_if(Lexer *lexer) {
 	Token_Data next = lexer_next(lexer, false);
 	if (next.kind == KEYWORD && strcmp(next.string, "else") == 0) {
 		consume_check(lexer, KEYWORD);
-		if_->if_.else_body = parse_expression_or_nothing(lexer);
+		if_->if_.else_body = parse_expression(lexer);
 	}
 	return if_;
 }
@@ -493,6 +507,12 @@ static Node *parse_while(Lexer *lexer) {
 
 	while_->while_.condition = parse_expression(lexer);
 	while_->while_.body = parse_expression(lexer);
+
+	Token_Data next = lexer_next(lexer, false);
+	if (next.kind == KEYWORD && strcmp(next.string, "else") == 0) {
+		consume_check(lexer, KEYWORD);
+		while_->while_.else_body = parse_expression(lexer);
+	}
 
 	return while_;
 }
@@ -664,6 +684,7 @@ static Node *parse_statement(Lexer *lexer) {
 			// else if (strcmp(value, "return") == 0) result = parse_return(lexer);
 			else if (strcmp(value, "var") == 0) result = parse_variable(lexer);
 			else if (strcmp(value, "yield") == 0) result = parse_yield(lexer);
+			else if (strcmp(value, "break") == 0) result = parse_break(lexer);
 			break;
 		}
 		default:

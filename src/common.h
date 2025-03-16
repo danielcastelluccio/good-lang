@@ -291,6 +291,16 @@ typedef struct {
 } Yield_Data;
 
 typedef struct {
+	Value *wanted_type;
+	Value *type;
+	bool has_type;
+} While_Data;
+
+typedef struct {
+	Node *while_;
+} Break_Data;
+
+typedef struct {
 	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
@@ -315,6 +325,8 @@ typedef struct {
 		Binary_Operator_Data binary_operator;
 		Block_Data block;
 		Yield_Data yield;
+		Break_Data break_;
+		While_Data while_;
 	};
 } Node_Data;
 
