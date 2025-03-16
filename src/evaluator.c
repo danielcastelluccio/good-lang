@@ -319,6 +319,7 @@ Value *evaluate(Context *context, Node *node) {
 
 						Scope *saved_scopes = context->scopes;
 						context->scopes = NULL;
+						process_node(context, file_node);
 						value = evaluate(context, file_node);
 						context->scopes = saved_scopes;
 

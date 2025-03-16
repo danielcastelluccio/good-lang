@@ -204,12 +204,21 @@ static void handle_type_error(Node *node, Value *wanted, Value *given) {
 
 static void process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
+
+	Node_Data *data = node_data_new(BLOCK_NODE);
+	data->block.type = NULL;
+	set_data(context, node, data);
+
 	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(block.statements); i++) {
 		Node *statement = block.statements[i];
 		process_node(context, statement);
 	}
 	(void) arrpop(context->scopes);
+
+	if (data->block.has_type) {
+		set_type(context, node, data->block.type);
+	}
 }
 
 typedef struct {
@@ -1079,6 +1088,51 @@ static void process_variable(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_yield(Context *context, Node *node) {
+	Yield_Node yield = node->yield;
+
+	if (yield.value != NULL) {
+		process_node(context, yield.value);
+	}
+
+	Node *block = NULL;
+	for (long int i = 0; i < arrlen(context->scopes); i++) {
+		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+		if (scope_node != NULL && scope_node->kind == BLOCK_NODE) {
+			block = scope_node;
+			break;
+		}
+	}
+
+	Node_Data *block_data = get_data(context, block);
+	Value *type = get_type(context, yield.value);
+	if (block_data->block.has_type) {
+		if (type != NULL) {
+			if (block_data->block.type == NULL) {
+				handle_semantic_error(node->location, "Expected no value");
+			} else if (!value_equal(type, block_data->block.type)) {
+				char previous_string[64] = {};
+				print_type(type, previous_string);
+				char current_string[64] = {};
+				print_type(block_data->block.type, current_string);
+				handle_semantic_error(node->location, "Mismatched types '%s' and '%s'", previous_string, current_string);
+			}
+		}
+
+		if (block_data->block.type != NULL) {
+			if (type == NULL) {
+				handle_semantic_error(node->location, "Expected value");
+			}
+		}
+	}
+	block_data->block.type = type;
+	block_data->block.has_type = true;
+
+	Node_Data *data = node_data_new(YIELD_NODE);
+	data->yield.block = block;
+	set_data(context, node, data);
+}
+
 static void process_assign(Context *context, Node *node) {
 	Assign_Node assign = node->assign;
 
@@ -1129,13 +1183,13 @@ static void process_if(Context *context, Node *node) {
 		Value *else_type = get_type(context, if_.else_body);
 		if (else_type != NULL) {
 			if (if_type == NULL) {
-				handle_semantic_error(node->location, "Expected value from if expression");
+				handle_semantic_error(node->location, "Expected value from if");
 			}
 		}
 
 		if (if_type != NULL) {
 			if (else_type == NULL) {
-				handle_semantic_error(node->location, "Expected value from else expression");
+				handle_semantic_error(node->location, "Expected value from else");
 			}
 
 			if (!value_equal(if_type, else_type)) {
@@ -1392,6 +1446,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case VARIABLE_NODE: {
 			process_variable(context, node);
+			break;
+		}
+		case YIELD_NODE: {
+			process_yield(context, node);
 			break;
 		}
 		case ASSIGN_NODE: {

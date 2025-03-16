@@ -91,7 +91,7 @@ def foo = fn(): uint -> {
 	while true {
 		while true {
 			if foo() {
-				break@1;
+				break a;
 			}
 			if bar() {
 				continue;
@@ -194,6 +194,18 @@ if x?? {
 
 
 
+def a = fn(): uint {
+	var c = a: {
+		var b = 4;
+		if foo() {
+			yield@a b;
+		};
+
+		// need a yield here
+		yield b;
+	};
+	return x;
+};
 
 
 

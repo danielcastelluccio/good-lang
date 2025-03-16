@@ -452,6 +452,14 @@ static Node *parse_variable(Lexer *lexer) {
 	return variable;
 }
 
+static Node *parse_yield(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *yield = ast_new(YIELD_NODE, first_token.location);
+	yield->yield.value = parse_expression_or_nothing(lexer);
+	consume_check(lexer, SEMICOLON);
+	return yield;
+}
+
 static Node *parse_if(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 	Node *if_ = ast_new(IF_NODE, first_token.location);
@@ -649,6 +657,7 @@ static Node *parse_statement(Lexer *lexer) {
 			if (strcmp(value, "def") == 0) result = parse_define(lexer);
 			else if (strcmp(value, "return") == 0) result = parse_return(lexer);
 			else if (strcmp(value, "var") == 0) result = parse_variable(lexer);
+			else if (strcmp(value, "yield") == 0) result = parse_yield(lexer);
 			break;
 		}
 		default:

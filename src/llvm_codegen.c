@@ -16,12 +16,18 @@ typedef struct {
 } Value_Type_Pair;
 
 typedef struct {
+	LLVMBasicBlockRef block;
+	LLVMValueRef value;
+} Block_Codegen_Data;
+
+typedef struct {
 	LLVMModuleRef llvm_module;
 	LLVMBuilderRef llvm_builder;
 	LLVMTargetMachineRef llvm_target;
 	Context context;
 	struct { Value *key; LLVMValueRef value; } *generated_cache; // stb_ds
 	struct { Node_Data *key; LLVMValueRef value; } *variables; // stb_ds
+	struct { Node_Data *key; Block_Codegen_Data value; } *blocks; // stb_ds
 	LLVMValueRef *function_arguments; // stb_ds
 	LLVMValueRef current_function;
 	LLVMValueRef main_function;
@@ -150,11 +156,29 @@ static void generate_define(Node *node, State *state) {
 static LLVMValueRef generate_block(Node *node, State *state) {
 	assert(node->kind == BLOCK_NODE);
 	Block_Node block = node->block;
+	Node_Data *data = get_data(&state->context, node);
+	Block_Data block_data = data->block;
 
+	LLVMBasicBlockRef llvm_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMValueRef value = NULL;
+	if (block_data.type != NULL) {
+		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(block_data.type, state), "");
+	}
+
+	Block_Codegen_Data block_codegen_data = {
+		.block = llvm_block,
+		.value = value
+	};
+	hmput(state->blocks, data, block_codegen_data);
 	for (long int i = 0; i < arrlen(block.statements); i++) {
 		generate_node(block.statements[i], state);
 	}
+	LLVMBuildBr(state->llvm_builder, llvm_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, llvm_block);
 
+	if (block_data.type != NULL) {
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(block_data.type, state), value, "");
+	}
 	return NULL;
 }
 
@@ -573,6 +597,18 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 	return NULL;
 }
 
+static LLVMValueRef generate_yield(Node *node, State *state) {
+	assert(node->kind == YIELD_NODE);
+	Yield_Node yield = node->yield;
+	Yield_Data yield_data = get_data(&state->context, node)->yield;
+	Node_Data *block_data = get_data(&state->context, yield_data.block);
+	Block_Codegen_Data block_codegen_data = hmget(state->blocks, block_data);
+	LLVMBuildStore(state->llvm_builder, generate_node(yield.value, state), block_codegen_data.value);
+	LLVMBuildBr(state->llvm_builder, block_codegen_data.block);
+
+	return NULL;
+}
+
 static LLVMValueRef generate_if(Node *node, State *state) {
 	assert(node->kind == IF_NODE);
 	If_Node if_ = node->if_;
@@ -676,6 +712,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_assign(node, state);
 		case VARIABLE_NODE:
 			return generate_variable(node, state);
+		case YIELD_NODE:
+			return generate_yield(node, state);
 		case IF_NODE:
 			return generate_if(node, state);
 		case WHILE_NODE:
@@ -717,7 +755,13 @@ static LLVMValueRef generate_function(Value *value, State *state) {
 			arrpush(state->function_arguments, allocated);
 		}
 
-		generate_node(function.body, state);
+		LLVMValueRef value = generate_node(function.body, state);
+
+		if (function.type->function_type.return_type != NULL) {
+			LLVMBuildRet(state->llvm_builder, value);
+		} else {
+			LLVMBuildRetVoid(state->llvm_builder);
+		}
 	}
 
 	state->function_arguments = saved_function_arguments;

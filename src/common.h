@@ -281,6 +281,15 @@ typedef struct {
 } Binary_Operator_Data;
 
 typedef struct {
+	Value *type;
+	bool has_type;
+} Block_Data;
+
+typedef struct {
+	Node *block;
+} Yield_Data;
+
+typedef struct {
 	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
@@ -303,6 +312,8 @@ typedef struct {
 		Array_Access_Data array_access;
 		Slice_Data slice;
 		Binary_Operator_Data binary_operator;
+		Block_Data block;
+		Yield_Data yield;
 	};
 } Node_Data;
 

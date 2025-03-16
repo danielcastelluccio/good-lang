@@ -140,6 +140,10 @@ typedef struct {
 } Variable_Node;
 
 typedef struct {
+	Node *value;
+} Yield_Node;
+
+typedef struct {
 	Node *condition;
 	Node *if_body;
 	Node *else_body;
@@ -216,6 +220,7 @@ typedef enum {
 	RETURN_NODE,
 	ASSIGN_NODE,
 	VARIABLE_NODE,
+	YIELD_NODE,
 	IF_NODE,
 	WHILE_NODE,
 	MODULE_NODE,
@@ -253,6 +258,7 @@ struct Node {
 		Return_Node return_;
 		Assign_Node assign;
 		Variable_Node variable;
+		Yield_Node yield;
 		If_Node if_;
 		While_Node while_;
 		Module_Node module;
