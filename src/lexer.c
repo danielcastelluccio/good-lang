@@ -132,7 +132,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		case '=':
 			if (lexer->source[lexer->position] == '=') {
-				result = create_token(EQUAL_EQUALS, lexer);
+				result = create_token(EQUALS_EQUALS, lexer);
 				increment_position(lexer);
 				break;
 			}
@@ -326,8 +326,12 @@ char *token_to_string(Token_Kind kind) {
 			return "@";
 		case LESS:
 			return "<";
+		case LESS_EQUALS:
+			return "<=";
 		case GREATER:
 			return ">";
+		case GREATER_EQUALS:
+			return ">=";
 		case HASHTAG:
 			return "#";
 		case PERIOD:
@@ -338,7 +342,7 @@ char *token_to_string(Token_Kind kind) {
 			return "...";
 		case MINUS_GREATER:
 			return "->";
-		case EQUAL_EQUALS:
+		case EQUALS_EQUALS:
 			return "==";
 		case COLON_COLON:
 			return "::";

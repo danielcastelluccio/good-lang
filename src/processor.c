@@ -1408,6 +1408,10 @@ static void process_binary_operator(Context *context, Node *node) {
 	Value *result_type = NULL;
 	switch (binary_operator.operator) {
 		case OPERATOR_EQUALS:
+		case OPERATOR_LESS:
+		case OPERATOR_LESS_EQUALS:
+		case OPERATOR_GREATER:
+		case OPERATOR_GREATER_EQUALS:
 			result_type = value_new(INTERNAL_VALUE);
 			result_type->internal.identifier = "bool";
 			break;

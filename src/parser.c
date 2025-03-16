@@ -188,8 +188,20 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 	Node *binary_operator = ast_new(BINARY_OPERATOR_NODE, first_token.location);
 	binary_operator->binary_operator.left = left;
 	switch (first_token.kind) {
-		case EQUAL_EQUALS:
+		case EQUALS_EQUALS:
 			binary_operator->binary_operator.operator = OPERATOR_EQUALS;
+			break;
+		case LESS:
+			binary_operator->binary_operator.operator = OPERATOR_LESS;
+			break;
+		case LESS_EQUALS:
+			binary_operator->binary_operator.operator = OPERATOR_LESS_EQUALS;
+			break;
+		case GREATER:
+			binary_operator->binary_operator.operator = OPERATOR_GREATER;
+			break;
+		case GREATER_EQUALS:
+			binary_operator->binary_operator.operator = OPERATOR_GREATER_EQUALS;
 			break;
 		case PLUS:
 			binary_operator->binary_operator.operator = OPERATOR_ADD;
@@ -780,7 +792,11 @@ static Node *parse_expression(Lexer *lexer) {
 			case OPEN_PARENTHESIS:
 				result = parse_call(lexer, result);
 				break;
-			case EQUAL_EQUALS:
+			case EQUALS_EQUALS:
+			case LESS:
+			case LESS_EQUALS:
+			case GREATER:
+			case GREATER_EQUALS:
 			case PLUS:
 			case MINUS:
 			case ASTERISK:

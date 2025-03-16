@@ -553,6 +553,30 @@ static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 	switch (binary_operator.operator) {
 		case OPERATOR_EQUALS:
 			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, left_value, right_value, "");
+		case OPERATOR_LESS:
+			if (is_type_signed(binary_operator_data.type)) {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntSLT, left_value, right_value, "");
+			} else {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntULT, left_value, right_value, "");
+			}
+		case OPERATOR_LESS_EQUALS:
+			if (is_type_signed(binary_operator_data.type)) {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntSLE, left_value, right_value, "");
+			} else {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntULE, left_value, right_value, "");
+			}
+		case OPERATOR_GREATER:
+			if (is_type_signed(binary_operator_data.type)) {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntSGT, left_value, right_value, "");
+			} else {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntUGT, left_value, right_value, "");
+			}
+		case OPERATOR_GREATER_EQUALS:
+			if (is_type_signed(binary_operator_data.type)) {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntSGE, left_value, right_value, "");
+			} else {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntUGE, left_value, right_value, "");
+			}
 		case OPERATOR_ADD:
 			return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
 		case OPERATOR_SUBTRACT:
