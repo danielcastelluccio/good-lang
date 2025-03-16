@@ -281,6 +281,7 @@ typedef struct {
 } Binary_Operator_Data;
 
 typedef struct {
+	Value *wanted_type;
 	Value *type;
 	bool has_type;
 } Block_Data;

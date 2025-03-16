@@ -173,7 +173,6 @@ static int print_type(Value *value, char *buffer) {
 			break;
 		}
 		case DEFINE_DATA_VALUE: {
-			// buffer += print_type(value->define_data.value, buffer);
 			buffer += sprintf(buffer, "%s", value->define_data.define_node->define.identifier);
 			if (arrlen(value->define_data.bindings) > 0) {
 				buffer += sprintf(buffer, "#(");
@@ -194,18 +193,33 @@ static int print_type(Value *value, char *buffer) {
 	return buffer - buffer_start;
 }
 
+
+static int print_type_outer(Value *value, char *buffer) {
+	char *buffer_start = buffer;
+	if (value == NULL) {
+		buffer += sprintf(buffer, "nothing");
+	} else {
+		buffer += sprintf(buffer, "'");
+		buffer += print_type(value, buffer);
+		buffer += sprintf(buffer, "'");
+	}
+
+	return buffer - buffer_start;
+}
+
 static void handle_type_error(Node *node, Value *wanted, Value *given) {
 	char wanted_string[64] = {};
-	print_type(wanted, wanted_string);
+	print_type_outer(wanted, wanted_string);
 	char given_string[64] = {};
-	print_type(given, given_string);
-	handle_semantic_error(node->location, "Expected '%s', but got '%s'", wanted_string, given_string);
+	print_type_outer(given, given_string);
+	handle_semantic_error(node->location, "Expected %s, but got %s", wanted_string, given_string);
 }
 
 static void process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
 
 	Node_Data *data = node_data_new(BLOCK_NODE);
+	data->block.wanted_type = context->temporary_context.wanted_type;
 	data->block.type = NULL;
 	set_data(context, node, data);
 
@@ -454,8 +468,8 @@ static void process_call(Context *context, Node *node) {
 	Value *function_type = get_type(context, call.function);
 	if (function_type->tag != FUNCTION_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type(function_type, given_string);
-		handle_semantic_error(node->location, "Expected function pointer, but got '%s'", given_string);
+		print_type_outer(function_type, given_string);
+		handle_semantic_error(node->location, "Expected function pointer, but got %s", given_string);
 	}
 
 	if (arrlen(call.arguments) != arrlen(function_type->function_type.arguments) && !function_type->function_type.variadic) {
@@ -831,8 +845,8 @@ static void process_dereference(Context *context, Node *node) {
 	Value *inner_type = get_type(context, dereference.node);
 	if (inner_type->tag != POINTER_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type(inner_type, given_string);
-		handle_semantic_error(node->location, "Expected pointer, but got '%s'", given_string);
+		print_type_outer(inner_type, given_string);
+		handle_semantic_error(node->location, "Expected pointer, but got %s", given_string);
 	}
 
 	Node_Data *data = node_data_new(DEREFERENCE_NODE);
@@ -869,8 +883,8 @@ static void process_deoption(Context *context, Node *node) {
 
 	if (option_pointer_type->tag != POINTER_TYPE_VALUE || option_pointer_type->pointer_type.inner->tag != OPTION_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type(option_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected option, but got '%s'", given_string);
+		print_type_outer(option_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected option, but got %s", given_string);
 	}
 
 	Node_Data *data = node_data_new(DEOPTION_NODE);
@@ -907,8 +921,8 @@ static void process_deoption_present(Context *context, Node *node) {
 
 	if (option_pointer_type->tag != POINTER_TYPE_VALUE || option_pointer_type->pointer_type.inner->tag != OPTION_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type(option_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected option, but got '%s'", given_string);
+		print_type_outer(option_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected option, but got %s", given_string);
 	}
 
 	Node_Data *data = node_data_new(DEOPTION_PRESENT_NODE);
@@ -934,8 +948,8 @@ static void process_structure_access(Context *context, Node *node) {
 
 	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || (strip_define_data(structure_pointer_type->pointer_type.inner)->tag != STRUCT_TYPE_VALUE && strip_define_data(structure_pointer_type->pointer_type.inner)->tag != UNION_TYPE_VALUE)) {
 		char given_string[64] = {};
-		print_type(structure_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected structure or union, but got '%s'", given_string);
+		print_type_outer(structure_pointer_type, given_string);
+		handle_semantic_error(node->location, "Expected structure or union, but got %s", given_string);
 	}
 
 	Value *structure_type = strip_define_data(structure_pointer_type->pointer_type.inner);
@@ -991,8 +1005,8 @@ static void process_array_access(Context *context, Node *node) {
 
 	if ((array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) && (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != SLICE_TYPE_VALUE)) {
 		char given_string[64] = {};
-		print_type(array_like_type_original, given_string);
-		handle_semantic_error(node->location, "Expected array or slice, but got '%s'", given_string);
+		print_type_outer(array_like_type_original, given_string);
+		handle_semantic_error(node->location, "Expected array or slice, but got %s", given_string);
 	}
 
 	Value *item_type = NULL;
@@ -1049,8 +1063,8 @@ static void process_slice(Context *context, Node *node) {
 
 	if ((array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) && (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != SLICE_TYPE_VALUE)) {
 		char given_string[64] = {};
-		print_type(array_like_type_original, given_string);
-		handle_semantic_error(node->location, "Expected array or slice, but got '%s'", given_string);
+		print_type_outer(array_like_type_original, given_string);
+		handle_semantic_error(node->location, "Expected array or slice, but got %s", given_string);
 	}
 
 	Value *item_type = NULL;
@@ -1086,10 +1100,13 @@ static void process_variable(Context *context, Node *node) {
 	}
 
 	Value *value_type = get_type(context, variable.value);
-	assert(value_type != NULL || type != NULL);
 	if (type == NULL) {
 		type = value_type;
-	} else if (value_type != NULL) {
+
+		if (value_type == NULL) {
+			handle_semantic_error(node->location, "Expected value");
+		}
+	} else {
 		if (!type_assignable(type, value_type)) {
 			handle_type_error(node, type, value_type);
 		}
@@ -1102,10 +1119,6 @@ static void process_variable(Context *context, Node *node) {
 
 static void process_yield(Context *context, Node *node) {
 	Yield_Node yield = node->yield;
-
-	if (yield.value != NULL) {
-		process_node(context, yield.value);
-	}
 
 	size_t levels = yield.levels;
 	Node *block = NULL;
@@ -1124,6 +1137,12 @@ static void process_yield(Context *context, Node *node) {
 	}
 
 	Node_Data *block_data = get_data(context, block);
+
+	if (yield.value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = block_data->block.wanted_type };
+		process_node_context(context, temporary_context, yield.value);
+	}
+
 	Value *type = get_type(context, yield.value);
 	if (block_data->block.has_type) {
 		if (type != NULL) {
@@ -1131,10 +1150,10 @@ static void process_yield(Context *context, Node *node) {
 				handle_semantic_error(node->location, "Expected no value");
 			} else if (!value_equal(type, block_data->block.type)) {
 				char previous_string[64] = {};
-				print_type(type, previous_string);
+				print_type_outer(type, previous_string);
 				char current_string[64] = {};
-				print_type(block_data->block.type, current_string);
-				handle_semantic_error(node->location, "Mismatched types '%s' and '%s'", previous_string, current_string);
+				print_type_outer(block_data->block.type, current_string);
+				handle_semantic_error(node->location, "Mismatched types %s and %s", previous_string, current_string);
 			}
 		}
 
@@ -1230,10 +1249,10 @@ static void process_if(Context *context, Node *node) {
 
 			if (!value_equal(if_type, else_type)) {
 				char if_string[64] = {};
-				print_type(if_type, if_string);
+				print_type_outer(if_type, if_string);
 				char else_string[64] = {};
-				print_type(else_type, else_string);
-				handle_semantic_error(node->location, "Mismatched types '%s' and '%s'", if_string, else_string);
+				print_type_outer(else_type, else_string);
+				handle_semantic_error(node->location, "Mismatched types %s and %s", if_string, else_string);
 			}
 
 			data->if_.type = if_type;
@@ -1270,10 +1289,10 @@ static void process_binary_operator(Context *context, Node *node) {
 	assert(right_type != NULL);
 	if (!type_assignable(left_type, right_type)) {
 		char left_string[64] = {};
-		print_type(left_type, left_string);
+		print_type_outer(left_type, left_string);
 		char right_string[64] = {};
-		print_type(right_type, right_string);
-		handle_semantic_error(node->location, "Mismatched types '%s' and '%s'", left_string, right_string);
+		print_type_outer(right_type, right_string);
+		handle_semantic_error(node->location, "Mismatched types %s and %s", left_string, right_string);
 	}
 
 	Value *stripped_type = strip_define_data(left_type);
@@ -1281,8 +1300,8 @@ static void process_binary_operator(Context *context, Node *node) {
 	else if (stripped_type->tag == ENUM_TYPE_VALUE && binary_operator.operator == OPERATOR_EQUALS) {}
 	else {
 		char left_string[64] = {};
-		print_type(left_type, left_string);
-		handle_semantic_error(node->location, "Cannot operate on '%s'", left_string);
+		print_type_outer(left_type, left_string);
+		handle_semantic_error(node->location, "Cannot operate on %s", left_string);
 	}
 
 	Value *result_type = NULL;
@@ -1347,8 +1366,7 @@ static void process_function_type(Context *context, Node *node) {
 		arrpush(argument_type_values, argument);
 	}
 
-	Value *return_type_value = value_new(INTERNAL_VALUE);
-	return_type_value->internal.identifier = "void";
+	Value *return_type_value = NULL;
 	if (function_type.return_ != NULL) {
 		process_node(context, function_type.return_);
 		return_type_value = evaluate(context, function_type.return_);

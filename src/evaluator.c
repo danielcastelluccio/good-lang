@@ -87,6 +87,7 @@ bool value_equal(Value *value1, Value *value2) {
 }
 
 bool type_assignable(Value *type1, Value *type2) {
+	if (type2 == NULL) return false;
 	if (type1->tag != type2->tag) return false;
 
 	switch (type1->tag) {

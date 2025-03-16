@@ -47,7 +47,10 @@ static LLVMTypeRef create_llvm_function_literal_type(Value *value, State *state)
 		arrpush(arguments, create_llvm_type(function_type.arguments[i].type, state));
 	}
 
-	LLVMTypeRef return_type = create_llvm_type(function_type.return_type, state);
+	LLVMTypeRef return_type = LLVMVoidType();
+	if (function_type.return_type != NULL) {
+		return_type = create_llvm_type(function_type.return_type, state);
+	}
 
 	return LLVMFunctionType(return_type, arguments, arrlen(arguments), function_type.variadic);
 }
@@ -89,7 +92,7 @@ static LLVMTypeRef create_llvm_type(Value *value, State *state) {
 			Internal_Value internal = value->internal;
 
 			if (strcmp(internal.identifier, "byte") == 0) return LLVMInt8Type();
-			else if (strcmp(internal.identifier, "void") == 0) return LLVMVoidType();
+			else if (strcmp(internal.identifier, "void") == 0) return LLVMStructType(NULL, 0, false);
 			else if (strcmp(internal.identifier, "uint") == 0) return LLVMInt64Type();
 			else if (strcmp(internal.identifier, "bool") == 0) return LLVMInt1Type();
 			else assert(false);
