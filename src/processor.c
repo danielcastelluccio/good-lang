@@ -217,6 +217,18 @@ static void process_block(Context *context, Node *node) {
 	(void) arrpop(context->scopes);
 
 	if (data->block.has_type) {
+		bool left = false;
+		for (long int i = 0; i < arrlen(context->left_blocks); i++) {
+			if (context->left_blocks[i] == node) {
+				left = true;
+				break;
+			}
+		}
+
+		if (!left) {
+			handle_semantic_error(node->location, "Expected value from block");
+		}
+
 		set_type(context, node, data->block.type);
 	}
 }
@@ -1099,7 +1111,9 @@ static void process_yield(Context *context, Node *node) {
 	Node *block = NULL;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+
 		if (scope_node != NULL && scope_node->kind == BLOCK_NODE) {
+			arrpush(context->left_blocks, scope_node);
 			if (levels == 0) {
 				block = scope_node;
 				break;
@@ -1180,10 +1194,27 @@ static void process_if(Context *context, Node *node) {
 		data->if_.static_condition = evaluated->boolean.value;
 	}
 
+	Node **saved_left_blocks = context->left_blocks;
+	context->left_blocks = NULL;
 	process_node(context, if_.if_body);
+
 	Value *if_type = get_type(context, if_.if_body);
 	if (if_.else_body != NULL) {
+		Node **saved_if_left_blocks = context->left_blocks;
+		context->left_blocks = NULL;
 		process_node(context, if_.else_body);
+
+		Node **saved_else_left_blocks = context->left_blocks;
+
+		context->left_blocks = saved_left_blocks;
+
+		for (long int i = 0; i < arrlen(saved_if_left_blocks); i++) {
+			for (long int j = 0; j < arrlen(saved_else_left_blocks); j++) {
+				if (saved_if_left_blocks[i] == saved_else_left_blocks[j]) {
+					arrpush(context->left_blocks, saved_if_left_blocks[i]);
+				}
+			}
+		}
 
 		Value *else_type = get_type(context, if_.else_body);
 		if (else_type != NULL) {
@@ -1209,6 +1240,7 @@ static void process_if(Context *context, Node *node) {
 			set_type(context, node, if_type);
 		}
 	} else {
+		context->left_blocks = saved_left_blocks;
 		if (if_type != NULL) {
 			handle_semantic_error(node->location, "Expected else expression");
 		}

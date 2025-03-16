@@ -348,6 +348,7 @@ typedef struct {
 struct Context {
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
+	Node **left_blocks; // stb_ds
 	Scope *scopes; // stb_ds
 	bool compile_only;
 	size_t generic_id;
