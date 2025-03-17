@@ -523,6 +523,7 @@ static void process_identifier(Context *context, Node *node) {
 	if (identifier.module == NULL &&
 			(strcmp(identifier.value, "byte") == 0
 			|| strcmp(identifier.value, "uint") == 0
+			|| strcmp(identifier.value, "flt") == 0
 			|| strcmp(identifier.value, "void") == 0
 			|| strcmp(identifier.value, "type") == 0)) {
 		value = value_new(INTERNAL_VALUE);
@@ -750,15 +751,22 @@ static void process_string(Context *context, Node *node) {
 }
 
 static void process_number(Context *context, Node *node) {
+	Number_Node number = node->number;
+
 	Value *wanted_type = context->temporary_context.wanted_type;
 	bool invalid_wanted_type = false;
 	if (wanted_type == NULL) invalid_wanted_type = true;
 	else if (wanted_type->tag == INTERNAL_VALUE && strcmp(wanted_type->internal.identifier, "uint") == 0) {}
+	else if (wanted_type->tag == INTERNAL_VALUE && strcmp(wanted_type->internal.identifier, "flt") == 0) {}
 	else invalid_wanted_type = true;
 
 	if (invalid_wanted_type) {
 		wanted_type = value_new(INTERNAL_VALUE);
-		wanted_type->internal.identifier = "uint";
+		if (number.tag == DECIMAL_NUMBER) {
+			wanted_type->internal.identifier = "flt";
+		} else {
+			wanted_type->internal.identifier = "uint";
+		}
 	}
 
 	Node_Data *data = node_data_new(NUMBER_NODE);
@@ -1383,6 +1391,7 @@ static bool can_compare(Value *type) {
 	if (type->tag == ENUM_TYPE_VALUE) return true;
 	if (type->tag == SLICE_TYPE_VALUE && can_compare(type->slice_type.inner)) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "uint") == 0) return true;
+	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "byte") == 0) return true;
 
 	return false;
@@ -1407,6 +1416,7 @@ static void process_binary_operator(Context *context, Node *node) {
 
 	Value *stripped_type = strip_define_data(left_type);
 	if (stripped_type->tag == INTERNAL_VALUE && strcmp(stripped_type->internal.identifier, "uint") == 0) {}
+	else if (stripped_type->tag == INTERNAL_VALUE && strcmp(stripped_type->internal.identifier, "flt") == 0) {}
 	else if (can_compare(stripped_type) && binary_operator.operator == OPERATOR_EQUALS) {}
 	else {
 		char left_string[64] = {};

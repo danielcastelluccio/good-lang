@@ -48,11 +48,16 @@ static Node *parse_string(Lexer *lexer) {
 }
 
 static Node *parse_number(Lexer *lexer) {
-	Token_Data token = consume_check(lexer, INTEGER);
+	Token_Data token = lexer_next(lexer, true);
 
 	Node *number = ast_new(NUMBER_NODE, token.location);
-	number->number.tag = INTEGER_NUMBER;
-	number->number.integer = token.integer;
+	if (token.kind == INTEGER) {
+		number->number.tag = INTEGER_NUMBER;
+		number->number.integer = token.integer;
+	} else {
+		number->number.tag = DECIMAL_NUMBER;
+		number->number.decimal = token.decimal;
+	}
 
 	return number;
 }
@@ -733,7 +738,8 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_string(lexer);
 			break;
 		}
-		case INTEGER: {
+		case INTEGER:
+		case DECIMAL: {
 			result = parse_number(lexer);
 			break;
 		}

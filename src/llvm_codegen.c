@@ -100,6 +100,7 @@ static LLVMTypeRef create_llvm_type(Value *value, State *state) {
 			if (strcmp(internal.identifier, "byte") == 0) return LLVMInt8Type();
 			else if (strcmp(internal.identifier, "void") == 0) return LLVMStructType(NULL, 0, false);
 			else if (strcmp(internal.identifier, "uint") == 0) return LLVMInt64Type();
+			else if (strcmp(internal.identifier, "flt") == 0) return LLVMDoubleType();
 			else if (strcmp(internal.identifier, "bool") == 0) return LLVMInt1Type();
 			else assert(false);
 			break;
@@ -276,7 +277,11 @@ static LLVMValueRef generate_number(Node *node, State *state) {
 	assert(node->kind == NUMBER_NODE);
 	Number_Node number = node->number;
 	Value *type = get_data(&state->context, node)->number.type;
-	return LLVMConstInt(create_llvm_type(type, state), number.integer, false);
+	if (number.tag == DECIMAL_NUMBER) {
+		return LLVMConstReal(create_llvm_type(type, state), number.decimal);
+	} else {
+		return LLVMConstInt(create_llvm_type(type, state), number.integer, false);
+	}
 }
 
 static LLVMValueRef generate_null(Node *node, State *state) {
@@ -542,6 +547,11 @@ static bool is_type_signed(Value *type) {
 	return false;
 }
 
+static bool is_type_float(Value *type) {
+	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) return true;
+	return false;
+}
+
 static LLVMValueRef values_equal(Value *type, LLVMValueRef value1, LLVMValueRef value2, State *state) {
 	switch (type->tag) {
 		case SLICE_TYPE_VALUE: {
@@ -640,16 +650,32 @@ static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntUGE, left_value, right_value, "");
 			}
 		case OPERATOR_ADD:
-			return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
-		case OPERATOR_SUBTRACT:
-			return LLVMBuildSub(state->llvm_builder, left_value, right_value, "");
-		case OPERATOR_MULTIPLY:
-			return LLVMBuildMul(state->llvm_builder, left_value, right_value, "");
-		case OPERATOR_DIVIDE:
-			if (is_type_signed(binary_operator_data.type)) {
-				return LLVMBuildSDiv(state->llvm_builder, left_value, right_value, "");
+			if (is_type_float(binary_operator_data.type)) {
+				return LLVMBuildFAdd(state->llvm_builder, left_value, right_value, "");
 			} else {
-				return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
+				return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
+			}
+		case OPERATOR_SUBTRACT:
+			if (is_type_float(binary_operator_data.type)) {
+				return LLVMBuildFSub(state->llvm_builder, left_value, right_value, "");
+			} else {
+				return LLVMBuildSub(state->llvm_builder, left_value, right_value, "");
+			}
+		case OPERATOR_MULTIPLY:
+			if (is_type_float(binary_operator_data.type)) {
+				return LLVMBuildFMul(state->llvm_builder, left_value, right_value, "");
+			} else {
+				return LLVMBuildMul(state->llvm_builder, left_value, right_value, "");
+			}
+		case OPERATOR_DIVIDE:
+			if (is_type_float(binary_operator_data.type)) {
+				return LLVMBuildFDiv(state->llvm_builder, left_value, right_value, "");
+			} else {
+				if (is_type_signed(binary_operator_data.type)) {
+					return LLVMBuildSDiv(state->llvm_builder, left_value, right_value, "");
+				} else {
+					return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
+				}
 			}
 		default:
 			assert(false);

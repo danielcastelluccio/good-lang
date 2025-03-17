@@ -54,6 +54,11 @@ static size_t extract_integer(char *source, size_t start, size_t end) {
 	return atoll(extracted);
 }
 
+static double extract_decimal(char *source, size_t start, size_t end) {
+	char *extracted = extract_string(source, start, end);
+	return strtod(extracted, NULL);
+}
+
 static void increment_position(Lexer *lexer) {
 	lexer->position++;
 	lexer->column++;
@@ -264,14 +269,30 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 					increment_position(lexer);
 				}
 
-				size_t number_end = lexer->position;
-				size_t extracted_integer = extract_integer(lexer->source, number_start, number_end);
+				if (lexer->source[lexer->position] == '.') {
+					increment_position(lexer);
+					while (is_numeric(lexer->source[lexer->position])) {
+						increment_position(lexer);
+					}
 
-				result = (Token_Data) {
-					.kind = INTEGER,
-					.integer = extracted_integer,
-					.location = { .path = lexer->path, .row = number_start_row, .column = number_start_column }
-				};
+					size_t number_end = lexer->position;
+					double extracted_decimal = extract_decimal(lexer->source, number_start, number_end);
+
+					result = (Token_Data) {
+						.kind = DECIMAL,
+						.decimal = extracted_decimal,
+						.location = { .path = lexer->path, .row = number_start_row, .column = number_start_column }
+					};
+				} else {
+					size_t number_end = lexer->position;
+					size_t extracted_integer = extract_integer(lexer->source, number_start, number_end);
+
+					result = (Token_Data) {
+						.kind = INTEGER,
+						.integer = extracted_integer,
+						.location = { .path = lexer->path, .row = number_start_row, .column = number_start_column }
+					};
+				}
 				break;
 			} else {
 				result = create_token(INVALID, lexer);
@@ -298,6 +319,8 @@ char *token_to_string(Token_Kind kind) {
 			return "String";
 		case INTEGER:
 			return "Integer";
+		case DECIMAL:
+			return "Decimal";
 		case COLON:
 			return ":";
 		case SEMICOLON:

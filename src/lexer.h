@@ -5,6 +5,7 @@ typedef enum {
 	KEYWORD,
 	STRING,
 	INTEGER,
+	DECIMAL,
 	COLON,
 	SEMICOLON,
 	COMMA,
@@ -45,6 +46,7 @@ typedef struct {
 	union {
 		char *string;
 		long integer;
+		double decimal;
 	};
 } Token_Data;
 

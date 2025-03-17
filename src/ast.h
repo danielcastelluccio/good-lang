@@ -62,10 +62,12 @@ typedef struct {
 
 typedef struct {
 	enum {
-		INTEGER_NUMBER
+		INTEGER_NUMBER,
+		DECIMAL_NUMBER
 	} tag;
 	union {
 		long integer;
+		double decimal;
 	};
 } Number_Node;
 
