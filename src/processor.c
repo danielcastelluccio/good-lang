@@ -1379,6 +1379,15 @@ static void process_while(Context *context, Node *node) {
 	}
 }
 
+static bool can_compare(Value *type) {
+	if (type->tag == ENUM_TYPE_VALUE) return true;
+	if (type->tag == SLICE_TYPE_VALUE && can_compare(type->slice_type.inner)) return true;
+	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "uint") == 0) return true;
+	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "byte") == 0) return true;
+
+	return false;
+}
+
 static void process_binary_operator(Context *context, Node *node) {
 	Binary_Operator_Node binary_operator = node->binary_operator;
 
@@ -1398,7 +1407,7 @@ static void process_binary_operator(Context *context, Node *node) {
 
 	Value *stripped_type = strip_define_data(left_type);
 	if (stripped_type->tag == INTERNAL_VALUE && strcmp(stripped_type->internal.identifier, "uint") == 0) {}
-	else if (stripped_type->tag == ENUM_TYPE_VALUE && binary_operator.operator == OPERATOR_EQUALS) {}
+	else if (can_compare(stripped_type) && binary_operator.operator == OPERATOR_EQUALS) {}
 	else {
 		char left_string[64] = {};
 		print_type_outer(left_type, left_string);

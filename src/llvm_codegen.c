@@ -542,6 +542,68 @@ static bool is_type_signed(Value *type) {
 	return false;
 }
 
+static LLVMValueRef values_equal(Value *type, LLVMValueRef value1, LLVMValueRef value2, State *state) {
+	switch (type->tag) {
+		case SLICE_TYPE_VALUE: {
+			LLVMTypeRef llvm_type = create_llvm_type(type, state);
+
+			LLVMValueRef value1_ptr = LLVMBuildAlloca(state->llvm_builder, llvm_type, "");
+			LLVMValueRef value2_ptr = LLVMBuildAlloca(state->llvm_builder, llvm_type, "");
+			LLVMBuildStore(state->llvm_builder, value1, value1_ptr);
+			LLVMBuildStore(state->llvm_builder, value2, value2_ptr);
+
+			LLVMValueRef value1_length = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), LLVMBuildStructGEP2(state->llvm_builder, llvm_type, value1_ptr, 0, ""), "");
+			LLVMValueRef value2_length = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), LLVMBuildStructGEP2(state->llvm_builder, llvm_type, value2_ptr, 0, ""), "");
+
+			LLVMTypeRef pointer_type = LLVMPointerType(LLVMArrayType2(create_llvm_type(type->slice_type.inner, state), 0), 0);
+			LLVMValueRef value1_pointer = LLVMBuildLoad2(state->llvm_builder, pointer_type, LLVMBuildStructGEP2(state->llvm_builder, llvm_type, value1_ptr, 1, ""), "");
+			LLVMValueRef value2_pointer = LLVMBuildLoad2(state->llvm_builder, pointer_type, LLVMBuildStructGEP2(state->llvm_builder, llvm_type, value2_ptr, 1, ""), "");
+
+			LLVMValueRef result_ptr = LLVMBuildAlloca(state->llvm_builder, LLVMInt1Type(), "");
+			LLVMBuildStore(state->llvm_builder, LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1_length, value2_length, ""), result_ptr);
+
+			LLVMBasicBlockRef check = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef update = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef done = LLVMAppendBasicBlock(state->current_function, "");
+
+			LLVMValueRef counter_variable = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), counter_variable);
+			LLVMBuildBr(state->llvm_builder, check);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, check);
+			LLVMValueRef counter_value = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), counter_variable, "");
+			LLVMBuildCondBr(state->llvm_builder, LLVMBuildICmp(state->llvm_builder, LLVMIntULT, counter_value, value1_length, ""), update, done);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, update);
+
+			LLVMValueRef indices[2] = {
+				LLVMConstInt(LLVMInt64Type(), 0, false),
+				LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), counter_variable, "")
+			};
+			LLVMValueRef value1_element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(create_llvm_type(type->slice_type.inner, state), 0), value1_pointer, indices, 2, "");
+			LLVMValueRef value2_element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(create_llvm_type(type->slice_type.inner, state), 0), value2_pointer, indices, 2, "");
+			LLVMValueRef elements_equal = values_equal(type->slice_type.inner, value1_element, value2_element, state);
+			LLVMValueRef new_result = LLVMBuildAnd(state->llvm_builder, elements_equal, LLVMBuildLoad2(state->llvm_builder, LLVMInt1Type(), result_ptr, ""), "");
+			LLVMBuildStore(state->llvm_builder, new_result, result_ptr);
+
+			LLVMBuildStore(state->llvm_builder, LLVMBuildAdd(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), counter_variable, ""), LLVMConstInt(LLVMInt64Type(), 1, false), ""), counter_variable);
+
+			LLVMBuildBr(state->llvm_builder, check);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, done);
+
+			return LLVMBuildLoad2(state->llvm_builder, LLVMInt1Type(), result_ptr, "");
+		}
+		case INTERNAL_VALUE: {
+			char *internal = type->internal.identifier;
+			if (strcmp(internal, "uint") == 0 || strcmp(internal, "byte") == 0) {
+				return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
+			}
+			assert(false);
+			return NULL;
+		}
+		default:
+			assert(false);
+	}
+}
+
 static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 	assert(node->kind == BINARY_OPERATOR_NODE);
 	Binary_Operator_Node binary_operator = node->binary_operator;
@@ -552,7 +614,7 @@ static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 
 	switch (binary_operator.operator) {
 		case OPERATOR_EQUALS:
-			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, left_value, right_value, "");
+			return values_equal(binary_operator_data.type, left_value, right_value, state);
 		case OPERATOR_LESS:
 			if (is_type_signed(binary_operator_data.type)) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntSLT, left_value, right_value, "");
