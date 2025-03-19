@@ -1341,6 +1341,94 @@ static void process_if(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_switch(Context *context, Node *node) {
+	Switch_Node switch_ = node->switch_;
+
+	process_node(context, switch_.value);
+
+	Node_Data *data = node_data_new(SWITCH_NODE);
+
+	Node **saved_left_blocks = context->left_blocks;
+
+	Value *type = strip_define_data(get_type(context, switch_.value));
+	if (type->tag != ENUM_TYPE_VALUE) {
+		char string[64] = {};
+		print_type_outer(type, string);
+		handle_semantic_error(node->location, "Expected enum, but got %s", string);
+	}
+
+	Value *switch_type = NULL;
+	bool set_switch_type = false;
+	long int case_count = 0;
+	bool else_case = false;
+	for (long int i = 0; i < arrlen(switch_.cases); i++) {
+		Switch_Case switch_case = switch_.cases[i];
+
+		if (switch_case.check != NULL) {
+			Temporary_Context temporary_context = { .wanted_type = get_type(context, switch_.value) };
+			process_node_context(context, temporary_context, switch_case.check);
+			case_count++;
+		} else {
+			else_case = true;
+		}
+
+		Node **saved_previous_left_blocks = context->left_blocks;
+		context->left_blocks = NULL;
+		process_node(context, switch_case.body);
+
+		Node **saved_case_left_blocks = context->left_blocks;
+
+		context->left_blocks = saved_left_blocks;
+
+		for (long int i = 0; i < arrlen(saved_previous_left_blocks); i++) {
+			for (long int j = 0; j < arrlen(saved_case_left_blocks); j++) {
+				if (saved_previous_left_blocks[i] == saved_case_left_blocks[j]) {
+					arrpush(context->left_blocks, saved_previous_left_blocks[i]);
+				}
+			}
+		}
+
+		Value *case_type = get_type(context, switch_case.body);
+		if (case_type != NULL) {
+			if (switch_type == NULL) {
+				if (set_switch_type) {
+					handle_semantic_error(node->location, "Expected value from case");
+				} else {
+					switch_type = case_type;
+				}
+			}
+
+			set_switch_type = true;
+		}
+
+		if (switch_type != NULL) {
+			if (case_type == NULL) {
+				handle_semantic_error(node->location, "Expected value from case");
+			}
+
+			if (!value_equal(switch_type, case_type)) {
+				char switch_string[64] = {};
+				print_type_outer(switch_type, switch_string);
+				char case_string[64] = {};
+				print_type_outer(case_type, case_string);
+				handle_semantic_error(node->location, "Mismatched types %s and %s", switch_string, case_string);
+			}
+
+			data->switch_.type = switch_type;
+			set_type(context, node, switch_type);
+		}
+	}
+
+	if (case_count < arrlen(type->enum_type.items) && !else_case) {
+		context->left_blocks = saved_left_blocks;
+		if (switch_type != NULL) {
+			handle_semantic_error(node->location, "Expected generic case");
+		}
+	}
+
+	set_data(context, node, data);
+}
+
 static void process_while(Context *context, Node *node) {
 	While_Node while_ = node->while_;
 
@@ -1655,6 +1743,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		// }
 		case IF_NODE: {
 			process_if(context, node);
+			break;
+		}
+		case SWITCH_NODE: {
+			process_switch(context, node);
 			break;
 		}
 		case WHILE_NODE: {

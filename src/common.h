@@ -219,6 +219,10 @@ typedef struct {
 } If_Data;
 
 typedef struct {
+	Value *type;
+} Switch_Data;
+
+typedef struct {
 	Generic_Binding *generics;
 	Generic_Binding value;
 } Generic_Value;
@@ -312,6 +316,7 @@ typedef struct {
 		Null_Data null_;
 		Call_Data call;
 		If_Data if_;
+		Switch_Data switch_;
 		Define_Data define;
 		Function_Data function;
 		Function_Type_Data function_type;

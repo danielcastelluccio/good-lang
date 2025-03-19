@@ -81,6 +81,8 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "run") == 0) return true;
 	else if (strcmp(identifier, "yield") == 0) return true;
 	else if (strcmp(identifier, "break") == 0) return true;
+	else if (strcmp(identifier, "switch") == 0) return true;
+	else if (strcmp(identifier, "case") == 0) return true;
 	else return false;
 }
 
@@ -168,6 +170,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		case '@':
 			result = create_token(AT, lexer);
+			break;
+		case '_':
+			result = create_token(UNDERSCORE, lexer);
 			break;
 		case '(':
 			result = create_token(OPEN_PARENTHESIS, lexer);
@@ -347,6 +352,8 @@ char *token_to_string(Token_Kind kind) {
 			return "&";
 		case AT:
 			return "@";
+		case UNDERSCORE:
+			return "_";
 		case LESS:
 			return "<";
 		case LESS_EQUALS:

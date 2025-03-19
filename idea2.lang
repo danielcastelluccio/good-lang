@@ -1,21 +1,31 @@
-def Tagged_Union<Tag_Type: type, Union: type> = struct {
+def Tagged_Union$(Tag_Type: type, Union: type) = struct {
 	tag: Tag_Type,
 	data: Union
 };
 
-def Node = Tagged_Union(<uint, union {
+def Node = Tagged_Union$(uint, union {
 	a: uint,
 	b: uint
-}>);
+});
 
-def slice<T: type> = struct {
+def slice$(T: type) = struct {
 	len: uint,
-	ptr: *[]T,
+	ptr: ^[]T,
 };
 
-def slice_create<T: type, U: type> = fn(array: [U]T) -> {
-	
+def a = fn(): struct { a: uint, b: uint } {
+}
+
+def slice_create$(T: type, U: type) = fn(array: ^[U]T): slice$(T) {
+	return .{ T, array };
 };
+
+def Node = union(uint, union {
+	a: uint,
+	b: uint
+});
+
+slice_create("test");
 
 def switch_test = fn(check: Ast_Node, branches: slice(<Ast_Node>)) -> {
 	Node *node = new(.{ .switch_ = .{ .check = check, .branches = branches } });

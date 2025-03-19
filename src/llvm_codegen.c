@@ -799,6 +799,57 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_switch(Node *node, State *state) {
+	assert(node->kind == SWITCH_NODE);
+	Switch_Node switch_ = node->switch_;
+	Switch_Data switch_data = get_data(&state->context, node)->switch_;
+
+	LLVMValueRef value = NULL;
+	if (switch_data.type != NULL) {
+		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(switch_data.type, state), "");
+	}
+
+	LLVMValueRef switched_value = generate_node(switch_.value, state);
+
+	bool added_else_block = false;
+	LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMValueRef switch_llvm_value = LLVMBuildSwitch(state->llvm_builder, switched_value, else_block, arrlen(switch_.cases));
+	for (long int i = 0; i < arrlen(switch_.cases); i++) {
+		Switch_Case switch_case = switch_.cases[i];
+
+		LLVMBasicBlockRef case_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMPositionBuilderAtEnd(state->llvm_builder, case_block);
+		LLVMValueRef case_value = generate_node(switch_case.body, state);
+		if (switch_data.type != NULL) {
+			LLVMBuildStore(state->llvm_builder, case_value, value);
+		}
+
+		if (switch_case.check != NULL) {
+			LLVMAddCase(switch_llvm_value, generate_node(switch_case.check, state), case_block);
+			LLVMBuildBr(state->llvm_builder, done_block);
+		} else {
+			LLVMBuildBr(state->llvm_builder, done_block);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
+			LLVMBuildBr(state->llvm_builder, case_block);
+			added_else_block = true;
+		}
+	}
+
+	if (!added_else_block) {
+		LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
+		LLVMBuildBr(state->llvm_builder, done_block);
+	}
+
+	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
+
+	if (switch_data.type != NULL) {
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(switch_data.type, state), value, "");
+	} else {
+		return NULL;
+	}
+}
+
 static LLVMValueRef generate_while(Node *node, State *state) {
 	assert(node->kind == WHILE_NODE);
 	While_Node while_ = node->while_;
@@ -892,6 +943,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_break(node, state);
 		case IF_NODE:
 			return generate_if(node, state);
+		case SWITCH_NODE:
+			return generate_switch(node, state);
 		case WHILE_NODE:
 			return generate_while(node, state);
 		default:
@@ -1055,7 +1108,7 @@ void build_llvm(Context context, Node *root, void *data) {
 	LLVMPrintModuleToFile(llvm_module, "main.ll", NULL);
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.o", LLVMObjectFile, NULL);
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.s", LLVMAssemblyFile, NULL);
-	
+
 	char *args[] = {
 		"gcc",
 		"-no-pie",

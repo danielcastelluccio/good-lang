@@ -165,6 +165,16 @@ typedef struct {
 } While_Node;
 
 typedef struct {
+	Node *check;
+	Node *body;
+} Switch_Case;
+
+typedef struct {
+	Node *value;
+	Switch_Case *cases; // stb_ds
+} Switch_Node;
+
+typedef struct {
 	Node *body;
 } Module_Node;
 
@@ -237,6 +247,7 @@ typedef enum {
 	BREAK_NODE,
 	IF_NODE,
 	WHILE_NODE,
+	SWITCH_NODE,
 	MODULE_NODE,
 	BINARY_OPERATOR_NODE,
 	DEFINE_NODE,
@@ -276,6 +287,7 @@ struct Node {
 		Break_Node break_;
 		If_Node if_;
 		While_Node while_;
+		Switch_Node switch_;
 		Module_Node module;
 		Binary_Operator_Node binary_operator;
 		Define_Node define;

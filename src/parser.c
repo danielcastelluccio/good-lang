@@ -534,6 +534,34 @@ static Node *parse_while(Lexer *lexer) {
 	return while_;
 }
 
+static Node *parse_switch(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
+
+	switch_->switch_.value = parse_expression(lexer);
+
+	Token_Data next = lexer_next(lexer, false);
+	while (next.kind == KEYWORD && strcmp(next.string, "case") == 0) {
+		consume_check(lexer, KEYWORD);
+		Node *check = NULL;
+		if (lexer_next(lexer, false).kind != UNDERSCORE) {
+			check = parse_expression(lexer);
+		} else {
+			consume_check(lexer, UNDERSCORE);
+		}
+
+		Switch_Case switch_case = {
+			.check = check,
+			.body = parse_expression(lexer)
+		};
+		arrpush(switch_->switch_.cases, switch_case);
+
+		next = lexer_next(lexer, false);
+	}
+
+	return switch_;
+}
+
 static Node *parse_block(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, OPEN_CURLY_BRACE);
 
@@ -759,6 +787,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (strcmp(value, "enum") == 0) result = parse_enum_type(lexer);
 			else if (strcmp(value, "if") == 0) result = parse_if(lexer);
 			else if (strcmp(value, "while") == 0) result = parse_while(lexer);
+			else if (strcmp(value, "switch") == 0) result = parse_switch(lexer);
 			else if (strcmp(value, "mod") == 0) result = parse_module(lexer);
 			else if (strcmp(value, "run") == 0) result = parse_run(lexer);
 			else {

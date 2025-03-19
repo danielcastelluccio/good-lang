@@ -27,6 +27,7 @@ typedef enum {
 	PLUS,
 	SLASH,
 	AT,
+	UNDERSCORE,
 	HASHTAG,
 	EQUALS_EQUALS,
 	COLON_COLON,
