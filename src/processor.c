@@ -1105,19 +1105,15 @@ static void process_variable(Context *context, Node *node) {
 
 	if (variable.value != NULL) {
 		process_node_context(context, temporary_context, variable.value);
-	}
 
-	Value *value_type = get_type(context, variable.value);
-	if (type == NULL) {
-		type = value_type;
-
-		if (value_type == NULL) {
-			handle_semantic_error(node->location, "Expected value");
-		}
-	} else {
-		if (!type_assignable(type, value_type)) {
+		Value *value_type = get_type(context, variable.value);
+		if (type == NULL) {
+			type = value_type;
+		} else if (!type_assignable(type, value_type)) {
 			handle_type_error(node, type, value_type);
 		}
+	} else if (type == NULL) {
+		handle_semantic_error(node->location, "Expected value");
 	}
 
 	Node_Data *data = node_data_new(VARIABLE_NODE);

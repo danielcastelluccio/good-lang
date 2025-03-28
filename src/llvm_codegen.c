@@ -880,8 +880,10 @@ static LLVMValueRef generate_while(Node *node, State *state) {
 	generate_node(while_.body, state);
 	LLVMBuildBr(state->llvm_builder, check_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
-	LLVMValueRef else_value = generate_node(while_.else_body, state);
-	LLVMBuildStore(state->llvm_builder, else_value, value);
+	if (while_.else_body != NULL) {
+		LLVMValueRef else_value = generate_node(while_.else_body, state);
+		LLVMBuildStore(state->llvm_builder, else_value, value);
+	}
 	LLVMBuildBr(state->llvm_builder, done_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 
