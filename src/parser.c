@@ -133,22 +133,6 @@ static Node *parse_dereference(Lexer *lexer, Node *node) {
 	return derefence;
 }
 
-static Node *parse_deoption(Lexer *lexer, Node *node) {
-	Token_Data token = consume_check(lexer, QUESTION);
-
-	Node *deoption = ast_new(DEOPTION_NODE, token.location);
-	deoption->deoption.node = node;
-	return deoption;
-}
-
-static Node *parse_deoption_present(Lexer *lexer, Node *node) {
-	Token_Data token = consume_check(lexer, QUESTION_QUESTION);
-
-	Node *deoption_present = ast_new(DEOPTION_PRESENT_NODE, token.location);
-	deoption_present->deoption_present.node = node;
-	return deoption_present;
-}
-
 static Node *parse_call(Lexer *lexer, Node *function) {
 	Token_Data first_token = consume_check(lexer, OPEN_PARENTHESIS);
 
@@ -253,7 +237,7 @@ static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 	return structure_access;
 }
 
-static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
+static Node *parse_array_access(Lexer *lexer, Node *array) {
 	Token_Data first_token = lexer_next(lexer, true);
 
 	Node *index = NULL;
@@ -261,28 +245,12 @@ static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 		index = parse_expression(lexer);
 	}
 
-	Node *result = NULL;
-	if (lexer_next(lexer, false).kind == COLON) {
-		consume_check(lexer, COLON);
-
-		Node *slice = ast_new(SLICE_NODE, first_token.location);
-		slice->slice.array = array;
-		if (index != NULL) {
-			slice->slice.start_index = index;
-			slice->slice.end_index = parse_expression(lexer);
-		}
-
-		result = slice;
-	} else {
-		Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
-		array_access->array_access.array = array;
-		array_access->array_access.index = index;
-
-		result = array_access;
-	}
+	Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
+	array_access->array_access.array = array;
+	array_access->array_access.index = index;
 
 	consume_check(lexer, CLOSED_BRACE);
-	return result;
+	return array_access;
 }
 
 static Node *parse_assign(Lexer *lexer, Node *structure) {
@@ -585,15 +553,6 @@ static Node *parse_pointer(Lexer *lexer) {
 	return pointer;
 }
 
-static Node *parse_option(Lexer *lexer) {
-	Token_Data first_token = consume_check(lexer, QUESTION);
-
-	Node *option = ast_new(OPTION_NODE, first_token.location);
-	option->option.inner = parse_expression(lexer);
-
-	return option;
-}
-
 static Node *parse_reference(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, AMPERSAND);
 
@@ -605,32 +564,18 @@ static Node *parse_reference(Lexer *lexer) {
 
 static Node *parse_array_type_or_slice_type(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, OPEN_BRACE);
-	bool slice = false;
-	if (lexer_next(lexer, false).kind == COLON) {
-		consume_check(lexer, COLON);
-		slice = true;
-	}
 
 	Node *size = NULL;
-	if (!slice) {
-		if (lexer_next(lexer, false).kind != CLOSED_BRACE) {
-			size = parse_expression(lexer);
-		}
+	if (lexer_next(lexer, false).kind != CLOSED_BRACE) {
+		size = parse_expression(lexer);
 	}
 
 	consume_check(lexer, CLOSED_BRACE);
 
-	Node *inner = parse_expression(lexer);
-	if (slice) {
-		Node *slice_type = ast_new(SLICE_TYPE_NODE, first_token.location);
-		slice_type->slice_type.inner = inner;
-		return slice_type;
-	} else {
-		Node *array_type = ast_new(ARRAY_TYPE_NODE, first_token.location);
-		array_type->array_type.size = size;
-		array_type->array_type.inner = inner;
-		return array_type;
-	}
+	Node *array_type = ast_new(ARRAY_TYPE_NODE, first_token.location);
+	array_type->array_type.size = size;
+	array_type->array_type.inner = parse_expression(lexer);
+	return array_type;
 }
 
 static Node *parse_module(Lexer *lexer) {
@@ -804,10 +749,6 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_pointer(lexer);
 			break;
 		}
-		case QUESTION: {
-			result = parse_option(lexer);
-			break;
-		}
 		case AMPERSAND: {
 			result = parse_reference(lexer);
 			break;
@@ -842,7 +783,7 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_structure_access(lexer, result);
 				break;
 			case OPEN_BRACE:
-				result = parse_array_access_or_slice(lexer, result);
+				result = parse_array_access(lexer, result);
 				break;
 			case COLON_COLON:
 				consume_check(lexer, COLON_COLON);
@@ -850,12 +791,6 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case CARET:
 				result = parse_dereference(lexer, result);
-				break;
-			case QUESTION:
-				result = parse_deoption(lexer, result);
-				break;
-			case QUESTION_QUESTION:
-				result = parse_deoption_present(lexer, result);
 				break;
 			default:
 				operating = false;

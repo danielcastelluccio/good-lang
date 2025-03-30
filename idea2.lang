@@ -8,18 +8,6 @@ def Node = Tagged_Union$(uint, union {
 	b: uint
 });
 
-def slice$(T: type) = struct {
-	len: uint,
-	ptr: ^[]T,
-};
-
-def a = fn(): struct { a: uint, b: uint } {
-}
-
-def slice_create$(T: type, U: type) = fn(array: ^[U]T): slice$(T) {
-	return .{ T, array };
-};
-
 def Node = union(uint, union {
 	a: uint,
 	b: uint
@@ -42,3 +30,10 @@ expand_switch(switch x {
 	a => |a| print("is an a with value ", a),
 	b => |b| print("is an b with value ", a),
 });
+
+
+
+
+
+
+

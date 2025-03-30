@@ -106,11 +106,6 @@ static int print_type(Value *value, char *buffer) {
 			buffer += print_type(value->pointer_type.inner, buffer);
 			break;
 		}
-		case OPTION_TYPE_VALUE: {
-			buffer += sprintf(buffer, "?");
-			buffer += print_type(value->option_type.inner, buffer);
-			break;
-		}
 		case ARRAY_TYPE_VALUE: {
 			buffer += sprintf(buffer, "[");
 			if (value->array_type.size != NULL) {
@@ -118,11 +113,6 @@ static int print_type(Value *value, char *buffer) {
 			}
 			buffer += sprintf(buffer, "]");
 			buffer += print_type(value->array_type.inner, buffer);
-			break;
-		}
-		case SLICE_TYPE_VALUE: {
-			buffer += sprintf(buffer, "[:]");
-			buffer += print_type(value->slice_type.inner, buffer);
 			break;
 		}
 		case INTERNAL_VALUE: {
@@ -162,6 +152,10 @@ static int print_type(Value *value, char *buffer) {
 				}
 			}
 			buffer += sprintf(buffer, "}");
+			break;
+		}
+		case STRING_TYPE_VALUE: {
+			buffer += sprintf(buffer, "str");
 			break;
 		}
 		case INTEGER_VALUE: {
@@ -259,6 +253,13 @@ static bool pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 		case POINTER_NODE: {
 			if (value->tag == POINTER_TYPE_VALUE) {
 				return pattern_match(node->pointer.inner, value->pointer_type.inner, context, generics, match_result);
+			}
+			break;
+		}
+		case ARRAY_TYPE_NODE: {
+			if (value->tag == ARRAY_TYPE_VALUE) {
+				if (!pattern_match(node->array_type.inner, value->array_type.inner, context, generics, match_result)) return false;
+				return pattern_match(node->array_type.size, value->array_type.size, context, generics, match_result);
 			}
 			break;
 		}
@@ -734,8 +735,14 @@ static void process_string(Context *context, Node *node) {
 	Value *type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
 	if (type == NULL) invalid_type = true;
-	else if (type->tag == POINTER_TYPE_VALUE && type->pointer_type.inner->tag == ARRAY_TYPE_VALUE && type->pointer_type.inner->array_type.inner->tag == INTERNAL_VALUE && strcmp(type->pointer_type.inner->array_type.inner->internal.identifier, "byte") == 0) {}
-	else if (type->tag == SLICE_TYPE_VALUE && type->slice_type.inner->tag == INTERNAL_VALUE && strcmp(type->slice_type.inner->internal.identifier, "byte") == 0) {}
+	else if (type->tag == POINTER_TYPE_VALUE && type->pointer_type.inner->tag == ARRAY_TYPE_VALUE && type->pointer_type.inner->array_type.inner->tag == INTERNAL_VALUE && strcmp(type->pointer_type.inner->array_type.inner->internal.identifier, "byte") == 0) {
+		type = value_new(POINTER_TYPE_VALUE);
+		type->pointer_type.inner = value_new(ARRAY_TYPE_VALUE);
+		type->pointer_type.inner->array_type.inner = create_internal_type("byte");
+		type->pointer_type.inner->array_type.size = value_new(INTEGER_VALUE);
+		type->pointer_type.inner->array_type.size->integer.value = new_index;
+	}
+	else if (type->tag == STRING_TYPE_VALUE) {}
 	else invalid_type = true;
 
 	if (invalid_type) {
@@ -874,71 +881,6 @@ static void process_dereference(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
-static void process_deoption(Context *context, Node *node) {
-	Deoption_Node deoption = node->deoption;
-
-	process_node(context, deoption.node);
-
-	Value *option_pointer_type = strip_define_data(get_type(context, deoption.node));
-	if (option_pointer_type->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, deoption.node);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, deoption.node);
-
-		option_pointer_type = strip_define_data(get_type(context, deoption.node));
-	}
-
-	if (option_pointer_type->tag != POINTER_TYPE_VALUE || option_pointer_type->pointer_type.inner->tag != OPTION_TYPE_VALUE) {
-		char given_string[64] = {};
-		print_type_outer(option_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected option, but got %s", given_string);
-	}
-
-	Node_Data *data = node_data_new(DEOPTION_NODE);
-	data->deoption.type = option_pointer_type->pointer_type.inner->option_type.inner;
-	if (context->temporary_context.assign_value != NULL) {
-		Temporary_Context temporary_context = { .wanted_type = data->deoption.type };
-		process_node_context(context, temporary_context, context->temporary_context.assign_value);
-
-		Value *value_type = get_type(context, context->temporary_context.assign_value);
-		if (!type_assignable(data->deoption.type, value_type)) {
-			handle_type_error(context->temporary_context.assign_node, data->deoption.type, value_type);
-		}
-		data->deoption.assign_value = context->temporary_context.assign_value;
-	} else {
-		set_type(context, node, data->deoption.type);
-	}
-	set_data(context, node, data);
-}
-
-static void process_deoption_present(Context *context, Node *node) {
-	Deoption_Node deoption = node->deoption;
-
-	process_node(context, deoption.node);
-
-	Value *option_pointer_type = strip_define_data(get_type(context, deoption.node));
-	if (option_pointer_type->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, deoption.node);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, deoption.node);
-
-		option_pointer_type = strip_define_data(get_type(context, deoption.node));
-	}
-
-	if (option_pointer_type->tag != POINTER_TYPE_VALUE || option_pointer_type->pointer_type.inner->tag != OPTION_TYPE_VALUE) {
-		char given_string[64] = {};
-		print_type_outer(option_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected option, but got %s", given_string);
-	}
-
-	Node_Data *data = node_data_new(DEOPTION_PRESENT_NODE);
-	data->deoption_present.type = option_pointer_type->pointer_type.inner->option_type.inner;
-	set_type(context, node, create_internal_type("bool"));
-	set_data(context, node, data);
-}
-
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
@@ -1011,18 +953,13 @@ static void process_array_access(Context *context, Node *node) {
 		array_like_type = strip_define_data(get_type(context, array_access.array));
 	}
 
-	if ((array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) && (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != SLICE_TYPE_VALUE)) {
+	if (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(array_like_type_original, given_string);
-		handle_semantic_error(node->location, "Expected array or slice, but got %s", given_string);
+		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
 	}
 
-	Value *item_type = NULL;
-	if (array_like_type->tag == POINTER_TYPE_VALUE) {
-		item_type = array_like_type->pointer_type.inner->array_type.inner;
-	} else {
-		item_type = array_like_type->slice_type.inner;
-	}
+	Value *item_type = array_like_type->pointer_type.inner->array_type.inner;
 
 	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
 	data->array_access.array_like_type = array_like_type;
@@ -1046,46 +983,6 @@ static void process_array_access(Context *context, Node *node) {
 
 		set_type(context, node, item_type);
 	}
-	set_data(context, node, data);
-}
-
-static void process_slice(Context *context, Node *node) {
-	Slice_Node slice = node->slice;
-
-	process_node(context, slice.array);
-	if (slice.start_index != NULL) {
-		process_node(context, slice.start_index);
-		process_node(context, slice.end_index);
-	}
-
-	Value *array_like_type = strip_define_data(get_type(context, slice.array));
-	Value *array_like_type_original = array_like_type;
-	if (array_like_type->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, slice.array);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, slice.array);
-
-		array_like_type = strip_define_data(get_type(context, slice.array));
-	}
-
-	if ((array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) && (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != SLICE_TYPE_VALUE)) {
-		char given_string[64] = {};
-		print_type_outer(array_like_type_original, given_string);
-		handle_semantic_error(node->location, "Expected array or slice, but got %s", given_string);
-	}
-
-	Value *item_type = NULL;
-	if (array_like_type->tag == POINTER_TYPE_VALUE) {
-		item_type = array_like_type->pointer_type.inner->array_type.inner;
-	} else {
-		item_type = array_like_type->slice_type.inner;
-	}
-
-	Node_Data *data = node_data_new(SLICE_NODE);
-	data->slice.array_like_type = array_like_type;
-
-	set_type(context, node, create_slice_type(item_type));
 	set_data(context, node, data);
 }
 
@@ -1473,7 +1370,6 @@ static void process_while(Context *context, Node *node) {
 
 static bool can_compare(Value *type) {
 	if (type->tag == ENUM_TYPE_VALUE) return true;
-	if (type->tag == SLICE_TYPE_VALUE && can_compare(type->slice_type.inner)) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "uint") == 0) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "byte") == 0) return true;
@@ -1609,30 +1505,12 @@ static void process_pointer(Context *context, Node *node) {
 	set_type(context, node, value);
 }
 
-static void process_option(Context *context, Node *node) {
-	Option_Node option = node->option;
-	process_node(context, option.inner);
-
-	Value *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, value);
-}
-
 static void process_array_type(Context *context, Node *node) {
 	Array_Type_Node array_type = node->array_type;
 	process_node(context, array_type.inner);
 	if (array_type.size != NULL) {
 		process_node(context, array_type.size);
 	}
-
-	Value *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, value);
-}
-
-static void process_slice_type(Context *context, Node *node) {
-	Slice_Type_Node slice_type = node->slice_type;
-	process_node(context, slice_type.inner);
 
 	Value *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
@@ -1697,24 +1575,12 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_dereference(context, node);
 			break;
 		}
-		case DEOPTION_NODE: {
-			process_deoption(context, node);
-			break;
-		}
-		case DEOPTION_PRESENT_NODE: {
-			process_deoption_present(context, node);
-			break;
-		}
 		case STRUCTURE_ACCESS_NODE: {
 			process_structure_access(context, node);
 			break;
 		}
 		case ARRAY_ACCESS_NODE: {
 			process_array_access(context, node);
-			break;
-		}
-		case SLICE_NODE: {
-			process_slice(context, node);
 			break;
 		}
 		case VARIABLE_NODE: {
@@ -1765,16 +1631,8 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_pointer(context, node);
 			break;
 		}
-		case OPTION_NODE: {
-			process_option(context, node);
-			break;
-		}
 		case ARRAY_TYPE_NODE: {
 			process_array_type(context, node);
-			break;
-		}
-		case SLICE_TYPE_NODE: {
-			process_slice_type(context, node);
 			break;
 		}
 		case STRUCT_TYPE_NODE: {

@@ -98,30 +98,11 @@ Value *strip_define_data(Value *value) {
 }
 
 Value *create_string_type() {
-	Value *slice = value_new(SLICE_TYPE_VALUE);
-	Value *byte = value_new(INTERNAL_VALUE);
-	byte->internal.identifier = "byte";
-	slice->slice_type.inner = byte;
-
-	return slice;
+	return value_new(STRING_TYPE_VALUE);
 }
 
 Value *create_boolean_type() {
-	Value *boolean = value_new(INTERNAL_VALUE);
-	boolean->internal.identifier = "bool";
-	return boolean;
-}
-
-Value *create_slice_type(Value *inner) {
-	Value *slice_type = value_new(SLICE_TYPE_VALUE);
-	slice_type->slice_type.inner = inner;
-	return slice_type;
-}
-
-Value *create_option_type(Value *inner) {
-	Value *option_type = value_new(OPTION_TYPE_VALUE);
-	option_type->option_type.inner = inner;
-	return option_type;
+	return create_internal_type("bool");
 }
 
 Value *create_internal_type(char *identifier) {

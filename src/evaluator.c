@@ -30,12 +30,6 @@ bool value_equal(Value *value1, Value *value2) {
 
 			return value_equal(value1->array_type.inner, value2->array_type.inner);
 		}
-		case SLICE_TYPE_VALUE: {
-			return value_equal(value1->slice_type.inner, value2->slice_type.inner);
-		}
-		case OPTION_TYPE_VALUE: {
-			return value_equal(value1->option_type.inner, value2->option_type.inner);
-		}
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
 		}
@@ -76,6 +70,9 @@ bool value_equal(Value *value1, Value *value2) {
 
 			return true;
 		}
+		case STRING_TYPE_VALUE: {
+			return true;
+		}
 		case INTEGER_VALUE: {
 			return value1->integer.value == value2->integer.value;
 		}
@@ -96,12 +93,71 @@ bool type_assignable(Value *type1, Value *type2) {
 			if ((type1->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type1->pointer_type.inner->internal.identifier, "void") == 0) || (type2->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type2->pointer_type.inner->internal.identifier, "void") == 0)) {
 				return true;
 			}
+
+			return type_assignable(type1->pointer_type.inner, type2->pointer_type.inner);
+		}
+		case ARRAY_TYPE_VALUE: {
+			if ((type1->array_type.size == NULL && type2->array_type.size != NULL)) return type_assignable(type1->array_type.inner, type2->array_type.inner);
+			if (type1->array_type.size != NULL && type2->array_type.size == NULL) return false;
+
+			if (type1->array_type.size != NULL) {
+				if (!type_assignable(type1->array_type.size, type2->array_type.size)) return false;
+			}
+
+			return type_assignable(type1->array_type.inner, type2->array_type.inner);
+		}
+		case INTERNAL_VALUE: {
+			return strcmp(type1->internal.identifier, type2->internal.identifier) == 0;
+		}
+		case STRUCT_TYPE_VALUE: {
+			if (arrlen(type1->struct_type.items) != arrlen(type2->struct_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(type1->struct_type.items); i++) {
+				if (strcmp(type1->struct_type.items[i].identifier, type2->struct_type.items[i].identifier) != 0) return false;
+				if (!type_assignable(type1->struct_type.items[i].type, type2->struct_type.items[i].type)) return false;
+			}
+
+			return true;
+		}
+		case ENUM_TYPE_VALUE: {
+			if (arrlen(type1->enum_type.items) != arrlen(type2->enum_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(type1->enum_type.items); i++) {
+				if (strcmp(type1->enum_type.items[i], type2->enum_type.items[i]) != 0) return false;
+			}
+
+			return true;
+		}
+		case FUNCTION_TYPE_VALUE: {
+			if (arrlen(type1->function_type.arguments) != arrlen(type2->function_type.arguments)) return false;
+			for (long int i = 0; i < arrlen(type1->function_type.arguments); i++) {
+				if (strcmp(type1->function_type.arguments[i].identifier, type2->function_type.arguments[i].identifier) != 0) return false;
+				if (!type_assignable(type1->function_type.arguments[i].type, type2->function_type.arguments[i].type)) return false;
+			}
+
+			if ((type1->function_type.return_type == NULL && type2->function_type.return_type != NULL) || (type1->function_type.return_type != NULL && type2->function_type.return_type == NULL)) return false;
+			if (type1->function_type.return_type != NULL) {
+				if (!type_assignable(type1->function_type.return_type, type2->function_type.return_type)) {
+					return false;
+				}
+			}
+
+			if (type1->function_type.variadic != type2->function_type.variadic) return false;
+
+			return true;
+		}
+		case STRING_TYPE_VALUE: {
+			return true;
+		}
+		case INTEGER_VALUE: {
+			return type1->integer.value == type2->integer.value;
+		}
+		case DEFINE_DATA_VALUE: {
+			return type_assignable(type1->define_data.value, type2->define_data.value);
 		}
 		default:
-			break;
+			assert(false);
 	}
-
-	return value_equal(type1, type2);
 }
 
 Value *get_cached_file(Context *context, char *path) {
@@ -215,13 +271,6 @@ Value *evaluate(Context *context, Node *node) {
 			pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
 			return pointer_type_value;
 		}
-		case OPTION_NODE: {
-			Option_Node option = node->option;
-
-			Value *option_type_value = value_new(OPTION_TYPE_VALUE);
-			option_type_value->option_type.inner = evaluate(context, option.inner);
-			return option_type_value;
-		}
 		case ARRAY_TYPE_NODE: {
 			Array_Type_Node array_type = node->array_type;
 
@@ -229,13 +278,6 @@ Value *evaluate(Context *context, Node *node) {
 			if (array_type.size != NULL) array_type_value->array_type.size = evaluate(context, array_type.size);
 			array_type_value->array_type.inner = evaluate(context, array_type.inner);
 			return array_type_value;
-		}
-		case SLICE_TYPE_NODE: {
-			Slice_Type_Node slice_type = node->slice_type;
-
-			Value *slice_type_value = value_new(SLICE_TYPE_VALUE);
-			slice_type_value->slice_type.inner = evaluate(context, slice_type.inner);
-			return slice_type_value;
 		}
 		case IDENTIFIER_NODE: {
 			Identifier_Data identifier_data = get_data(context, node)->identifier;
@@ -255,20 +297,25 @@ Value *evaluate(Context *context, Node *node) {
 			char *string_value = string_data.value;
 			size_t string_length = string_data.length;
 
-			Value **values = malloc(sizeof(Value *) * string_length);
-			for (size_t i = 0; i < string_length; i++) {
-				Value *byte = value_new(BYTE_VALUE);
-				byte->byte.value = string_value[i];
-				values[i] = byte;
-			}
+			if (string_data.type->tag == STRING_TYPE_VALUE) {
+				char *data = malloc(string_length);
+				for (size_t i = 0; i < string_length; i++) {
+					data[i] = string_value[i];
+				}
 
-			if (string_data.type->tag == SLICE_TYPE_VALUE) {
-				Value *slice = value_new(SLICE_VALUE);
-				slice->slice.length = string_length;
-				slice->slice.values = values;
+				Value *string = value_new(STRING_VALUE);
+				string->string.length = string_length;
+				string->string.data = data;
 
-				return slice;
+				return string;
 			} else {
+				Value **values = malloc(sizeof(Value *) * string_length);
+				for (size_t i = 0; i < string_length; i++) {
+					Value *byte = value_new(BYTE_VALUE);
+					byte->byte.value = string_value[i];
+					values[i] = byte;
+				}
+
 				Value *pointer = value_new(POINTER_VALUE);
 				Value *array = value_new(ARRAY_VALUE);
 				array->array.length = string_length;
@@ -305,12 +352,10 @@ Value *evaluate(Context *context, Node *node) {
 				case INTERNAL_VALUE: {
 					char *identifier = function->internal.identifier;
 					if (strcmp(identifier, "import") == 0) {
-						Value *slice = arguments[0];
-						char *source = malloc(slice->slice.length + 1);
-						source[slice->slice.length] = '\0';
-						for (size_t i = 0; i < slice->slice.length; i++) {
-							source[i] = slice->slice.values[i]->byte.value;
-						}
+						Value *string = arguments[0];
+						char *source = malloc(string->string.length + 1);
+						source[string->string.length] = '\0';
+						memcpy(source, string->string.data, string->string.length); 
 
 						Value *value = get_cached_file(context, source);
 						if (value != NULL) {
