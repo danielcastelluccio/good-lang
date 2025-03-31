@@ -349,9 +349,13 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 			}
 
 			if (arrlen(generics) < arrlen(define.generics) || pattern_match_collision) {
+				(void) arrpop(context->scopes);
+				if (scopes != NULL) context->scopes = saved_scopes;
 				return (Process_Define_Result) {};
 			}
 		} else {
+			(void) arrpop(context->scopes);
+			if (scopes != NULL) context->scopes = saved_scopes;
 			return (Process_Define_Result) {};
 		}
 	}
@@ -579,7 +583,11 @@ static void process_identifier(Context *context, Node *node) {
 			}
 		}
 
-		Lookup_Result lookup_result = lookup(context, identifier.value);
+		Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
+		if (identifier.module == NULL) {
+			lookup_result = lookup(context, identifier.value);
+		}
+
 		if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
 			for (long i = 0; i < arrlen(context->scopes); i++) {
 				arrpush(define_scopes, context->scopes[i]);
