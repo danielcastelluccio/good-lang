@@ -87,6 +87,12 @@ typedef struct {
 } Call_Node;
 
 typedef struct {
+	Node *argument1;
+	char *method;
+	Node **arguments; // stb_ds
+} Call_Method_Node;
+
+typedef struct {
 	Node *node;
 } Reference_Node;
 
@@ -189,7 +195,7 @@ typedef struct {
 	Node *expression;
 	Generic_Argument *generics; // stb_ds
 	Node *generic_constraint;
-	bool extern_;
+	char *operator;
 } Define_Node;
 
 typedef struct {
@@ -217,6 +223,7 @@ typedef enum {
 	RUN_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
+	CALL_METHOD_NODE,
 	REFERENCE_NODE,
 	DEREFERENCE_NODE,
 	STRUCTURE_ACCESS_NODE,
@@ -252,6 +259,7 @@ struct Node {
 		Run_Node run;
 		Identifier_Node identifier;
 		Call_Node call;
+		Call_Method_Node call_method;
 		Reference_Node reference;
 		Dereference_Node dereference;
 		Deoption_Node deoption;

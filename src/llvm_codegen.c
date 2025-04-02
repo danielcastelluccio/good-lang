@@ -189,6 +189,21 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, arguments, arrlen(arguments), "");
 }
 
+static LLVMValueRef generate_call_method(Node *node, State *state) {
+	assert(node->kind == CALL_METHOD_NODE);
+	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
+
+	LLVMValueRef function_llvm_value = generate_node(call_method_data.fake_node, state);
+
+	LLVMValueRef *arguments = NULL;
+	for (unsigned int i = 0; i < arrlen(call_method_data.arguments); i++) {
+		arrpush(arguments, generate_node(call_method_data.arguments[i], state));
+	}
+
+	Value *function_type = get_data(&state->context, node)->call.function_type;
+	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, arguments, arrlen(arguments), "");
+}
+
 static LLVMValueRef generate_identifier(Node *node, State *state) {
 	assert(node->kind == IDENTIFIER_NODE);
 
@@ -730,6 +745,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_block(node, state);
 		case CALL_NODE:
 			return generate_call(node, state);
+		case CALL_METHOD_NODE:
+			return generate_call_method(node, state);
 		case IDENTIFIER_NODE:
 			return generate_identifier(node, state);
 		case STRING_NODE:

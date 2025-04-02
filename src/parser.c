@@ -253,6 +253,31 @@ static Node *parse_array_access(Lexer *lexer, Node *array) {
 	return array_access;
 }
 
+static Node *parse_call_method(Lexer *lexer, Node *argument1) {
+	Token_Data first_token = lexer_next(lexer, true);
+
+	Node *call_method = ast_new(CALL_METHOD_NODE, first_token.location);
+	call_method->call_method.argument1 = argument1;
+	call_method->call_method.method = consume_check(lexer, IDENTIFIER).string;
+
+	consume_check(lexer, OPEN_PARENTHESIS);
+
+	while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
+		arrpush(call_method->call_method.arguments, parse_expression(lexer));
+
+		Token_Data token = lexer_next(lexer, false);
+		if (token.kind == COMMA) {
+			lexer_next(lexer, true);
+		} else if (token.kind == CLOSED_PARENTHESIS) {
+		} else {
+			handle_token_error_no_expected(token);
+		}
+	}
+
+	consume_check(lexer, CLOSED_PARENTHESIS);
+	return call_method;
+}
+
 static Node *parse_assign(Lexer *lexer, Node *structure) {
 	Token_Data first_token = lexer_next(lexer, true);
 
@@ -393,6 +418,12 @@ static Node *parse_define(Lexer *lexer) {
 		consume_check(lexer, CLOSED_PARENTHESIS);
 	}
 
+	char *operator = NULL;
+	if (lexer_next(lexer, false).kind == KEYWORD && strcmp(lexer_next(lexer, false).string, "op") == 0) {
+		consume_check(lexer, KEYWORD);
+		operator = lexer_next(lexer, true).string;
+	}
+
 	consume_check(lexer, EQUALS);
 
 	Node *expression = parse_expression(lexer);
@@ -404,6 +435,7 @@ static Node *parse_define(Lexer *lexer) {
 	define->define.expression = expression;
 	define->define.generics = generics;
 	define->define.generic_constraint = constraint;
+	define->define.operator = operator;
 
 	return define;
 }
@@ -784,6 +816,9 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case OPEN_BRACE:
 				result = parse_array_access(lexer, result);
+				break;
+			case COLON:
+				result = parse_call_method(lexer, result);
 				break;
 			case COLON_COLON:
 				consume_check(lexer, COLON_COLON);

@@ -129,6 +129,8 @@ typedef struct {
 	Node *define_node;
 	Generic_Binding *bindings;
 	Value *value;
+	Scope *scopes;
+	size_t generic_id;
 } Define_Data_Value;
 
 struct Value {
@@ -201,6 +203,12 @@ typedef struct {
 typedef struct {
 	Value *function_type;
 } Call_Data;
+
+typedef struct {
+	Value *function_type;
+	Node **arguments;
+	Node *fake_node;
+} Call_Method_Data;
 
 typedef struct {
 	bool static_condition;
@@ -300,6 +308,7 @@ typedef struct {
 		Run_Data run;
 		Null_Data null_;
 		Call_Data call;
+		Call_Method_Data call_method;
 		If_Data if_;
 		Switch_Data switch_;
 		Define_Data define;
@@ -324,6 +333,8 @@ Node_Data *node_data_new(Node_Kind kind);
 typedef struct { Node *key; Value *value; } *Node_Types;
 
 typedef struct { Node *key; Node_Data *value; } *Node_Datas;
+
+typedef struct { char *key; Node *value; } *Define_Operators;
 
 typedef struct Context Context;
 
@@ -350,6 +361,7 @@ typedef struct {
 struct Context {
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
+	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
 	Node **left_blocks; // stb_ds
 	Scope *scopes; // stb_ds
 	bool compile_only;

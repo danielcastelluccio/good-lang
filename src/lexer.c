@@ -83,6 +83,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "break") == 0) return true;
 	else if (strcmp(identifier, "switch") == 0) return true;
 	else if (strcmp(identifier, "case") == 0) return true;
+	else if (strcmp(identifier, "op") == 0) return true;
 	else return false;
 }
 

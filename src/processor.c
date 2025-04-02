@@ -302,6 +302,23 @@ static bool pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Define_Node define = node->define;
 
+	if (define.operator != NULL) {
+		assert(define.expression->kind == FUNCTION_NODE);
+		assert(arrlen(define.expression->function.function_type->function_type.arguments) > 0);
+		assert(define.expression->function.function_type->function_type.arguments[0].type->kind == IDENTIFIER_NODE);
+
+		Lookup_Result lookup_result = lookup(context, define.expression->function.function_type->function_type.arguments[0].type->identifier.value);
+		assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
+		Define_Operators *operators = hmget(context->operators, lookup_result.define.node);
+		if (operators == NULL) {
+			operators = malloc(sizeof(Node_Types *));
+			*operators = NULL;
+			hmput(context->operators, lookup_result.define.node, operators);
+		}
+
+		shput(*operators, define.operator, node);
+	}
+
 	Scope *saved_scopes = context->scopes;
 	if (scopes != NULL) context->scopes = scopes;
 	arrpush(context->scopes, (Scope) { .node = node });
@@ -417,6 +434,8 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	wrapped_value->define_data.value = value;
 	wrapped_value->define_data.define_node = node;
 	wrapped_value->define_data.bindings = generics;
+	wrapped_value->define_data.scopes = scopes;
+	wrapped_value->define_data.generic_id = generic_id;
 
 	context->generic_id = saved_generic_id;
 	(void) arrpop(context->scopes);
@@ -455,51 +474,101 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	};
 }
 
-static void process_call(Context *context, Node *node) {
-	Call_Node call = node->call;
-
+static Temporary_Context process_call_generic1(Context *context, Node **arguments) {
 	Value **argument_types = NULL;
-	for (long int i = 0; i < arrlen(call.arguments); i++) {
+	for (long int i = 0; i < arrlen(arguments); i++) {
 		Temporary_Context temporary_context = { .wanted_type = NULL };
-		process_node_context(context, temporary_context, call.arguments[i]);
-		Value *type = get_type(context, call.arguments[i]);;
+		process_node_context(context, temporary_context, arguments[i]);
+		Value *type = get_type(context, arguments[i]);;
 		arrpush(argument_types, type);
 
-		reset_node(context, call.arguments[i]);
+		reset_node(context, arguments[i]);
 	}
 
-	Temporary_Context temporary_context = { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
-	process_node_context(context, temporary_context, call.function);
-	Value *function_type = get_type(context, call.function);
+	return (Temporary_Context) { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
+}
+
+static void process_call_generic2(Context *context, Node *node, Node **arguments, Value *function_type) {
 	if (function_type->tag != FUNCTION_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(function_type, given_string);
 		handle_semantic_error(node->location, "Expected function pointer, but got %s", given_string);
 	}
 
-	if (arrlen(call.arguments) != arrlen(function_type->function_type.arguments) && !function_type->function_type.variadic) {
-		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", arrlen(function_type->function_type.arguments), arrlen(call.arguments));
+	if (arrlen(arguments) != arrlen(function_type->function_type.arguments) && !function_type->function_type.variadic) {
+		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", arrlen(function_type->function_type.arguments), arrlen(arguments));
 	}
 
-	for (long int i = 0; i < arrlen(call.arguments); i++) {
+	for (long int i = 0; i < arrlen(arguments); i++) {
 		Value *wanted_type = NULL;
 		if (i < arrlen(function_type->function_type.arguments) || !function_type->function_type.variadic) {
 			wanted_type = function_type->function_type.arguments[i].type;
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = wanted_type };
-		process_node_context(context, temporary_context, call.arguments[i]);
-		Value *type = get_type(context, call.arguments[i]);;
+		process_node_context(context, temporary_context, arguments[i]);
+		Value *type = get_type(context, arguments[i]);;
 
 		if (wanted_type != NULL && !type_assignable(wanted_type, type)) {
 			handle_type_error(node, wanted_type, type);
 		}
 	}
+}
+
+static void process_call(Context *context, Node *node) {
+	Call_Node call = node->call;
+
+	Temporary_Context temporary_context = process_call_generic1(context, call.arguments);
+	process_node_context(context, temporary_context, call.function);
+	Value *function_type = get_type(context, call.function);
+
+	process_call_generic2(context, node, call.arguments, function_type);
 
 	Node_Data *data = node_data_new(CALL_NODE);
 	data->call.function_type = function_type;
 	set_data(context, node, data);
 	set_type(context, node, function_type->function_type.return_type);
+}
+
+static void process_call_method(Context *context, Node *node) {
+	Call_Method_Node call_method = node->call_method;
+
+	Node **arguments = NULL;
+	arrpush(arguments, call_method.argument1);
+	for (long int i = 0; i < arrlen(call_method.arguments); i++) {
+		arrpush(arguments, call_method.arguments[i]);
+	}
+
+	process_node(context, arguments[0]);
+	Define_Data_Value define_data = get_type(context, arguments[0])->define_data;
+	Node *define_node = define_data.define_node;
+	reset_node(context, arguments[0]);
+
+	Define_Operators *operators = hmget(context->operators, define_node);
+	assert(operators != NULL);
+
+	Node *method_define_node = shget(*operators, call_method.method);
+	Temporary_Context temporary_context = process_call_generic1(context, arguments);
+
+	context->temporary_context = temporary_context;
+	bool compile_only_parent = context->compile_only;
+	Process_Define_Result process_define_result = process_define(context, method_define_node, define_data.scopes, NULL, define_data.generic_id);
+	context->compile_only = compile_only_parent;
+
+	process_call_generic2(context, node, arguments, process_define_result.type);
+
+	Node *fake_node = ast_new(IDENTIFIER_NODE, (Source_Location) {});
+	Node_Data *fake_node_data = node_data_new(IDENTIFIER_NODE);
+	fake_node_data->identifier.kind = IDENTIFIER_VALUE;
+	fake_node_data->identifier.value = process_define_result.value;
+	set_data(context, fake_node, fake_node_data);
+
+	Node_Data *data = node_data_new(CALL_METHOD_NODE);
+	data->call_method.function_type = process_define_result.type;
+	data->call_method.arguments = arguments;
+	data->call_method.fake_node = fake_node;
+	set_data(context, node, data);
+	set_type(context, node, process_define_result.type->function_type.return_type);
 }
 
 static void process_identifier(Context *context, Node *node) {
@@ -1545,6 +1614,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case CALL_NODE: {
 			process_call(context, node);
+			break;
+		}
+		case CALL_METHOD_NODE: {
+			process_call_method(context, node);
 			break;
 		}
 		case IDENTIFIER_NODE: {
