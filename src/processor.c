@@ -309,46 +309,21 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	size_t saved_saved_generic_id = context->generic_id;
 	context->generic_id = generic_id;
 
-	if (define.operator != NULL) {
-		assert(define.expression->kind == FUNCTION_NODE);
-		assert(arrlen(define.expression->function.function_type->function_type.arguments) > 0);
+	for (long int i = 0; i < arrlen(define.operators); i++) {
+		Operator_Definition operator = define.operators[i];
 
-		Node *argument0 = define.expression->function.function_type->function_type.arguments[0].type;
-		if (strcmp(define.operator, "[]") == 0) {
-			argument0 = argument0->pointer.inner;
-		}
+		Lookup_Result lookup_result = lookup(context, operator.function);
+		assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
+		Node *function_define_node = lookup_result.define.node;
 
-		assert(argument0->kind == IDENTIFIER_NODE);
-
-		Node *define_node = NULL;
-		Node *define_scope_node = NULL;
-		if (argument0->identifier.module != NULL) {
-			process_node(context, argument0->identifier.module);
-			Value *module_value = strip_define_data(evaluate(context, argument0->identifier.module));
-			for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
-				Node *statement = module_value->module.body->block.statements[i];
-				if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, argument0->identifier.value) == 0) {
-					define_node = statement;
-					define_scope_node = module_value->module.scopes[arrlen(module_value->module.scopes) - 1].node;
-					break;
-				}
-			}
-		} else {
-			Lookup_Result lookup_result = lookup(context, argument0->identifier.value);
-			assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
-			define_node = lookup_result.define.node;
-			define_scope_node = lookup_result.define.scope->node;
-		}
-
-		assert(define_scope_node == context->scopes[arrlen(context->scopes) - 2].node);
-		Define_Operators *operators = hmget(context->operators, define_node);
+		Define_Operators *operators = hmget(context->operators, node);
 		if (operators == NULL) {
 			operators = malloc(sizeof(Node_Types *));
 			*operators = NULL;
-			hmput(context->operators, define_node, operators);
+			hmput(context->operators, node, operators);
 		}
 
-		shput(*operators, define.operator, node);
+		shput(*operators, operator.operator, function_define_node);
 	}
 
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {

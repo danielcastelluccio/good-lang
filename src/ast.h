@@ -189,13 +189,14 @@ typedef struct {
 } Binary_Operator_Node;
 
 typedef Identifier_Type_Pair Generic_Argument;
+typedef struct { char *operator; char *function; } Operator_Definition;
 
 typedef struct {
 	char *identifier;
 	Node *expression;
 	Generic_Argument *generics; // stb_ds
 	Node *generic_constraint;
-	char *operator;
+	Operator_Definition *operators; // stb_ds
 } Define_Node;
 
 typedef struct {

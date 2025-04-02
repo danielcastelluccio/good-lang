@@ -418,11 +418,13 @@ static Node *parse_define(Lexer *lexer) {
 		consume_check(lexer, CLOSED_PARENTHESIS);
 	}
 
-	char *operator = NULL;
-	if (lexer_next(lexer, false).kind == KEYWORD && strcmp(lexer_next(lexer, false).string, "op") == 0) {
+	Operator_Definition *operators = NULL;
+	while (lexer_next(lexer, false).kind == KEYWORD && strcmp(lexer_next(lexer, false).string, "op") == 0) {
 		consume_check(lexer, KEYWORD);
+		consume_check(lexer, OPEN_PARENTHESIS);
 
 		Token_Data token = lexer_next(lexer, true);
+		char *operator = NULL;
 		switch (token.kind) {
 			case IDENTIFIER:
 				operator = token.string;
@@ -434,6 +436,15 @@ static Node *parse_define(Lexer *lexer) {
 			default:
 				assert(false);
 		}
+
+		consume_check(lexer, COMMA);
+
+		char *function = consume_check(lexer, IDENTIFIER).string;
+
+		consume_check(lexer, CLOSED_PARENTHESIS);
+
+		Operator_Definition operator_definition = { .operator = operator, .function = function };
+		arrpush(operators, operator_definition);
 	}
 
 	consume_check(lexer, EQUALS);
@@ -447,7 +458,7 @@ static Node *parse_define(Lexer *lexer) {
 	define->define.expression = expression;
 	define->define.generics = generics;
 	define->define.generic_constraint = constraint;
-	define->define.operator = operator;
+	define->define.operators = operators;
 
 	return define;
 }
