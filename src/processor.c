@@ -532,6 +532,14 @@ static void process_call(Context *context, Node *node) {
 	set_type(context, node, function_type->function_type.return_type);
 }
 
+static Scope *clone_scopes(Scope *scopes) {
+	Scope *cloned = NULL;
+	for (long int i = 0; i < arrlen(scopes); i++) {
+		arrpush(cloned, scopes[i]);
+	}
+	return cloned;
+}
+
 static void process_call_method(Context *context, Node *node) {
 	Call_Method_Node call_method = node->call_method;
 
@@ -555,26 +563,15 @@ static void process_call_method(Context *context, Node *node) {
 	context->temporary_context = temporary_context;
 	bool compile_only_parent = context->compile_only;
 
-	Scope *copied_scopes = NULL;
-	for (long int i = 0; i < arrlen(define_data.scopes); i++) {
-		arrpush(copied_scopes, define_data.scopes[i]);
-	}
-	Process_Define_Result process_define_result = process_define(context, method_define_node, copied_scopes, NULL, define_data.generic_id);
+	Process_Define_Result process_define_result = process_define(context, method_define_node, clone_scopes(define_data.scopes), NULL, define_data.generic_id);
 	context->compile_only = compile_only_parent;
 
 	process_call_generic2(context, node, arguments, process_define_result.type);
 
-	Node *fake_node = ast_new(IDENTIFIER_NODE, (Source_Location) {});
-	Node_Data *fake_node_data = node_data_new(IDENTIFIER_NODE);
-	fake_node_data->identifier.kind = IDENTIFIER_VALUE;
-	fake_node_data->identifier.value = process_define_result.value;
-	set_data(context, fake_node, fake_node_data);
-	set_type(context, fake_node, process_define_result.type);
-
 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
 	data->call_method.function_type = process_define_result.type;
 	data->call_method.arguments = arguments;
-	data->call_method.fake_node = fake_node;
+	data->call_method.function = strip_define_data(process_define_result.value);
 	set_data(context, node, data);
 	set_type(context, node, process_define_result.type->function_type.return_type);
 }
@@ -1038,7 +1035,8 @@ static void process_array_access(Context *context, Node *node) {
 		array_like_type = get_type(context, array_access.array);
 	}
 
-	Node *fake_node = NULL;
+	Value *array_access_function = NULL;
+	Value *array_access_function_type = NULL;
 	Process_Define_Result array_access_define_result;
 	if (array_like_type->pointer_type.inner->tag == DEFINE_DATA_VALUE) {
 		Define_Data_Value define_data = array_like_type->pointer_type.inner->define_data;
@@ -1057,31 +1055,23 @@ static void process_array_access(Context *context, Node *node) {
 			context->temporary_context = temporary_context;
 			bool compile_only_parent = context->compile_only;
 
-			Scope *copied_scopes = NULL;
-			for (long int i = 0; i < arrlen(define_data.scopes); i++) {
-				arrpush(copied_scopes, define_data.scopes[i]);
-			}
-			array_access_define_result = process_define(context, array_access_define_node, copied_scopes, NULL, define_data.generic_id);
+			array_access_define_result = process_define(context, array_access_define_node, clone_scopes(define_data.scopes), NULL, define_data.generic_id);
 			context->compile_only = compile_only_parent;
 			context->temporary_context = saved_temporary_context;
 
-			fake_node = ast_new(IDENTIFIER_NODE, (Source_Location) {});
-			Node_Data *fake_node_data = node_data_new(IDENTIFIER_NODE);
-			fake_node_data->identifier.kind = IDENTIFIER_VALUE;
-			fake_node_data->identifier.value = array_access_define_result.value;
-			set_data(context, fake_node, fake_node_data);
-			set_type(context, fake_node, array_access_define_result.type);
+			array_access_function = strip_define_data(array_access_define_result.value);
+			array_access_function_type = array_access_define_result.type;
 		}
 	}
 
-	if (fake_node == NULL && strip_define_data(strip_define_data(array_like_type)->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
+	if (array_access_function == NULL && strip_define_data(strip_define_data(array_like_type)->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(strip_define_data(array_like_type_original), given_string);
 		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
 	}
 
 	Value *item_type = NULL;
-	if (fake_node == NULL) {
+	if (array_access_function == NULL) {
 		item_type = strip_define_data(array_like_type)->pointer_type.inner->array_type.inner;
 	} else {
 		item_type = strip_define_data(array_access_define_result.type->function_type.return_type->pointer_type.inner);
@@ -1090,7 +1080,8 @@ static void process_array_access(Context *context, Node *node) {
 	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
 	data->array_access.array_like_type = array_like_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
-	data->array_access.fake_node = fake_node;
+	data->array_access.function = array_access_function;
+	data->array_access.function_type = array_access_function_type;
 	data->array_access.item_type = item_type;
 
 	if (context->temporary_context.assign_value != NULL) {

@@ -207,7 +207,7 @@ typedef struct {
 typedef struct {
 	Value *function_type;
 	Node **arguments;
-	Node *fake_node;
+	Value *function;
 } Call_Method_Data;
 
 typedef struct {
@@ -270,7 +270,8 @@ typedef struct {
 typedef struct {
 	Value *array_like_type;
 	Value *item_type;
-	Node *fake_node;
+	Value *function;
+	Value *function_type;
 	Node *assign_value;
 	bool want_pointer;
 } Array_Access_Data;

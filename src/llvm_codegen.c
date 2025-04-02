@@ -174,15 +174,12 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 	return NULL;
 }
 
-static LLVMValueRef generate_call_generic(Node *function, Node **arguments, State *state) {
-	LLVMValueRef function_llvm_value = generate_node(function, state);
-
+static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Value *function_type, Node **arguments, State *state) {
 	LLVMValueRef *llvm_arguments = NULL;
 	for (unsigned int i = 0; i < arrlen(arguments); i++) {
 		arrpush(llvm_arguments, generate_node(arguments[i], state));
 	}
 
-	Value *function_type = get_type(&state->context, function);
 	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
 }
 
@@ -190,14 +187,15 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	assert(node->kind == CALL_NODE);
 	Call_Node call = node->call;
 
-	return generate_call_generic(call.function, call.arguments, state);
+	Value *function_type = get_type(&state->context, call.function);
+	return generate_call_generic(generate_node(call.function, state), function_type, call.arguments, state);
 }
 
 static LLVMValueRef generate_call_method(Node *node, State *state) {
 	assert(node->kind == CALL_METHOD_NODE);
 	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
 
-	return generate_call_generic(call_method_data.fake_node, call_method_data.arguments, state);
+	return generate_call_generic(generate_value(call_method_data.function, state), call_method_data.function_type, call_method_data.arguments, state);
 }
 
 static LLVMValueRef generate_identifier(Node *node, State *state) {
@@ -406,11 +404,11 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 	LLVMValueRef array_llvm_value = generate_node(array_access.array, state);
 	LLVMValueRef element_pointer = NULL;
 
-	if (array_access_data.fake_node != NULL) {
+	if (array_access_data.function != NULL) {
 		Node **arguments = NULL;
 		arrpush(arguments, array_access.array);
 		arrpush(arguments, array_access.index);
-		element_pointer = generate_call_generic(array_access_data.fake_node, arguments, state);
+		element_pointer = generate_call_generic(generate_value(array_access_data.function, state), array_access_data.function_type, arguments, state);
 	} else {
 		LLVMValueRef indices[2] = {
 			LLVMConstInt(LLVMInt64Type(), 0, false),
