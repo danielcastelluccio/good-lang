@@ -302,6 +302,13 @@ static bool pattern_match(Node *node, Value *value, Context *context, Generic_Ar
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Define_Node define = node->define;
 
+	Scope *saved_scopes = context->scopes;
+	if (scopes != NULL) context->scopes = scopes;
+	arrpush(context->scopes, (Scope) { .node = node });
+
+	size_t saved_saved_generic_id = context->generic_id;
+	context->generic_id = generic_id;
+
 	if (define.operator != NULL) {
 		assert(define.expression->kind == FUNCTION_NODE);
 		assert(arrlen(define.expression->function.function_type->function_type.arguments) > 0);
@@ -313,24 +320,36 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 
 		assert(argument0->kind == IDENTIFIER_NODE);
 
-		Lookup_Result lookup_result = lookup(context, argument0->identifier.value);
-		assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
-		Define_Operators *operators = hmget(context->operators, lookup_result.define.node);
+		Node *define_node = NULL;
+		Node *define_scope_node = NULL;
+		if (argument0->identifier.module != NULL) {
+			process_node(context, argument0->identifier.module);
+			Value *module_value = strip_define_data(evaluate(context, argument0->identifier.module));
+			for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
+				Node *statement = module_value->module.body->block.statements[i];
+				if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, argument0->identifier.value) == 0) {
+					define_node = statement;
+					define_scope_node = module_value->module.scopes[arrlen(module_value->module.scopes) - 1].node;
+					break;
+				}
+			}
+		} else {
+			Lookup_Result lookup_result = lookup(context, argument0->identifier.value);
+			assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
+			define_node = lookup_result.define.node;
+			define_scope_node = lookup_result.define.scope->node;
+		}
+
+		assert(define_scope_node == context->scopes[arrlen(context->scopes) - 2].node);
+		Define_Operators *operators = hmget(context->operators, define_node);
 		if (operators == NULL) {
 			operators = malloc(sizeof(Node_Types *));
 			*operators = NULL;
-			hmput(context->operators, lookup_result.define.node, operators);
+			hmput(context->operators, define_node, operators);
 		}
 
 		shput(*operators, define.operator, node);
 	}
-
-	Scope *saved_scopes = context->scopes;
-	if (scopes != NULL) context->scopes = scopes;
-	arrpush(context->scopes, (Scope) { .node = node });
-
-	size_t saved_saved_generic_id = context->generic_id;
-	context->generic_id = generic_id;
 
 	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
 		if (context->temporary_context.call_argument_types != NULL || context->temporary_context.call_wanted_type != NULL) {
@@ -396,17 +415,22 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		} else if (cached_data->define.kind == DEFINE_GENERIC) {
 			for (long int i = 0; i < arrlen(cached_data->define.generic_values); i++) {
 				if (arrlen(generics) == arrlen(cached_data->define.generic_values[i].generics)) {
+					bool cache = true;
 					for (long int j = 0; j < arrlen(cached_data->define.generic_values[i].generics); j++) {
-						if (type_assignable(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
-							Generic_Binding binding = cached_data->define.generic_values[i].value;
-							context->generic_id = saved_saved_generic_id;
-							(void) arrpop(context->scopes);
-							if (scopes != NULL) context->scopes = saved_scopes;
-							return (Process_Define_Result) {
-								.value = binding.binding,
-								.type = binding.type
-							};
+						if (!type_assignable(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
+							cache = false;
 						}
+					}
+
+					if (cache) {
+						Generic_Binding binding = cached_data->define.generic_values[i].value;
+						context->generic_id = saved_saved_generic_id;
+						(void) arrpop(context->scopes);
+						if (scopes != NULL) context->scopes = saved_scopes;
+						return (Process_Define_Result) {
+							.value = binding.binding,
+							.type = binding.type
+						};
 					}
 				}
 			}
@@ -424,23 +448,20 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		shput(arrlast(context->scopes).generic_bindings, define.generics[i].identifier, generics[i]);
 	}
 
-	// if (define.generic_constraint != NULL) {
-	// 	process_node(context, define.generic_constraint);
-	// 	Value *result = strip_define_data(evaluate(context, define.generic_constraint));
-	// 	if (!result->boolean.value) {
-	// 		return (Process_Define_Result) {};
-	// 	}
-	// }
-
 	process_node(context, define.expression);
 	Value *type = get_type(context, define.expression);
 	Value *value = evaluate(context, define.expression);
+
+	Scope *copied_scopes = NULL;
+	for (long int i = 0; i < arrlen(context->scopes) - 1; i++) {
+		arrpush(copied_scopes, context->scopes[i]);
+	}
 
 	Value *wrapped_value = value_new(DEFINE_DATA_VALUE);
 	wrapped_value->define_data.value = value;
 	wrapped_value->define_data.define_node = node;
 	wrapped_value->define_data.bindings = generics;
-	wrapped_value->define_data.scopes = scopes;
+	wrapped_value->define_data.scopes = copied_scopes;
 	wrapped_value->define_data.generic_id = generic_id;
 
 	context->generic_id = saved_generic_id;
@@ -558,7 +579,12 @@ static void process_call_method(Context *context, Node *node) {
 
 	context->temporary_context = temporary_context;
 	bool compile_only_parent = context->compile_only;
-	Process_Define_Result process_define_result = process_define(context, method_define_node, define_data.scopes, NULL, define_data.generic_id);
+
+	Scope *copied_scopes = NULL;
+	for (long int i = 0; i < arrlen(define_data.scopes); i++) {
+		arrpush(copied_scopes, define_data.scopes[i]);
+	}
+	Process_Define_Result process_define_result = process_define(context, method_define_node, copied_scopes, NULL, define_data.generic_id);
 	context->compile_only = compile_only_parent;
 
 	process_call_generic2(context, node, arguments, process_define_result.type);
@@ -1055,7 +1081,12 @@ static void process_array_access(Context *context, Node *node) {
 			Temporary_Context saved_temporary_context = context->temporary_context;
 			context->temporary_context = temporary_context;
 			bool compile_only_parent = context->compile_only;
-			array_access_define_result = process_define(context, array_access_define_node, define_data.scopes, NULL, define_data.generic_id);
+
+			Scope *copied_scopes = NULL;
+			for (long int i = 0; i < arrlen(define_data.scopes); i++) {
+				arrpush(copied_scopes, define_data.scopes[i]);
+			}
+			array_access_define_result = process_define(context, array_access_define_node, copied_scopes, NULL, define_data.generic_id);
 			context->compile_only = compile_only_parent;
 			context->temporary_context = saved_temporary_context;
 
