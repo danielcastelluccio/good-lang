@@ -269,6 +269,8 @@ typedef struct {
 
 typedef struct {
 	Value *array_like_type;
+	Value *item_type;
+	Node *fake_node;
 	Node *assign_value;
 	bool want_pointer;
 } Array_Access_Data;

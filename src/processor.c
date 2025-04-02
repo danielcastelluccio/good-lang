@@ -305,9 +305,15 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	if (define.operator != NULL) {
 		assert(define.expression->kind == FUNCTION_NODE);
 		assert(arrlen(define.expression->function.function_type->function_type.arguments) > 0);
-		assert(define.expression->function.function_type->function_type.arguments[0].type->kind == IDENTIFIER_NODE);
 
-		Lookup_Result lookup_result = lookup(context, define.expression->function.function_type->function_type.arguments[0].type->identifier.value);
+		Node *argument0 = define.expression->function.function_type->function_type.arguments[0].type;
+		if (strcmp(define.operator, "[]") == 0) {
+			argument0 = argument0->pointer.inner;
+		}
+
+		assert(argument0->kind == IDENTIFIER_NODE);
+
+		Lookup_Result lookup_result = lookup(context, argument0->identifier.value);
 		assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
 		Define_Operators *operators = hmget(context->operators, lookup_result.define.node);
 		if (operators == NULL) {
@@ -562,6 +568,7 @@ static void process_call_method(Context *context, Node *node) {
 	fake_node_data->identifier.kind = IDENTIFIER_VALUE;
 	fake_node_data->identifier.value = process_define_result.value;
 	set_data(context, fake_node, fake_node_data);
+	set_type(context, fake_node, process_define_result.type);
 
 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
 	data->call_method.function_type = process_define_result.type;
@@ -1019,28 +1026,66 @@ static void process_array_access(Context *context, Node *node) {
 	process_node(context, array_access.array);
 	process_node(context, array_access.index);
 
-	Value *array_like_type = strip_define_data(get_type(context, array_access.array));
+	Value *array_like_type = get_type(context, array_access.array);
 	Value *array_like_type_original = array_like_type;
-	if (array_like_type->tag != POINTER_TYPE_VALUE) {
+	if (strip_define_data(array_like_type)->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, array_access.array);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
 		process_node_context(context, temporary_context, array_access.array);
 
-		array_like_type = strip_define_data(get_type(context, array_access.array));
+		array_like_type = get_type(context, array_access.array);
 	}
 
-	if (array_like_type->tag != POINTER_TYPE_VALUE || strip_define_data(array_like_type->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
+	Node *fake_node = NULL;
+	Process_Define_Result array_access_define_result;
+	if (array_like_type->pointer_type.inner->tag == DEFINE_DATA_VALUE) {
+		Define_Data_Value define_data = array_like_type->pointer_type.inner->define_data;
+		Node *define_node = define_data.define_node;
+
+		Define_Operators *operators = hmget(context->operators, define_node);
+		if (operators != NULL) {
+			Node *array_access_define_node = shget(*operators, "[]");
+
+			Value **argument_types = NULL;
+			arrpush(argument_types, array_like_type);
+			arrpush(argument_types, get_type(context, array_access.index));
+			Temporary_Context temporary_context = { .call_argument_types = argument_types };
+
+			Temporary_Context saved_temporary_context = context->temporary_context;
+			context->temporary_context = temporary_context;
+			bool compile_only_parent = context->compile_only;
+			array_access_define_result = process_define(context, array_access_define_node, define_data.scopes, NULL, define_data.generic_id);
+			context->compile_only = compile_only_parent;
+			context->temporary_context = saved_temporary_context;
+
+			fake_node = ast_new(IDENTIFIER_NODE, (Source_Location) {});
+			Node_Data *fake_node_data = node_data_new(IDENTIFIER_NODE);
+			fake_node_data->identifier.kind = IDENTIFIER_VALUE;
+			fake_node_data->identifier.value = array_access_define_result.value;
+			set_data(context, fake_node, fake_node_data);
+			set_type(context, fake_node, array_access_define_result.type);
+		}
+	}
+
+	if (fake_node == NULL && strip_define_data(strip_define_data(array_like_type)->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type_outer(array_like_type_original, given_string);
+		print_type_outer(strip_define_data(array_like_type_original), given_string);
 		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
 	}
 
-	Value *item_type = array_like_type->pointer_type.inner->array_type.inner;
+	Value *item_type = NULL;
+	if (fake_node == NULL) {
+		item_type = strip_define_data(array_like_type)->pointer_type.inner->array_type.inner;
+	} else {
+		item_type = strip_define_data(array_access_define_result.type->function_type.return_type->pointer_type.inner);
+	}
 
 	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
 	data->array_access.array_like_type = array_like_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
+	data->array_access.fake_node = fake_node;
+	data->array_access.item_type = item_type;
 
 	if (context->temporary_context.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
@@ -1050,9 +1095,9 @@ static void process_array_access(Context *context, Node *node) {
 		if (!type_assignable(item_type, value_type)) {
 			handle_type_error(context->temporary_context.assign_node, item_type, value_type);
 		}
-		data->structure_access.assign_value = context->temporary_context.assign_value;
+		data->array_access.assign_value = context->temporary_context.assign_value;
 	} else {
-		if (data->structure_access.want_pointer) {
+		if (data->array_access.want_pointer) {
 			Value *pointer_item_type = value_new(POINTER_TYPE_VALUE);
 			pointer_item_type->pointer_type.inner = item_type;
 			item_type = pointer_item_type;

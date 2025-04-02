@@ -174,34 +174,30 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 	return NULL;
 }
 
+static LLVMValueRef generate_call_generic(Node *function, Node **arguments, State *state) {
+	LLVMValueRef function_llvm_value = generate_node(function, state);
+
+	LLVMValueRef *llvm_arguments = NULL;
+	for (unsigned int i = 0; i < arrlen(arguments); i++) {
+		arrpush(llvm_arguments, generate_node(arguments[i], state));
+	}
+
+	Value *function_type = get_type(&state->context, function);
+	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
+}
+
 static LLVMValueRef generate_call(Node *node, State *state) {
 	assert(node->kind == CALL_NODE);
 	Call_Node call = node->call;
 
-	LLVMValueRef function_llvm_value = generate_node(call.function, state);
-
-	LLVMValueRef *arguments = NULL;
-	for (unsigned int i = 0; i < arrlen(call.arguments); i++) {
-		arrpush(arguments, generate_node(call.arguments[i], state));
-	}
-
-	Value *function_type = get_data(&state->context, node)->call.function_type;
-	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, arguments, arrlen(arguments), "");
+	return generate_call_generic(call.function, call.arguments, state);
 }
 
 static LLVMValueRef generate_call_method(Node *node, State *state) {
 	assert(node->kind == CALL_METHOD_NODE);
 	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
 
-	LLVMValueRef function_llvm_value = generate_node(call_method_data.fake_node, state);
-
-	LLVMValueRef *arguments = NULL;
-	for (unsigned int i = 0; i < arrlen(call_method_data.arguments); i++) {
-		arrpush(arguments, generate_node(call_method_data.arguments[i], state));
-	}
-
-	Value *function_type = get_data(&state->context, node)->call.function_type;
-	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, arguments, arrlen(arguments), "");
+	return generate_call_generic(call_method_data.fake_node, call_method_data.arguments, state);
 }
 
 static LLVMValueRef generate_identifier(Node *node, State *state) {
@@ -404,20 +400,24 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 	Array_Access_Node array_access = node->array_access;
 
 	Array_Access_Data array_access_data = get_data(&state->context, node)->array_access;
-	Value *array_like_type = array_access_data.array_like_type;
-	strip_define_data(array_like_type);
 
-	Value *type = NULL;
+	Value *array_like_type = array_access_data.array_like_type;
 
 	LLVMValueRef array_llvm_value = generate_node(array_access.array, state);
 	LLVMValueRef element_pointer = NULL;
 
-	LLVMValueRef indices[2] = {
-		LLVMConstInt(LLVMInt64Type(), 0, false),
-		generate_node(array_access.index, state)
-	};
-	type = array_like_type->pointer_type.inner->array_type.inner;
-	element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner, state), array_llvm_value, indices, 2, "");
+	if (array_access_data.fake_node != NULL) {
+		Node **arguments = NULL;
+		arrpush(arguments, array_access.array);
+		arrpush(arguments, array_access.index);
+		element_pointer = generate_call_generic(array_access_data.fake_node, arguments, state);
+	} else {
+		LLVMValueRef indices[2] = {
+			LLVMConstInt(LLVMInt64Type(), 0, false),
+			generate_node(array_access.index, state)
+		};
+		element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner, state), array_llvm_value, indices, 2, "");
+	}
 
 	if (array_access_data.assign_value != NULL) {
 		LLVMBuildStore(state->llvm_builder, generate_node(array_access_data.assign_value, state), element_pointer);
@@ -426,7 +426,7 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 		if (array_access_data.want_pointer) {
 			return element_pointer;
 		} else  {
-			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), element_pointer, "");
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(array_access_data.item_type, state), element_pointer, "");
 		}
 	}
 }

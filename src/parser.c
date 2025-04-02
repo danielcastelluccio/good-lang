@@ -421,7 +421,19 @@ static Node *parse_define(Lexer *lexer) {
 	char *operator = NULL;
 	if (lexer_next(lexer, false).kind == KEYWORD && strcmp(lexer_next(lexer, false).string, "op") == 0) {
 		consume_check(lexer, KEYWORD);
-		operator = lexer_next(lexer, true).string;
+
+		Token_Data token = lexer_next(lexer, true);
+		switch (token.kind) {
+			case IDENTIFIER:
+				operator = token.string;
+				break;
+			case OPEN_BRACE:
+				consume_check(lexer, CLOSED_BRACE);
+				operator = "[]";
+				break;
+			default:
+				assert(false);
+		}
 	}
 
 	consume_check(lexer, EQUALS);
