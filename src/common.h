@@ -126,9 +126,9 @@ typedef struct {
 } Internal_Value;
 
 typedef struct {
+	Value *value;
 	Node *define_node;
 	Generic_Binding *bindings;
-	Value *value;
 	Scope *scopes;
 	size_t generic_id;
 } Define_Data_Value;
@@ -205,9 +205,13 @@ typedef struct {
 } Call_Data;
 
 typedef struct {
-	Value *function_type;
-	Node **arguments;
 	Value *function;
+	Value *function_type;
+} Custom_Operator_Function;
+
+typedef struct {
+	Node **arguments;
+	Custom_Operator_Function custom_operator_function;
 } Call_Method_Data;
 
 typedef struct {
@@ -268,10 +272,9 @@ typedef struct {
 } Deoption_Present_Data;
 
 typedef struct {
-	Value *array_like_type;
+	Value *array_type;
 	Value *item_type;
-	Value *function;
-	Value *function_type;
+	Custom_Operator_Function custom_operator_function;
 	Node *assign_value;
 	bool want_pointer;
 } Array_Access_Data;

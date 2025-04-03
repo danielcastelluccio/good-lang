@@ -540,6 +540,27 @@ static Scope *clone_scopes(Scope *scopes) {
 	return cloned;
 }
 
+static Process_Define_Result process_define_context(Context *context, Temporary_Context temporary_context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
+	Temporary_Context saved_temporary_context = context->temporary_context;
+	context->temporary_context = temporary_context;
+	bool compile_only_parent = context->compile_only;
+
+	Process_Define_Result process_define_result = process_define(context, node, scopes, generics, generic_id);
+	context->compile_only = compile_only_parent;
+
+	context->temporary_context = saved_temporary_context;
+	return process_define_result;
+}
+
+static Node *get_operator(Context *context, Node *define_node, char *operator) {
+	Define_Operators *operators = hmget(context->operators, define_node);
+	if (operators != NULL) {
+		return shget(*operators, operator);
+	}
+
+	return NULL;
+}
+
 static void process_call_method(Context *context, Node *node) {
 	Call_Method_Node call_method = node->call_method;
 
@@ -549,29 +570,22 @@ static void process_call_method(Context *context, Node *node) {
 		arrpush(arguments, call_method.arguments[i]);
 	}
 
-	process_node(context, arguments[0]);
-	Define_Data_Value define_data = get_type(context, arguments[0])->define_data;
+	process_node(context, call_method.argument1);
+	Define_Data_Value define_data = get_type(context, call_method.argument1)->define_data;
 	Node *define_node = define_data.define_node;
-	reset_node(context, arguments[0]);
 
-	Define_Operators *operators = hmget(context->operators, define_node);
-	assert(operators != NULL);
-
-	Node *method_define_node = shget(*operators, call_method.method);
+	Node *method_define_node = get_operator(context, define_node, call_method.method);
 	Temporary_Context temporary_context = process_call_generic1(context, arguments);
-
-	context->temporary_context = temporary_context;
-	bool compile_only_parent = context->compile_only;
-
-	Process_Define_Result process_define_result = process_define(context, method_define_node, clone_scopes(define_data.scopes), NULL, define_data.generic_id);
-	context->compile_only = compile_only_parent;
+	Process_Define_Result process_define_result = process_define_context(context, temporary_context, method_define_node, clone_scopes(define_data.scopes), NULL, define_data.generic_id);
 
 	process_call_generic2(context, node, arguments, process_define_result.type);
 
 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
-	data->call_method.function_type = process_define_result.type;
 	data->call_method.arguments = arguments;
-	data->call_method.function = strip_define_data(process_define_result.value);
+	data->call_method.custom_operator_function = (Custom_Operator_Function) {
+		.function = process_define_result.value,
+		.function_type = process_define_result.type
+	};
 	set_data(context, node, data);
 	set_type(context, node, process_define_result.type->function_type.return_type);
 }
@@ -673,15 +687,13 @@ static void process_identifier(Context *context, Node *node) {
 		}
 
 		if (define_node != NULL) {
-			bool compile_only_parent = context->compile_only;
-			Process_Define_Result result = process_define(context, define_node, define_scopes, generics, generic_id);
+			Process_Define_Result result = process_define_context(context, context->temporary_context, define_node, define_scopes, generics, generic_id);
 			type = result.type;
 			value = result.value;
 
 			if (type == NULL) {
 				handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
 			}
-			context->compile_only = compile_only_parent;
 		}
 
 		if (lookup_result.tag == LOOKUP_RESULT_VARIABLE) {
@@ -1024,64 +1036,55 @@ static void process_array_access(Context *context, Node *node) {
 	process_node(context, array_access.array);
 	process_node(context, array_access.index);
 
-	Value *array_like_type = get_type(context, array_access.array);
-	Value *array_like_type_original = array_like_type;
-	if (strip_define_data(array_like_type)->tag != POINTER_TYPE_VALUE) {
+	Value *array_type = get_type(context, array_access.array);
+	Value *array_type_original = array_type;
+	if (strip_define_data(array_type)->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, array_access.array);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
 		process_node_context(context, temporary_context, array_access.array);
 
-		array_like_type = get_type(context, array_access.array);
+		array_type = get_type(context, array_access.array);
 	}
 
-	Value *array_access_function = NULL;
-	Value *array_access_function_type = NULL;
+	Custom_Operator_Function custom_operator_function = {};
 	Process_Define_Result array_access_define_result;
-	if (array_like_type->pointer_type.inner->tag == DEFINE_DATA_VALUE) {
-		Define_Data_Value define_data = array_like_type->pointer_type.inner->define_data;
+	if (array_type->pointer_type.inner->tag == DEFINE_DATA_VALUE) {
+		Define_Data_Value define_data = array_type->pointer_type.inner->define_data;
 		Node *define_node = define_data.define_node;
 
-		Define_Operators *operators = hmget(context->operators, define_node);
-		if (operators != NULL) {
-			Node *array_access_define_node = shget(*operators, "[]");
+		Node *array_access_define_node = get_operator(context, define_node, "[]");
 
-			Value **argument_types = NULL;
-			arrpush(argument_types, array_like_type);
-			arrpush(argument_types, get_type(context, array_access.index));
-			Temporary_Context temporary_context = { .call_argument_types = argument_types };
+		Value **argument_types = NULL;
+		arrpush(argument_types, array_type);
+		arrpush(argument_types, get_type(context, array_access.index));
+		Temporary_Context temporary_context = { .call_argument_types = argument_types };
 
-			Temporary_Context saved_temporary_context = context->temporary_context;
-			context->temporary_context = temporary_context;
-			bool compile_only_parent = context->compile_only;
+		array_access_define_result = process_define_context(context, temporary_context, array_access_define_node, clone_scopes(define_data.scopes), NULL, define_data.generic_id);
 
-			array_access_define_result = process_define(context, array_access_define_node, clone_scopes(define_data.scopes), NULL, define_data.generic_id);
-			context->compile_only = compile_only_parent;
-			context->temporary_context = saved_temporary_context;
-
-			array_access_function = strip_define_data(array_access_define_result.value);
-			array_access_function_type = array_access_define_result.type;
-		}
+		custom_operator_function = (Custom_Operator_Function) {
+			.function = array_access_define_result.value,
+			.function_type = array_access_define_result.type
+		};
 	}
 
-	if (array_access_function == NULL && strip_define_data(strip_define_data(array_like_type)->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
+	if (custom_operator_function.function == NULL && strip_define_data(strip_define_data(array_type)->pointer_type.inner)->tag != ARRAY_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type_outer(strip_define_data(array_like_type_original), given_string);
+		print_type_outer(strip_define_data(array_type_original), given_string);
 		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
 	}
 
 	Value *item_type = NULL;
-	if (array_access_function == NULL) {
-		item_type = strip_define_data(array_like_type)->pointer_type.inner->array_type.inner;
+	if (custom_operator_function.function == NULL) {
+		item_type = strip_define_data(array_type)->pointer_type.inner->array_type.inner;
 	} else {
 		item_type = strip_define_data(array_access_define_result.type->function_type.return_type->pointer_type.inner);
 	}
 
 	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
-	data->array_access.array_like_type = array_like_type;
+	data->array_access.array_type = array_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
-	data->array_access.function = array_access_function;
-	data->array_access.function_type = array_access_function_type;
+	data->array_access.custom_operator_function = custom_operator_function;
 	data->array_access.item_type = item_type;
 
 	if (context->temporary_context.assign_value != NULL) {

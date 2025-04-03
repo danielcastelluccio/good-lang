@@ -195,7 +195,8 @@ static LLVMValueRef generate_call_method(Node *node, State *state) {
 	assert(node->kind == CALL_METHOD_NODE);
 	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
 
-	return generate_call_generic(generate_value(call_method_data.function, state), call_method_data.function_type, call_method_data.arguments, state);
+	Value *function_value = strip_define_data(call_method_data.custom_operator_function.function);
+	return generate_call_generic(generate_value(function_value, state), call_method_data.custom_operator_function.function_type, call_method_data.arguments, state);
 }
 
 static LLVMValueRef generate_identifier(Node *node, State *state) {
@@ -399,22 +400,24 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 
 	Array_Access_Data array_access_data = get_data(&state->context, node)->array_access;
 
-	Value *array_like_type = array_access_data.array_like_type;
+	Value *array_type = array_access_data.array_type;
 
 	LLVMValueRef array_llvm_value = generate_node(array_access.array, state);
 	LLVMValueRef element_pointer = NULL;
 
-	if (array_access_data.function != NULL) {
+	if (array_access_data.custom_operator_function.function != NULL) {
 		Node **arguments = NULL;
 		arrpush(arguments, array_access.array);
 		arrpush(arguments, array_access.index);
-		element_pointer = generate_call_generic(generate_value(array_access_data.function, state), array_access_data.function_type, arguments, state);
+
+		Value *function_value = strip_define_data(array_access_data.custom_operator_function.function);
+		element_pointer = generate_call_generic(generate_value(function_value, state), array_access_data.custom_operator_function.function_type, arguments, state);
 	} else {
 		LLVMValueRef indices[2] = {
 			LLVMConstInt(LLVMInt64Type(), 0, false),
 			generate_node(array_access.index, state)
 		};
-		element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_like_type->pointer_type.inner, state), array_llvm_value, indices, 2, "");
+		element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_type->pointer_type.inner, state), array_llvm_value, indices, 2, "");
 	}
 
 	if (array_access_data.assign_value != NULL) {
