@@ -76,9 +76,9 @@ bool value_equal(Value *value1, Value *value2) {
 		case INTEGER_VALUE: {
 			return value1->integer.value == value2->integer.value;
 		}
-		case DEFINE_DATA_VALUE: {
-			return value_equal(value1->define_data.value, value2->define_data.value);
-		}
+		// case DEFINE_DATA_VALUE: {
+		// 	return value_equal(value1->define_data.value, value2->define_data.value);
+		// }
 		default:
 			assert(false);
 	}
@@ -152,9 +152,9 @@ bool type_assignable(Value *type1, Value *type2) {
 		case INTEGER_VALUE: {
 			return type1->integer.value == type2->integer.value;
 		}
-		case DEFINE_DATA_VALUE: {
-			return type_assignable(type1->define_data.value, type2->define_data.value);
-		}
+		// case DEFINE_DATA_VALUE: {
+		// 	return type_assignable(type1->define_data.value, type2->define_data.value);
+		// }
 		default:
 			assert(false);
 	}

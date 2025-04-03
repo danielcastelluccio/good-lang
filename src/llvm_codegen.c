@@ -111,10 +111,10 @@ static LLVMTypeRef create_llvm_type(Value *value, State *state) {
 		case ENUM_TYPE_VALUE: {
 			return LLVMInt64Type();
 		}
-		case DEFINE_DATA_VALUE: {
-			Define_Data_Value define_data = value->define_data;
-			return create_llvm_type(define_data.value, state);
-		}
+		// case DEFINE_DATA_VALUE: {
+		// 	Define_Data_Value define_data = value->define_data;
+		// 	return create_llvm_type(define_data.value, state);
+		// }
 		default:
 			assert(false);
 	}
@@ -137,7 +137,6 @@ static void generate_define(Node *node, State *state) {
 	if (value == NULL) {
 		return;
 	}
-	value = strip_define_data(value);
 
 	LLVMValueRef llvm_value = generate_value(value, state);
 	if (strcmp(define.identifier, "main") == 0) {
@@ -195,7 +194,7 @@ static LLVMValueRef generate_call_method(Node *node, State *state) {
 	assert(node->kind == CALL_METHOD_NODE);
 	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
 
-	Value *function_value = strip_define_data(call_method_data.custom_operator_function.function);
+	Value *function_value = call_method_data.custom_operator_function.function;
 	return generate_call_generic(generate_value(function_value, state), call_method_data.custom_operator_function.function_type, call_method_data.arguments, state);
 }
 
@@ -230,7 +229,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 		}
 		
 		case IDENTIFIER_VALUE: {
-			return generate_value(strip_define_data(identifier_data->identifier.value), state);
+			return generate_value(identifier_data->identifier.value, state);
 		}
 		default:
 			assert(false);
@@ -299,7 +298,6 @@ static LLVMValueRef generate_struct(Node *node, State *state) {
 	Structure_Node structure = node->structure;
 
 	Value *type = get_data(&state->context, node)->structure.type;
-	type = strip_define_data(type);
 
 	switch (type->tag) {
 		case STRUCT_TYPE_VALUE: {
@@ -362,7 +360,6 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 
 	Structure_Access_Data data = get_data(&state->context, node)->structure_access;
 	Value *structure_type = data.structure_value;
-	structure_type = strip_define_data(structure_type);
 
 	unsigned int index = 0;
 	Value *type = NULL;
@@ -410,7 +407,7 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 		arrpush(arguments, array_access.array);
 		arrpush(arguments, array_access.index);
 
-		Value *function_value = strip_define_data(array_access_data.custom_operator_function.function);
+		Value *function_value = array_access_data.custom_operator_function.function;
 		element_pointer = generate_call_generic(generate_value(function_value, state), array_access_data.custom_operator_function.function_type, arguments, state);
 	} else {
 		LLVMValueRef indices[2] = {

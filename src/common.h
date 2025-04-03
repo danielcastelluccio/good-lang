@@ -36,7 +36,6 @@ typedef enum {
 	ENUM_VALUE,
 	STRING_VALUE,
 	MODULE_TYPE_VALUE,
-	DEFINE_DATA_VALUE,
 	NONE_VALUE,
 	INTERNAL_VALUE
 } Value_Tag;
@@ -126,12 +125,11 @@ typedef struct {
 } Internal_Value;
 
 typedef struct {
-	Value *value;
 	Node *define_node;
 	Generic_Binding *bindings;
 	Scope *scopes;
 	size_t generic_id;
-} Define_Data_Value;
+} Value_Data;
 
 struct Value {
 	Value_Tag tag;
@@ -152,8 +150,8 @@ struct Value {
 		Enum_Value enum_;
 		String_Value string;
 		Internal_Value internal;
-		Define_Data_Value define_data;
 	};
+	Value_Data *value_data; // stb_ds
 };
 
 Value *value_new(Value_Tag tag);
@@ -385,8 +383,6 @@ Node_Data *get_data(Context *context, Node *node);
 void set_data(Context *context, Node *node, Node_Data *value);
 
 void reset_node(Context *context, Node *node);
-
-Value *strip_define_data(Value *value);
 
 Value *create_string_type();
 Value *create_boolean_type();

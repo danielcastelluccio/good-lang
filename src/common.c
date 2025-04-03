@@ -90,13 +90,6 @@ void reset_node(Context *context, Node *node) {
 	(void) hmdel(*node_datas, node);
 }
 
-Value *strip_define_data(Value *value) {
-	while (value->tag == DEFINE_DATA_VALUE) {
-		value = value->define_data.value;
-	}
-	return value;
-}
-
 Value *create_string_type() {
 	return value_new(STRING_TYPE_VALUE);
 }
