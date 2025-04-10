@@ -488,12 +488,16 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 static Temporary_Context process_call_generic1(Context *context, Node **arguments) {
 	Value **argument_types = NULL;
 	for (long int i = 0; i < arrlen(arguments); i++) {
-		Temporary_Context temporary_context = { .wanted_type = NULL };
-		process_node_context(context, temporary_context, arguments[i]);
-		Value *type = get_type(context, arguments[i]);;
-		arrpush(argument_types, type);
+		Value *type = get_type(context, arguments[i]);
+		if (type == NULL) {
+			Temporary_Context temporary_context = { .wanted_type = NULL };
+			process_node_context(context, temporary_context, arguments[i]);
 
-		reset_node(context, arguments[i]);
+			type = get_type(context, arguments[i]);
+			reset_node(context, arguments[i]);
+		}
+
+		arrpush(argument_types, type);
 	}
 
 	return (Temporary_Context) { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
@@ -581,7 +585,16 @@ static void process_call_method(Context *context, Node *node) {
 
 	process_node(context, call_method.argument1);
 	Value *argument1_type = get_type(context, call_method.argument1);
-	Value_Data value_data = argument1_type->value_data[arrlen(argument1_type->value_data) - 1];
+	if (argument1_type->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, call_method.argument1);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, call_method.argument1);
+
+		argument1_type = get_type(context, call_method.argument1);
+	}
+
+	Value_Data value_data = argument1_type->pointer_type.inner->value_data[arrlen(argument1_type->pointer_type.inner->value_data) - 1];
 	Node *define_node = value_data.define_node;
 
 	Node *method_define_node = get_operator(context, define_node, call_method.method);

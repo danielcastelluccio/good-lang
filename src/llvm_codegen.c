@@ -943,7 +943,7 @@ void build_llvm(Context context, Node *root, void *data) {
 	generate_node(root->module.body, &state);
 	generate_main(&state);
 
-	LLVMPrintModuleToFile(llvm_module, "main.ll", NULL);
+	LLVMPrintModuleToFile(llvm_module, "output.ll", NULL);
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.o", LLVMObjectFile, NULL);
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.s", LLVMAssemblyFile, NULL);
 
