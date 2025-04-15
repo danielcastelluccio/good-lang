@@ -211,9 +211,64 @@ def a = fn(): uint {
 
 
 
+def identity#(T: type) = fn(t: T) {
+	yield t;
+}
 
+def identity = gen(T: type) fn(t: T) {
+	yield t;
+}
 
+def identity = fn(t: $T) {
+	yield t;
+}
 
+def identity = #(T: type) fn(t: T) {
+	yield t;
+}
 
+def foo = #(T: type, U: type) struct {
+	a: T,
+	b: U
+};
 
+def bar = #(T: type) foo#(T, uint);
 
+// Upsides, generic things can be values on their own
+def main = fn() {
+	var a: bar#(uint);
+	var b = identity(a);
+};
+
+def slice = mod {
+	// Generic(Operator(Struct))
+	def slice = #(T: type) struct {
+		len: uint,
+		ptr: ^[]T,
+	} op {
+		[] = fn(slice: ^slice#(T), index: uint): ^T {
+			yield &slice.ptr[index];
+		},
+		slice = fn(slice: slice#(T), start: uint, end: uint): slice#(T) {
+			yield .{ end - start, &slice.ptr[start] };
+		}
+	};
+
+	def new = #(T: type, U: type) fn(array: ^[U]T): slice#(T) {
+		yield .{ U, array };
+	};
+};
+
+def A = #(T: type) mod {
+	def B = #(U: type) struct {
+		t: T,
+		u: U
+	};
+};
+
+var x: A#(uint)::B#(uint);
+var y: A#(str)::B#(uint) = x; // should be invalid
+
+var x = slice::new(&array);
+// Instead of checking the define data of the type, can use the type directly
+x[4] = 5;

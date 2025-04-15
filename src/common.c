@@ -4,9 +4,9 @@
 
 #include "common.h"
 
-Value *value_new(Value_Tag tag) {
-	Value *value = malloc(sizeof(Value));
-	memset(value, 0, sizeof(Value));
+Value_Data *value_new(Value_Tag tag) {
+	Value_Data *value = malloc(sizeof(Value_Data));
+	memset(value, 0, sizeof(Value_Data));
 	value->tag = tag;
 	return value;
 }
@@ -18,7 +18,7 @@ Node_Data *node_data_new(Node_Kind kind) {
 	return data;
 }
 
-Value *get_type(Context *context, Node *node) {
+Value get_type(Context *context, Node *node) {
 	Node_Types *node_types = hmget(context->node_types, context->generic_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
@@ -26,8 +26,8 @@ Value *get_type(Context *context, Node *node) {
 		hmput(context->node_types, context->generic_id, node_types);
 	}
 
-	Value *result = hmget(*node_types, node);
-	if (result == NULL && context->generic_id != 0) {
+	Value result = hmget(*node_types, node);
+	if (result.value == NULL && context->generic_id != 0) {
 		size_t saved_generic_id = context->generic_id;
 		context->generic_id = 0;
 		result = get_type(context, node);
@@ -36,14 +36,14 @@ Value *get_type(Context *context, Node *node) {
 	return result;
 }
 
-void set_type(Context *context, Node *node, Value *value) {
+void set_type(Context *context, Node *node, Value type) {
 	Node_Types *node_types = hmget(context->node_types, context->generic_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
 		*node_types = NULL;
 		hmput(context->node_types, context->generic_id, node_types);
 	}
-	hmput(*node_types, node, value);
+	hmput(*node_types, node, type);
 }
 
 Node_Data *get_data(Context *context, Node *node) {
@@ -90,16 +90,16 @@ void reset_node(Context *context, Node *node) {
 	(void) hmdel(*node_datas, node);
 }
 
-Value *create_string_type() {
-	return value_new(STRING_TYPE_VALUE);
+Value create_string_type() {
+	return (Value) { .value = value_new(STRING_TYPE_VALUE) };
 }
 
-Value *create_boolean_type() {
+Value create_boolean_type() {
 	return create_internal_type("bool");
 }
 
-Value *create_internal_type(char *identifier) {
-	Value *internal_type = value_new(INTERNAL_VALUE);
+Value create_internal_type(char *identifier) {
+	Value_Data *internal_type = value_new(INTERNAL_VALUE);
 	internal_type->internal.identifier = identifier;
-	return internal_type;
+	return (Value) { .value = internal_type };
 }

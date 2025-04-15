@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
 
+#include "ast.h"
+#include "common.h"
 #include "stb/ds.h"
 
 #include "evaluator.h"
@@ -18,11 +20,11 @@ typedef struct {
 			Scope *scope;
 		} define;
 		Node *variable;
-		Value *generic;
+		Value_Data *generic;
 		size_t argument;
 		size_t enum_variant;
 	};
-	Value *type;
+	Value type;
 	enum {
 		LOOKUP_RESULT_FAIL,
 		LOOKUP_RESULT_DEFINE,
@@ -39,11 +41,11 @@ typedef struct {
 } Lookup_Define_Result;
 
 static Lookup_Result lookup(Context *context, char *identifier) {
-	if (context->temporary_context.wanted_type != NULL) {
-		Value *wanted_type = context->temporary_context.wanted_type;
-		if (wanted_type->tag == ENUM_TYPE_VALUE) {
-			for (long int i = 0; i < arrlen(wanted_type->enum_type.items); i++) {
-				if (strcmp(identifier, wanted_type->enum_type.items[i]) == 0) {
+	if (context->temporary_context.wanted_type.value != NULL) {
+		Value wanted_type = context->temporary_context.wanted_type;
+		if (wanted_type.value->tag == ENUM_TYPE_VALUE) {
+			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
+				if (strcmp(identifier, wanted_type.value->enum_type.items[i]) == 0) {
 					return (Lookup_Result) { .tag = LOOKUP_RESULT_ENUM_VARIANT, .enum_variant = i, .type = context->temporary_context.wanted_type };
 				}
 			}
@@ -65,15 +67,15 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			Node *current_function_type = scope->node->function.function_type;
 			for (long int i = 0; i < arrlen(current_function_type->function_type.arguments); i++) {
 				if (strcmp(current_function_type->function_type.arguments[i].identifier, identifier) == 0) {
-					return (Lookup_Result) { .tag = LOOKUP_RESULT_ARGUMENT, .argument = i, .type = get_data(context, current_function_type)->function_type.value->function_type.arguments[i].type };
+					return (Lookup_Result) { .tag = LOOKUP_RESULT_ARGUMENT, .argument = i, .type = get_data(context, current_function_type)->function_type.value.value->function_type.arguments[i].type };
 				}
 			}
 		}
 
-		Generic_Binding binding = shget(scope->generic_bindings, identifier);
-		if (binding.type != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_GENERIC, .generic = binding.binding, .type = binding.type };
-		}
+		// Generic_Binding binding = shget(scope->generic_bindings, identifier);
+		// if (binding.type != NULL) {
+		// 	return (Lookup_Result) { .tag = LOOKUP_RESULT_GENERIC, .generic = binding.binding, .type = binding.type };
+		// }
 
 		Node *node = scope->node;
 		switch (node->kind) {
@@ -98,33 +100,88 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 	exit(1); \
 }
 
-static int print_type(Value *value, char *buffer) {
+static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 	char *buffer_start = buffer;
-	switch (value->tag) {
+	if (pointer) {
+		buffer += sprintf(buffer, "^");
+	}
+
+	switch (type_node->kind) {
+		// case POINTER_NODE: {
+		// 	buffer += sprintf(buffer, "^");
+		// 	buffer += print_type_node(type_node->pointer.inner, false, buffer);
+		// 	break;
+		// }
+		// case STRUCT_TYPE_NODE: {
+		// 	buffer += sprintf(buffer, "struct{");
+		// 	for (long int i = 0; i < arrlen(type_node->struct_type.items); i++) {
+		// 		buffer += sprintf(buffer, "%s:", type_node->struct_type.items[i].identifier);
+		// 		buffer += print_type_node(type_node->struct_type.items[i].type, false, buffer);
+		// 		if (i < arrlen(type_node->struct_type.items) - 1) {
+		// 			buffer += sprintf(buffer, ",");
+		// 		}
+		// 	}
+		// 	buffer += sprintf(buffer, "}");
+		// 	break;
+		// }
+		case IDENTIFIER_NODE: {
+			buffer += sprintf(buffer, "%s", type_node->identifier.value);
+			break;
+		}
+		case CALL_NODE: {
+			buffer += print_type_node(type_node->call.function, false, buffer);
+			buffer += sprintf(buffer, "(");
+			for (long int i = 0; i < arrlen(type_node->call.arguments); i++) {
+				buffer += print_type_node(type_node->call.arguments[i], false, buffer);
+				if (i < arrlen(type_node->call.arguments) - 1) {
+					buffer += sprintf(buffer, ",");
+				}
+			}
+			buffer += sprintf(buffer, ")");
+			break;
+		}
+		default:
+			assert(false);
+	}
+
+	return buffer - buffer_start;
+}
+
+static int print_type(Value type, char *buffer) {
+	// if (type.source != NULL) {
+	// 	return print_type_node(type.source, type.pointer, buffer);
+	// }
+
+	if (type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE)) {
+		return print_type_node(type.node, false, buffer);
+	}
+
+	char *buffer_start = buffer;
+	switch (type.value->tag) {
 		case POINTER_TYPE_VALUE: {
 			buffer += sprintf(buffer, "^");
-			buffer += print_type(value->pointer_type.inner, buffer);
+			buffer += print_type(type.value->pointer_type.inner, buffer);
 			break;
 		}
 		case ARRAY_TYPE_VALUE: {
 			buffer += sprintf(buffer, "[");
-			if (value->array_type.size != NULL) {
-				buffer += print_type(value->array_type.size, buffer);
+			if (type.value->array_type.size.value != NULL) {
+				buffer += print_type(type.value->array_type.size, buffer);
 			}
 			buffer += sprintf(buffer, "]");
-			buffer += print_type(value->array_type.inner, buffer);
+			buffer += print_type(type.value->array_type.inner, buffer);
 			break;
 		}
 		case INTERNAL_VALUE: {
-			buffer += sprintf(buffer, "%s", value->internal.identifier);
+			buffer += sprintf(buffer, "%s", type.value->internal.identifier);
 			break;
 		}
 		case STRUCT_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
-			for (long int i = 0; i < arrlen(value->struct_type.items); i++) {
-				buffer += sprintf(buffer, "%s:", value->struct_type.items[i].identifier);
-				buffer += print_type(value->struct_type.items[i].type, buffer);
-				if (i < arrlen(value->struct_type.items) - 1) {
+			for (long int i = 0; i < arrlen(type.value->struct_type.items); i++) {
+				buffer += sprintf(buffer, "%s:", type.value->struct_type.items[i].identifier);
+				buffer += print_type(type.value->struct_type.items[i].type, buffer);
+				if (i < arrlen(type.value->struct_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -133,10 +190,10 @@ static int print_type(Value *value, char *buffer) {
 		}
 		case UNION_TYPE_VALUE: {
 			buffer += sprintf(buffer, "union{");
-			for (long int i = 0; i < arrlen(value->union_type.items); i++) {
-				buffer += sprintf(buffer, "%s:", value->union_type.items[i].identifier);
-				buffer += print_type(value->union_type.items[i].type, buffer);
-				if (i < arrlen(value->union_type.items) - 1) {
+			for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
+				buffer += sprintf(buffer, "%s:", type.value->union_type.items[i].identifier);
+				buffer += print_type(type.value->union_type.items[i].type, buffer);
+				if (i < arrlen(type.value->union_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -145,9 +202,9 @@ static int print_type(Value *value, char *buffer) {
 		}
 		case ENUM_TYPE_VALUE: {
 			buffer += sprintf(buffer, "enum{");
-			for (long int i = 0; i < arrlen(value->enum_type.items); i++) {
-				buffer += sprintf(buffer, "%s", value->enum_type.items[i]);
-				if (i < arrlen(value->struct_type.items) - 1) {
+			for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
+				buffer += sprintf(buffer, "%s", type.value->enum_type.items[i]);
+				if (i < arrlen(type.value->struct_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -159,7 +216,7 @@ static int print_type(Value *value, char *buffer) {
 			break;
 		}
 		case INTEGER_VALUE: {
-			buffer += sprintf(buffer, "%li", value->integer.value);
+			buffer += sprintf(buffer, "%li", type.value->integer.value);
 			break;
 		}
 		case NONE_VALUE: {
@@ -167,8 +224,8 @@ static int print_type(Value *value, char *buffer) {
 			break;
 		}
 		// case DEFINE_DATA_VALUE: {
-		// 	buffer += sprintf(buffer, "%s", value->define_data.define_node->define.identifier);
-		// 	if (arrlen(value->define_data.bindings) > 0) {
+		// 	buffer += sprintf(buffer, "%s", type.value->define_data.define_node->define.identifier);
+		// 	if (arrlen(type.value->define_data.bindings) > 0) {
 		// 		buffer += sprintf(buffer, "#(");
 		// 		for (long int i = 0; i < arrlen(value->define_data.bindings); i++) {
 		// 			buffer += print_type(value->define_data.bindings[i].binding, buffer);
@@ -188,20 +245,20 @@ static int print_type(Value *value, char *buffer) {
 }
 
 
-static int print_type_outer(Value *value, char *buffer) {
+static int print_type_outer(Value type, char *buffer) {
 	char *buffer_start = buffer;
-	if (value == NULL) {
+	if (type.value == NULL) {
 		buffer += sprintf(buffer, "nothing");
 	} else {
 		buffer += sprintf(buffer, "'");
-		buffer += print_type(value, buffer);
+		buffer += print_type(type, buffer);
 		buffer += sprintf(buffer, "'");
 	}
 
 	return buffer - buffer_start;
 }
 
-static void handle_type_error(Node *node, Value *wanted, Value *given) {
+static void handle_type_error(Node *node, Value wanted, Value given) {
 	char wanted_string[64] = {};
 	print_type_outer(wanted, wanted_string);
 	char given_string[64] = {};
@@ -214,7 +271,7 @@ static void process_block(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(BLOCK_NODE);
 	data->block.wanted_type = context->temporary_context.wanted_type;
-	data->block.type = NULL;
+	data->block.type = (Value) {};
 	set_data(context, node, data);
 
 	arrpush(context->scopes, (Scope) { .node = node });
@@ -242,62 +299,62 @@ static void process_block(Context *context, Node *node) {
 }
 
 typedef struct {
-	Value *value;
-	Value *type;
+	Value value;
+	Value type;
 } Process_Define_Result;
 
-typedef struct { char *key; Value *value; } *Pattern_Match_Result;
+typedef struct { char *key; Value_Data *value; } *Pattern_Match_Result;
 
-static bool pattern_match(Node *node, Value *value, Context *context, Generic_Argument *generics, Pattern_Match_Result *match_result) {
-	switch (node->kind) {
-		case POINTER_NODE: {
-			if (value->tag == POINTER_TYPE_VALUE) {
-				return pattern_match(node->pointer.inner, value->pointer_type.inner, context, generics, match_result);
-			}
-			break;
-		}
-		case ARRAY_TYPE_NODE: {
-			if (value->tag == ARRAY_TYPE_VALUE) {
-				if (!pattern_match(node->array_type.inner, value->array_type.inner, context, generics, match_result)) return false;
-				return pattern_match(node->array_type.size, value->array_type.size, context, generics, match_result);
-			}
-			break;
-		}
-		case IDENTIFIER_NODE: {
-			for (long int i = 0; i < arrlen(generics); i++) {
-				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
-					Value *previous_value = shget(*match_result, generics[i].identifier);
-					if (previous_value != NULL) {
-						if (!value_equal(previous_value, value)) {
-							return false;
-						}
-					}
-
-					shput(*match_result, generics[i].identifier, value);
-					break;
-				}
-			}
-
-			for (long i = 0; i < arrlen(value->value_data); i++) {
-				Value_Data value_data = value->value_data[i];
-				Lookup_Result result = lookup(context, node->identifier.value);
-				assert(result.tag == LOOKUP_RESULT_DEFINE);
-				if (value_data.define_node == result.define.node) {
-					for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
-						if (!pattern_match(node->identifier.generics[i], value_data.bindings[i].binding, context, generics, match_result)) {
-							return false;
-						}
-					}
-				}
-			}
-			break;
-		}
-		default:
-			break;
-	}
-
-	return true;
-}
+// static bool pattern_match(Node *node, Value *value, Context *context, Generic_Argument *generics, Pattern_Match_Result *match_result) {
+// 	switch (node->kind) {
+// 		case POINTER_NODE: {
+// 			if (value->tag == POINTER_TYPE_VALUE) {
+// 				return pattern_match(node->pointer.inner, value->pointer_type.inner, context, generics, match_result);
+// 			}
+// 			break;
+// 		}
+// 		case ARRAY_TYPE_NODE: {
+// 			if (value->tag == ARRAY_TYPE_VALUE) {
+// 				if (!pattern_match(node->array_type.inner, value->array_type.inner, context, generics, match_result)) return false;
+// 				return pattern_match(node->array_type.size, value->array_type.size, context, generics, match_result);
+// 			}
+// 			break;
+// 		}
+// 		case IDENTIFIER_NODE: {
+// 			for (long int i = 0; i < arrlen(generics); i++) {
+// 				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
+// 					Value *previous_value = shget(*match_result, generics[i].identifier);
+// 					if (previous_value != NULL) {
+// 						if (!value_equal(previous_value, value)) {
+// 							return false;
+// 						}
+// 					}
+//
+// 					shput(*match_result, generics[i].identifier, value);
+// 					break;
+// 				}
+// 			}
+//
+// 			for (long i = 0; i < arrlen(value->value_data); i++) {
+// 				Value_Data value_data = value->value_data[i];
+// 				Lookup_Result result = lookup(context, node->identifier.value);
+// 				assert(result.tag == LOOKUP_RESULT_DEFINE);
+// 				if (value_data.define_node == result.define.node) {
+// 					for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
+// 						if (!pattern_match(node->identifier.generics[i], value_data.bindings[i].binding, context, generics, match_result)) {
+// 							return false;
+// 						}
+// 					}
+// 				}
+// 			}
+// 			break;
+// 		}
+// 		default:
+// 			break;
+// 	}
+//
+// 	return true;
+// }
 
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Define_Node define = node->define;
@@ -326,56 +383,56 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		shput(*operators, operator.operator, function_define_node);
 	}
 
-	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
-		if (context->temporary_context.call_argument_types != NULL || context->temporary_context.call_wanted_type != NULL) {
-			bool pattern_match_collision = false;
-			if (define.expression->kind == FUNCTION_NODE) {
-				Function_Type_Node function_type = define.expression->function.function_type->function_type;
-				Pattern_Match_Result result = NULL;
-				if (context->temporary_context.call_argument_types != NULL) {
-					for (long int i = 0; i < arrlen(function_type.arguments) && i < arrlen(context->temporary_context.call_argument_types); i++) {
-						Node *argument = function_type.arguments[i].type;
-						Value *argument_value = context->temporary_context.call_argument_types[i];
-						if (!pattern_match(argument, argument_value, context, define.generics, &result)) {
-							pattern_match_collision = true;
-						};
-					}
-				}
+	// if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
+	// 	if (context->temporary_context.call_argument_types != NULL || context->temporary_context.call_wanted_type != NULL) {
+	// 		bool pattern_match_collision = false;
+	// 		if (define.expression->kind == FUNCTION_NODE) {
+	// 			Function_Type_Node function_type = define.expression->function.function_type->function_type;
+	// 			Pattern_Match_Result result = NULL;
+	// 			if (context->temporary_context.call_argument_types != NULL) {
+	// 				for (long int i = 0; i < arrlen(function_type.arguments) && i < arrlen(context->temporary_context.call_argument_types); i++) {
+	// 					Node *argument = function_type.arguments[i].type;
+	// 					Value *argument_value = context->temporary_context.call_argument_types[i];
+	// 					if (!pattern_match(argument, argument_value, context, define.generics, &result)) {
+	// 						pattern_match_collision = true;
+	// 					};
+	// 				}
+	// 			}
 
-				Node *return_ = function_type.return_;
-				if (return_ != NULL && context->temporary_context.call_wanted_type != NULL) {
-					if (!pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result)) {
-						pattern_match_collision = true;
-					};
-				}
+	// 			Node *return_ = function_type.return_;
+	// 			if (return_ != NULL && context->temporary_context.call_wanted_type != NULL) {
+	// 				if (!pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result)) {
+	// 					pattern_match_collision = true;
+	// 				};
+	// 			}
 
-				generics = NULL;
-				for (long int i = 0; i < arrlen(define.generics); i++) {
-					process_node(context, define.generics[i].type);
+	// 			generics = NULL;
+	// 			for (long int i = 0; i < arrlen(define.generics); i++) {
+	// 				process_node(context, define.generics[i].type);
 
-					Value *binding = shget(result, define.generics[i].identifier);
-					if (binding != NULL) {
-						Generic_Binding generic_binding = {
-							.type = evaluate(context, define.generics[i].type),
-							.binding = binding
-						};
+	// 				Value *binding = shget(result, define.generics[i].identifier);
+	// 				if (binding != NULL) {
+	// 					Generic_Binding generic_binding = {
+	// 						.type = evaluate(context, define.generics[i].type),
+	// 						.binding = binding
+	// 					};
 
-						arrpush(generics, generic_binding);
-					}
-				}
-			}
+	// 					arrpush(generics, generic_binding);
+	// 				}
+	// 			}
+	// 		}
 
-			if (arrlen(generics) < arrlen(define.generics) || pattern_match_collision) {
-				(void) arrpop(context->scopes);
-				if (scopes != NULL) context->scopes = saved_scopes;
-				return (Process_Define_Result) {};
-			}
-		} else {
-			(void) arrpop(context->scopes);
-			if (scopes != NULL) context->scopes = saved_scopes;
-			return (Process_Define_Result) {};
-		}
-	}
+	// 		if (arrlen(generics) < arrlen(define.generics) || pattern_match_collision) {
+	// 			(void) arrpop(context->scopes);
+	// 			if (scopes != NULL) context->scopes = saved_scopes;
+	// 			return (Process_Define_Result) {};
+	// 		}
+	// 	} else {
+	// 		(void) arrpop(context->scopes);
+	// 		if (scopes != NULL) context->scopes = saved_scopes;
+	// 		return (Process_Define_Result) {};
+	// 	}
+	// }
 
 	Node_Data *cached_data = get_data(context, node);
 	if (cached_data != NULL) {
@@ -392,7 +449,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 				if (arrlen(generics) == arrlen(cached_data->define.generic_values[i].generics)) {
 					bool cache = true;
 					for (long int j = 0; j < arrlen(cached_data->define.generic_values[i].generics); j++) {
-						if (!type_assignable(generics[j].binding, cached_data->define.generic_values[i].generics[j].binding)) {
+						if (!type_assignable(generics[j].binding.value, cached_data->define.generic_values[i].generics[j].binding.value)) {
 							cache = false;
 						}
 					}
@@ -424,36 +481,36 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	}
 
 	process_node(context, define.expression);
-	Value *type = get_type(context, define.expression);
-	Value *value = evaluate(context, define.expression);
+	Value type = get_type(context, define.expression);
+	Value value = evaluate(context, define.expression);
 
 	Scope *copied_scopes = NULL;
 	for (long int i = 0; i < arrlen(context->scopes) - 1; i++) {
 		arrpush(copied_scopes, context->scopes[i]);
 	}
 
-	Value *wrapped_value = malloc(sizeof(Value));
-	memcpy(wrapped_value, value, sizeof(Value));
-	Value_Data value_data = {
-		.define_node = node,
-		.bindings = generics,
-		.scopes = copied_scopes,
-		.generic_id = generic_id
-	};
+	// Value *wrapped_value = malloc(sizeof(Value));
+	// memcpy(wrapped_value, value, sizeof(Value));
+	// Value_Data_Old value_data = {
+	// 	.define_node = node,
+	// 	.bindings = generics,
+	// 	.scopes = copied_scopes,
+	// 	.generic_id = generic_id
+	// };
 
-	Value_Data *cloned_value_data = NULL;
-	for (long int i = 0; i < arrlen(wrapped_value->value_data); i++) {
-		arrpush(cloned_value_data, wrapped_value->value_data[i]);
-	}
-	wrapped_value->value_data = cloned_value_data;
-	arrpush(wrapped_value->value_data, value_data);
+	// Value_Data_Old *cloned_value_data = NULL;
+	// for (long int i = 0; i < arrlen(wrapped_value->value_data); i++) {
+	// 	arrpush(cloned_value_data, wrapped_value->value_data[i]);
+	// }
+	// wrapped_value->value_data = cloned_value_data;
+	// arrpush(wrapped_value->value_data, value_data);
 
 	context->generic_id = saved_generic_id;
 	(void) arrpop(context->scopes);
 	if (scopes != NULL) context->scopes = saved_scopes;
 
 	Generic_Binding binding = {
-		.binding = wrapped_value,
+		.binding = value,
 		.type = type
 	};
 
@@ -480,16 +537,16 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 
 	context->generic_id = saved_saved_generic_id;
 	return (Process_Define_Result) {
-		.value = wrapped_value,
+		.value = value,
 		.type = type
 	};
 }
 
 static Temporary_Context process_call_generic1(Context *context, Node **arguments) {
-	Value **argument_types = NULL;
+	Value *argument_types = NULL;
 	for (long int i = 0; i < arrlen(arguments); i++) {
-		Value *type = get_type(context, arguments[i]);
-		if (type == NULL) {
+		Value type = get_type(context, arguments[i]);
+		if (type.value == NULL) {
 			Temporary_Context temporary_context = { .wanted_type = NULL };
 			process_node_context(context, temporary_context, arguments[i]);
 
@@ -503,28 +560,28 @@ static Temporary_Context process_call_generic1(Context *context, Node **argument
 	return (Temporary_Context) { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
 }
 
-static void process_call_generic2(Context *context, Node *node, Node **arguments, Value *function_type) {
-	if (function_type->tag != FUNCTION_TYPE_VALUE) {
+static void process_call_generic2(Context *context, Node *node, Node **arguments, Value function_type) {
+	if (function_type.value->tag != FUNCTION_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(function_type, given_string);
 		handle_semantic_error(node->location, "Expected function pointer, but got %s", given_string);
 	}
 
-	if (arrlen(arguments) != arrlen(function_type->function_type.arguments) && !function_type->function_type.variadic) {
-		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", arrlen(function_type->function_type.arguments), arrlen(arguments));
+	if (arrlen(arguments) != arrlen(function_type.value->function_type.arguments) && !function_type.value->function_type.variadic) {
+		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", arrlen(function_type.value->function_type.arguments), arrlen(arguments));
 	}
 
 	for (long int i = 0; i < arrlen(arguments); i++) {
-		Value *wanted_type = NULL;
-		if (i < arrlen(function_type->function_type.arguments) || !function_type->function_type.variadic) {
-			wanted_type = function_type->function_type.arguments[i].type;
+		Value wanted_type = {};
+		if (i < arrlen(function_type.value->function_type.arguments) || !function_type.value->function_type.variadic) {
+			wanted_type = function_type.value->function_type.arguments[i].type;
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = wanted_type };
 		process_node_context(context, temporary_context, arguments[i]);
-		Value *type = get_type(context, arguments[i]);;
+		Value type = get_type(context, arguments[i]);;
 
-		if (wanted_type != NULL && !type_assignable(wanted_type, type)) {
+		if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
 			handle_type_error(node, wanted_type, type);
 		}
 	}
@@ -535,23 +592,23 @@ static void process_call(Context *context, Node *node) {
 
 	Temporary_Context temporary_context = process_call_generic1(context, call.arguments);
 	process_node_context(context, temporary_context, call.function);
-	Value *function_type = get_type(context, call.function);
+	Value function_type = get_type(context, call.function);
 
 	process_call_generic2(context, node, call.arguments, function_type);
 
 	Node_Data *data = node_data_new(CALL_NODE);
 	data->call.function_type = function_type;
 	set_data(context, node, data);
-	set_type(context, node, function_type->function_type.return_type);
+	set_type(context, node, function_type.value->function_type.return_type);
 }
 
-static Scope *clone_scopes(Scope *scopes) {
-	Scope *cloned = NULL;
-	for (long int i = 0; i < arrlen(scopes); i++) {
-		arrpush(cloned, scopes[i]);
-	}
-	return cloned;
-}
+// static Scope *clone_scopes(Scope *scopes) {
+// 	Scope *cloned = NULL;
+// 	for (long int i = 0; i < arrlen(scopes); i++) {
+// 		arrpush(cloned, scopes[i]);
+// 	}
+// 	return cloned;
+// }
 
 static Process_Define_Result process_define_context(Context *context, Temporary_Context temporary_context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Temporary_Context saved_temporary_context = context->temporary_context;
@@ -565,53 +622,53 @@ static Process_Define_Result process_define_context(Context *context, Temporary_
 	return process_define_result;
 }
 
-static Node *get_operator(Context *context, Node *define_node, char *operator) {
-	Define_Operators *operators = hmget(context->operators, define_node);
-	if (operators != NULL) {
-		return shget(*operators, operator);
-	}
+// static Node *get_operator(Context *context, Node *define_node, char *operator) {
+// 	Define_Operators *operators = hmget(context->operators, define_node);
+// 	if (operators != NULL) {
+// 		return shget(*operators, operator);
+// 	}
+//
+// 	return NULL;
+// }
 
-	return NULL;
-}
-
-static void process_call_method(Context *context, Node *node) {
-	Call_Method_Node call_method = node->call_method;
-
-	Node **arguments = NULL;
-	arrpush(arguments, call_method.argument1);
-	for (long int i = 0; i < arrlen(call_method.arguments); i++) {
-		arrpush(arguments, call_method.arguments[i]);
-	}
-
-	process_node(context, call_method.argument1);
-	Value *argument1_type = get_type(context, call_method.argument1);
-	if (argument1_type->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, call_method.argument1);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, call_method.argument1);
-
-		argument1_type = get_type(context, call_method.argument1);
-	}
-
-	Value_Data value_data = argument1_type->pointer_type.inner->value_data[arrlen(argument1_type->pointer_type.inner->value_data) - 1];
-	Node *define_node = value_data.define_node;
-
-	Node *method_define_node = get_operator(context, define_node, call_method.method);
-	Temporary_Context temporary_context = process_call_generic1(context, arguments);
-	Process_Define_Result process_define_result = process_define_context(context, temporary_context, method_define_node, clone_scopes(value_data.scopes), NULL, value_data.generic_id);
-
-	process_call_generic2(context, node, arguments, process_define_result.type);
-
-	Node_Data *data = node_data_new(CALL_METHOD_NODE);
-	data->call_method.arguments = arguments;
-	data->call_method.custom_operator_function = (Custom_Operator_Function) {
-		.function = process_define_result.value,
-		.function_type = process_define_result.type
-	};
-	set_data(context, node, data);
-	set_type(context, node, process_define_result.type->function_type.return_type);
-}
+// static void process_call_method(Context *context, Node *node) {
+// 	Call_Method_Node call_method = node->call_method;
+//
+// 	Node **arguments = NULL;
+// 	arrpush(arguments, call_method.argument1);
+// 	for (long int i = 0; i < arrlen(call_method.arguments); i++) {
+// 		arrpush(arguments, call_method.arguments[i]);
+// 	}
+//
+// 	process_node(context, call_method.argument1);
+// 	Value_Data argument1_type = get_type(context, call_method.argument1);
+// 	if (argument1_type.value->tag != POINTER_TYPE_VALUE) {
+// 		reset_node(context, call_method.argument1);
+//
+// 		Temporary_Context temporary_context = { .want_pointer = true };
+// 		process_node_context(context, temporary_context, call_method.argument1);
+//
+// 		argument1_type = get_type(context, call_method.argument1);
+// 	}
+//
+// 	Value_Data_Old value_data = argument1_type.value->pointer_type.inner->value_data[arrlen(argument1_type.type->pointer_type.inner->value_data) - 1];
+// 	Node *define_node = value_data.define_node;
+//
+// 	Node *method_define_node = get_operator(context, define_node, call_method.method);
+// 	Temporary_Context temporary_context = process_call_generic1(context, arguments);
+// 	Process_Define_Result process_define_result = process_define_context(context, temporary_context, method_define_node, clone_scopes(value_data.scopes), NULL, value_data.generic_id);
+//
+// 	process_call_generic2(context, node, arguments, process_define_result.type);
+//
+// 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
+// 	data->call_method.arguments = arguments;
+// 	data->call_method.custom_operator_function = (Custom_Operator_Function) {
+// 		.function = process_define_result.value,
+// 		.function_type = process_define_result.type
+// 	};
+// 	set_data(context, node, data);
+// 	set_type(context, node, process_define_result.type.value->function_type.return_type);
+// }
 
 static void process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
@@ -623,8 +680,8 @@ static void process_identifier(Context *context, Node *node) {
 	for (long int i = 0; i < arrlen(identifier.generics); i++) {
 		Node *generic = identifier.generics[i];
 		process_node(context, generic);
-		Value *type = get_type(context, generic);
-		Value *value = evaluate(context, generic);
+		Value type = get_type(context, generic);
+		Value value = evaluate(context, generic);
 
 		Generic_Binding binding = {
 			.binding = value,
@@ -634,60 +691,65 @@ static void process_identifier(Context *context, Node *node) {
 		arrpush(generics, binding);
 	}
 
-	Value *value = NULL;
-	Value *type = NULL;
+	Value value = {};
+	Value type = {};
 	if (identifier.module == NULL &&
 			(strcmp(identifier.value, "byte") == 0
 			|| strcmp(identifier.value, "uint") == 0
 			|| strcmp(identifier.value, "flt") == 0
 			|| strcmp(identifier.value, "void") == 0
 			|| strcmp(identifier.value, "type") == 0)) {
-		value = value_new(INTERNAL_VALUE);
-		value->internal.identifier = identifier.value;
+		value.value = value_new(INTERNAL_VALUE);
+		value.value->internal.identifier = identifier.value;
 
-		type = value_new(INTERNAL_VALUE);
-		type->internal.identifier = "type";
+		type.value = value_new(INTERNAL_VALUE);
+		type.value->internal.identifier = "type";
+	} else if (strcmp(identifier.value, "str") == 0) {
+		value.value = value_new(INTERNAL_VALUE);
+		value.value->internal.identifier = identifier.value;
+
+		type.value = value_new(STRING_TYPE_VALUE);
 	} else if (strcmp(identifier.value, "import") == 0) {
-		value = value_new(INTERNAL_VALUE);
-		value->internal.identifier = identifier.value;
+		value.value = value_new(INTERNAL_VALUE);
+		value.value->internal.identifier = identifier.value;
 
-		type = value_new(FUNCTION_TYPE_VALUE);
+		type.value = value_new(FUNCTION_TYPE_VALUE);
 		Function_Argument_Value argument = {
 			.identifier = "",
 			.type = create_string_type()
 		};
-		arrpush(type->function_type.arguments, argument);
-		type->function_type.return_type = value_new(MODULE_TYPE_VALUE);
+		arrpush(type.value->function_type.arguments, argument);
+		type.value->function_type.return_type = (Value) { .value = value_new(MODULE_TYPE_VALUE) };
 	} else if (strcmp(identifier.value, "size_of") == 0) {
-		value = value_new(INTERNAL_VALUE);
-		value->internal.identifier = identifier.value;
+		value.value = value_new(INTERNAL_VALUE);
+		value.value->internal.identifier = identifier.value;
 
-		Value *type_type = value_new(INTERNAL_VALUE);
-		type_type->internal.identifier = "type";
+		Value_Data *type_value = value_new(INTERNAL_VALUE);
+		type_value->internal.identifier = "type";
 
-		type = value_new(FUNCTION_TYPE_VALUE);
+		type.value = value_new(FUNCTION_TYPE_VALUE);
 		Function_Argument_Value argument = {
 			.identifier = "",
-			.type = type_type
+			.type = (Value) { .value = type_value }
 		};
-		arrpush(type->function_type.arguments, argument);
-		type->function_type.return_type = value_new(INTERNAL_VALUE);
-		type->function_type.return_type->internal.identifier = "uint";
+		arrpush(type.value->function_type.arguments, argument);
+		type.value->function_type.return_type.value = value_new(INTERNAL_VALUE);
+		type.value->function_type.return_type.value->internal.identifier = "uint";
 	} else {
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
 		size_t generic_id = context->generic_id;
 		if (identifier.module != NULL) {
 			process_node(context, identifier.module);
-			Value *module_value = evaluate(context, identifier.module);
-			for (long int i = 0; i < arrlen(module_value->module.body->block.statements); i++) {
-				Node *statement = module_value->module.body->block.statements[i];
+			Value module_value = evaluate(context, identifier.module);
+			for (long int i = 0; i < arrlen(module_value.value->module.body->block.statements); i++) {
+				Node *statement = module_value.value->module.body->block.statements[i];
 				if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
 					define_node = statement;
-					generic_id = module_value->module.generic_id;
+					generic_id = module_value.value->module.generic_id;
 
-					for (long i = 0; i < arrlen(module_value->module.scopes); i++) {
-						arrpush(define_scopes, module_value->module.scopes[i]);
+					for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
+						arrpush(define_scopes, module_value.value->module.scopes[i]);
 					}
 					break;
 				}
@@ -714,7 +776,7 @@ static void process_identifier(Context *context, Node *node) {
 			type = result.type;
 			value = result.value;
 
-			if (type == NULL) {
+			if (type.value == NULL) {
 				handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
 			}
 		}
@@ -725,17 +787,17 @@ static void process_identifier(Context *context, Node *node) {
 
 			type = lookup_result.type;
 			if (data->identifier.want_pointer) {
-				Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+				Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
 				pointer_type->pointer_type.inner = type;
-				type = pointer_type;
+				type = (Value) { .value = pointer_type };
 			}
 
 			if (context->temporary_context.assign_value != NULL) {
 				Temporary_Context temporary_context = { .wanted_type = type };
 				process_node_context(context, temporary_context, context->temporary_context.assign_value);
 
-				Value *value_type = get_type(context, context->temporary_context.assign_value);
-				if (!type_assignable(type, value_type)) {
+				Value value_type = get_type(context, context->temporary_context.assign_value);
+				if (!type_assignable(type.value, value_type.value)) {
 					handle_type_error(context->temporary_context.assign_node, type, value_type);
 				}
 
@@ -749,30 +811,30 @@ static void process_identifier(Context *context, Node *node) {
 
 			type = lookup_result.type;
 			if (data->identifier.want_pointer) {
-				Value *pointer_type = value_new(POINTER_TYPE_VALUE);
+				Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
 				pointer_type->pointer_type.inner = type;
-				type = pointer_type;
+				type = (Value) { .value = pointer_type };
 			}
 		}
 
-		if (lookup_result.tag == LOOKUP_RESULT_GENERIC) {
-			value = lookup_result.generic;
-			type = lookup_result.type;
-		}
+		// if (lookup_result.tag == LOOKUP_RESULT_GENERIC) {
+		// 	value = lookup_result.generic;
+		// 	type = lookup_result.type;
+		// }
 
 		if (lookup_result.tag == LOOKUP_RESULT_ENUM_VARIANT) {
-			value = value_new(ENUM_VALUE);
-			value->enum_.value = lookup_result.enum_variant;
+			value.value = value_new(ENUM_VALUE);
+			value.value->enum_.value = lookup_result.enum_variant;
 			type = lookup_result.type;
 		}
 	}
 
-	if (type == NULL) {
+	if (type.value == NULL) {
 		handle_semantic_error(node->location, "Identifier '%s' not found", identifier.value);
 	}
 
-	if (value != NULL) {
-		if (value->tag == INTERNAL_VALUE && strcmp(value->internal.identifier, "type") == 0) {
+	if (value.value != NULL) {
+		if (value.value->tag == INTERNAL_VALUE && strcmp(value.value->internal.identifier, "type") == 0) {
 			context->compile_only = true;
 		}
 
@@ -788,7 +850,7 @@ static void process_identifier(Context *context, Node *node) {
 static void process_module(Context *context, Node *node) {
 	Module_Node module = node->module;
 	process_node(context, module.body);
-	set_type(context, node, value_new(MODULE_TYPE_VALUE));
+	set_type(context, node, (Value) { .value = value_new(MODULE_TYPE_VALUE) });
 }
 
 static void process_struct_type(Context *context, Node *node) {
@@ -797,9 +859,9 @@ static void process_struct_type(Context *context, Node *node) {
 		process_node(context, struct_type.items[i].type);
 	}
 
-	Value *value = value_new(INTERNAL_VALUE);
+	Value_Data *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
-	set_type(context, node, value);
+	set_type(context, node, (Value) { .value = value });
 }
 
 static void process_union_type(Context *context, Node *node) {
@@ -808,15 +870,15 @@ static void process_union_type(Context *context, Node *node) {
 		process_node(context, union_type.items[i].type);
 	}
 
-	Value *value = value_new(INTERNAL_VALUE);
+	Value_Data *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
-	set_type(context, node, value);
+	set_type(context, node, (Value) { .value = value });
 }
 
 static void process_enum_type(Context *context, Node *node) {
-	Value *value = value_new(INTERNAL_VALUE);
+	Value_Data *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
-	set_type(context, node, value);
+	set_type(context, node, (Value) { .value = value });
 }
 
 static void process_string(Context *context, Node *node) {
@@ -849,17 +911,17 @@ static void process_string(Context *context, Node *node) {
 		}
 	}
 
-	Value *type = context->temporary_context.wanted_type;
+	Value type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
-	if (type == NULL) invalid_type = true;
-	else if (type->tag == POINTER_TYPE_VALUE && type->pointer_type.inner->tag == ARRAY_TYPE_VALUE && type->pointer_type.inner->array_type.inner->tag == INTERNAL_VALUE && strcmp(type->pointer_type.inner->array_type.inner->internal.identifier, "byte") == 0) {
-		type = value_new(POINTER_TYPE_VALUE);
-		type->pointer_type.inner = value_new(ARRAY_TYPE_VALUE);
-		type->pointer_type.inner->array_type.inner = create_internal_type("byte");
-		type->pointer_type.inner->array_type.size = value_new(INTEGER_VALUE);
-		type->pointer_type.inner->array_type.size->integer.value = new_index;
+	if (type.value == NULL) invalid_type = true;
+	else if (type.value->tag == POINTER_TYPE_VALUE && type.value->pointer_type.inner.value->tag == ARRAY_TYPE_VALUE && type.value->pointer_type.inner.value->array_type.inner.value->tag == INTERNAL_VALUE && strcmp(type.value->pointer_type.inner.value->array_type.inner.value->internal.identifier, "byte") == 0) {
+		type.value = value_new(POINTER_TYPE_VALUE);
+		type.value->pointer_type.inner.value = value_new(ARRAY_TYPE_VALUE);
+		type.value->pointer_type.inner.value->array_type.inner = create_internal_type("byte");
+		type.value->pointer_type.inner.value->array_type.size.value = value_new(INTEGER_VALUE);
+		type.value->pointer_type.inner.value->array_type.size.value->integer.value = new_index;
 	}
-	else if (type->tag == STRING_TYPE_VALUE) {}
+	else if (type.value->tag == STRING_TYPE_VALUE) {}
 	else invalid_type = true;
 
 	if (invalid_type) {
@@ -877,19 +939,20 @@ static void process_string(Context *context, Node *node) {
 static void process_number(Context *context, Node *node) {
 	Number_Node number = node->number;
 
-	Value *wanted_type = context->temporary_context.wanted_type;
+	Value wanted_type = context->temporary_context.wanted_type;
 	bool invalid_wanted_type = false;
-	if (wanted_type == NULL) invalid_wanted_type = true;
-	else if (wanted_type->tag == INTERNAL_VALUE && strcmp(wanted_type->internal.identifier, "uint") == 0) {}
-	else if (wanted_type->tag == INTERNAL_VALUE && strcmp(wanted_type->internal.identifier, "flt") == 0) {}
+	if (wanted_type.value == NULL) invalid_wanted_type = true;
+	else if (wanted_type.value->tag == INTERNAL_VALUE && strcmp(wanted_type.value->internal.identifier, "uint") == 0) {}
+	else if (wanted_type.value->tag == INTERNAL_VALUE && strcmp(wanted_type.value->internal.identifier, "flt") == 0) {}
 	else invalid_wanted_type = true;
 
 	if (invalid_wanted_type) {
-		wanted_type = value_new(INTERNAL_VALUE);
+		wanted_type.value = value_new(INTERNAL_VALUE);
+
 		if (number.tag == DECIMAL_NUMBER) {
-			wanted_type->internal.identifier = "flt";
+			wanted_type.value->internal.identifier = "flt";
 		} else {
-			wanted_type->internal.identifier = "uint";
+			wanted_type.value->internal.identifier = "uint";
 		}
 	}
 
@@ -900,8 +963,8 @@ static void process_number(Context *context, Node *node) {
 }
 
 static void process_null(Context *context, Node *node) {
-	Value *wanted_type = context->temporary_context.wanted_type;
-	if (wanted_type == NULL) {
+	Value wanted_type = context->temporary_context.wanted_type;
+	if (wanted_type.value == NULL) {
 		assert(false);
 	}
 
@@ -918,21 +981,21 @@ static void process_boolean(Context *context, Node *node) {
 static void process_structure(Context *context, Node *node) {
 	Structure_Node structure = node->structure;
 
-	Value *wanted_type = context->temporary_context.wanted_type;
-	if (wanted_type == NULL) {
+	Value wanted_type = context->temporary_context.wanted_type;
+	if (wanted_type.value == NULL) {
 		assert(false);
 	}
 
-	assert(wanted_type->tag == STRUCT_TYPE_VALUE || wanted_type->tag == ARRAY_TYPE_VALUE);
+	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE);
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {
-		Value *item_wanted_type = NULL;
-		switch (wanted_type->tag) {
+		Value item_wanted_type = {};
+		switch (wanted_type.value->tag) {
 			case STRUCT_TYPE_VALUE:
-				item_wanted_type = wanted_type->struct_type.items[i].type;
+				item_wanted_type = wanted_type.value->struct_type.items[i].type;
 				break;
 			case ARRAY_TYPE_VALUE:
-				item_wanted_type = wanted_type->array_type.inner;
+				item_wanted_type = wanted_type.value->array_type.inner;
 				break;
 			default:
 				assert(false);
@@ -951,7 +1014,7 @@ static void process_run(Context *context, Node *node) {
 	Run_Node run = node->run;
 
 	process_node(context, run.value);
-	Value *value = evaluate(context, run.value);
+	Value value = evaluate(context, run.value);
 
 	Node_Data *data = node_data_new(RUN_NODE);
 	data->run.value = value;
@@ -972,26 +1035,27 @@ static void process_dereference(Context *context, Node *node) {
 	Dereference_Node dereference = node->dereference;
 
 	process_node(context, dereference.node);
-	Value *inner_type = get_type(context, dereference.node);
-	if (inner_type->tag != POINTER_TYPE_VALUE) {
+	Value type = get_type(context, dereference.node);
+	if (type.value->tag != POINTER_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type_outer(inner_type, given_string);
+		print_type_outer(type, given_string);
 		handle_semantic_error(node->location, "Expected pointer, but got %s", given_string);
 	}
 
 	Node_Data *data = node_data_new(DEREFERENCE_NODE);
-	data->dereference.type = inner_type->pointer_type.inner;
+	Value inner_type = type.value->pointer_type.inner;
+	data->dereference.type = inner_type;
 	if (context->temporary_context.assign_value != NULL) {
-		Temporary_Context temporary_context = { .wanted_type = inner_type->pointer_type.inner };
+		Temporary_Context temporary_context = { .wanted_type = type.value->pointer_type.inner };
 		process_node_context(context, temporary_context, context->temporary_context.assign_value);
 
-		Value *value_type = get_type(context, context->temporary_context.assign_value);
-		if (!type_assignable(inner_type->pointer_type.inner, value_type)) {
-			handle_type_error(context->temporary_context.assign_node, inner_type->pointer_type.inner, value_type);
+		Value value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(inner_type.value, value_type.value)) {
+			handle_type_error(context->temporary_context.assign_node, inner_type, value_type);
 		}
 		data->dereference.assign_value = context->temporary_context.assign_value;
 	} else {
-		set_type(context, node, inner_type->pointer_type.inner);
+		set_type(context, node, inner_type);
 	}
 	set_data(context, node, data);
 }
@@ -1001,8 +1065,8 @@ static void process_structure_access(Context *context, Node *node) {
 
 	process_node(context, structure_access.structure);
 
-	Value *structure_pointer_type = get_type(context, structure_access.structure);
-	if (structure_pointer_type->tag != POINTER_TYPE_VALUE) {
+	Value structure_pointer_type = get_type(context, structure_access.structure);
+	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, structure_access.structure);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
@@ -1011,18 +1075,18 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_pointer_type = get_type(context, structure_access.structure);
 	}
 
-	if (structure_pointer_type->tag != POINTER_TYPE_VALUE || (structure_pointer_type->pointer_type.inner->tag != STRUCT_TYPE_VALUE && structure_pointer_type->pointer_type.inner->tag != UNION_TYPE_VALUE)) {
+	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE || (structure_pointer_type.value->pointer_type.inner.value->tag != STRUCT_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != UNION_TYPE_VALUE)) {
 		char given_string[64] = {};
 		print_type_outer(structure_pointer_type, given_string);
 		handle_semantic_error(node->location, "Expected structure or union, but got %s", given_string);
 	}
 
-	Value *structure_type = structure_pointer_type->pointer_type.inner;
+	Value structure_type = structure_pointer_type.value->pointer_type.inner;
 
-	Value *item_type = NULL;
-	for (long int i = 0; i < arrlen(structure_type->struct_type.items); i++) {
-		if (strcmp(structure_type->struct_type.items[i].identifier, structure_access.item) == 0) {
-			item_type = structure_type->struct_type.items[i].type;
+	Value item_type = {};
+	for (long int i = 0; i < arrlen(structure_type.value->struct_type.items); i++) {
+		if (strcmp(structure_type.value->struct_type.items[i].identifier, structure_access.item) == 0) {
+			item_type = structure_type.value->struct_type.items[i].type;
 		}
 	}
 
@@ -1034,16 +1098,16 @@ static void process_structure_access(Context *context, Node *node) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
 		process_node_context(context, temporary_context, context->temporary_context.assign_value);
 
-		Value *value_type = get_type(context, context->temporary_context.assign_value);
-		if (!type_assignable(item_type, value_type)) {
+		Value value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(item_type.value, value_type.value)) {
 			handle_type_error(context->temporary_context.assign_node, item_type, value_type);
 		}
 		data->structure_access.assign_value = context->temporary_context.assign_value;
 	} else {
 		if (data->structure_access.want_pointer) {
-			Value *pointer_item_type = value_new(POINTER_TYPE_VALUE);
+			Value_Data *pointer_item_type = value_new(POINTER_TYPE_VALUE);
 			pointer_item_type->pointer_type.inner = item_type;
-			item_type = pointer_item_type;
+			item_type = (Value) { .value = pointer_item_type };
 		}
 
 		set_type(context, node, item_type);
@@ -1057,9 +1121,9 @@ static void process_array_access(Context *context, Node *node) {
 	process_node(context, array_access.array);
 	process_node(context, array_access.index);
 
-	Value *array_type = get_type(context, array_access.array);
-	Value *array_type_original = array_type;
-	if (array_type->tag != POINTER_TYPE_VALUE) {
+	Value array_type = get_type(context, array_access.array);
+	Value array_type_original = array_type;
+	if (array_type.value->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, array_access.array);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
@@ -1069,37 +1133,37 @@ static void process_array_access(Context *context, Node *node) {
 	}
 
 	Custom_Operator_Function custom_operator_function = {};
-	Process_Define_Result array_access_define_result;
-	if (arrlen(array_type->pointer_type.inner->value_data) > 0) {
-		Value_Data value_data = array_type->pointer_type.inner->value_data[arrlen(array_type->pointer_type.inner->value_data) - 1];
-		Node *define_node = value_data.define_node;
+	// Process_Define_Result array_access_define_result;
+	// if (arrlen(array_type.value->pointer_type.inner.value->value_data) > 0) {
+	// 	Value_Data_Old value_data = array_type.value->pointer_type.inner->value_data[arrlen(array_type.type->pointer_type.inner->value_data) - 1];
+	// 	Node *define_node = value_data.define_node;
 
-		Node *array_access_define_node = get_operator(context, define_node, "[]");
+	// 	Node *array_access_define_node = get_operator(context, define_node, "[]");
 
-		Value **argument_types = NULL;
-		arrpush(argument_types, array_type);
-		arrpush(argument_types, get_type(context, array_access.index));
-		Temporary_Context temporary_context = { .call_argument_types = argument_types };
+	// 	Value_Data *argument_types = NULL;
+	// 	arrpush(argument_types, array_type);
+	// 	arrpush(argument_types, get_type(context, array_access.index));
+	// 	Temporary_Context temporary_context = { .call_argument_types = argument_types };
 
-		array_access_define_result = process_define_context(context, temporary_context, array_access_define_node, clone_scopes(value_data.scopes), NULL, value_data.generic_id);
+	// 	array_access_define_result = process_define_context(context, temporary_context, array_access_define_node, clone_scopes(value_data.scopes), NULL, value_data.generic_id);
 
-		custom_operator_function = (Custom_Operator_Function) {
-			.function = array_access_define_result.value,
-			.function_type = array_access_define_result.type
-		};
-	}
+	// 	custom_operator_function = (Custom_Operator_Function) {
+	// 		.function = array_access_define_result.value,
+	// 		.function_type = array_access_define_result.type
+	// 	};
+	// }
 
-	if (custom_operator_function.function == NULL && array_type->pointer_type.inner->tag != ARRAY_TYPE_VALUE) {
+	if (custom_operator_function.function == NULL && array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(array_type_original, given_string);
 		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
 	}
 
-	Value *item_type = NULL;
+	Value item_type = {};
 	if (custom_operator_function.function == NULL) {
-		item_type = array_type->pointer_type.inner->array_type.inner;
+		item_type = array_type.value->pointer_type.inner.value->array_type.inner;
 	} else {
-		item_type = array_access_define_result.type->function_type.return_type->pointer_type.inner;
+		// item_type = array_access_define_result.type.value->function_type.return_type.value->pointer_type.inner;
 	}
 
 	Node_Data *data = node_data_new(ARRAY_ACCESS_NODE);
@@ -1112,16 +1176,16 @@ static void process_array_access(Context *context, Node *node) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
 		process_node_context(context, temporary_context, context->temporary_context.assign_value);
 
-		Value *value_type = get_type(context, context->temporary_context.assign_value);
-		if (!type_assignable(item_type, value_type)) {
+		Value value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(item_type.value, value_type.value)) {
 			handle_type_error(context->temporary_context.assign_node, item_type, value_type);
 		}
 		data->array_access.assign_value = context->temporary_context.assign_value;
 	} else {
 		if (data->array_access.want_pointer) {
-			Value *pointer_item_type = value_new(POINTER_TYPE_VALUE);
+			Value_Data *pointer_item_type = value_new(POINTER_TYPE_VALUE);
 			pointer_item_type->pointer_type.inner = item_type;
-			item_type = pointer_item_type;
+			item_type = (Value) { .value = pointer_item_type };
 		}
 
 		set_type(context, node, item_type);
@@ -1136,7 +1200,7 @@ static void process_variable(Context *context, Node *node) {
 	shput(scope->variables, variable.identifier, node);
 
 	Temporary_Context temporary_context = {};
-	Value *type = NULL;
+	Value type = {};
 	if (variable.type != NULL) {
 		process_node(context, variable.type);
 		type = evaluate(context, variable.type);
@@ -1146,13 +1210,13 @@ static void process_variable(Context *context, Node *node) {
 	if (variable.value != NULL) {
 		process_node_context(context, temporary_context, variable.value);
 
-		Value *value_type = get_type(context, variable.value);
-		if (type == NULL) {
+		Value value_type = get_type(context, variable.value);
+		if (type.value == NULL) {
 			type = value_type;
-		} else if (!type_assignable(type, value_type)) {
+		} else if (!type_assignable(type.value, value_type.value)) {
 			handle_type_error(node, type, value_type);
 		}
-	} else if (type == NULL) {
+	} else if (type.value == NULL) {
 		handle_semantic_error(node->location, "Expected value");
 	}
 
@@ -1187,12 +1251,12 @@ static void process_yield(Context *context, Node *node) {
 		process_node_context(context, temporary_context, yield.value);
 	}
 
-	Value *type = get_type(context, yield.value);
+	Value type = get_type(context, yield.value);
 	if (block_data->block.has_type) {
-		if (type != NULL) {
-			if (block_data->block.type == NULL) {
+		if (type.value != NULL) {
+			if (block_data->block.type.value == NULL) {
 				handle_semantic_error(node->location, "Expected no value");
-			} else if (!value_equal(type, block_data->block.type)) {
+			} else if (!value_equal(type.value, block_data->block.type.value)) {
 				char previous_string[64] = {};
 				print_type_outer(type, previous_string);
 				char current_string[64] = {};
@@ -1201,8 +1265,8 @@ static void process_yield(Context *context, Node *node) {
 			}
 		}
 
-		if (block_data->block.type != NULL) {
-			if (type == NULL) {
+		if (block_data->block.type.value != NULL) {
+			if (type.value == NULL) {
 				handle_semantic_error(node->location, "Expected value");
 			}
 		}
@@ -1240,12 +1304,12 @@ static void process_break(Context *context, Node *node) {
 		process_node_context(context, temporary_context, break_.value);
 	}
 
-	Value *type = get_type(context, break_.value);
+	Value type = get_type(context, break_.value);
 	if (while_data->while_.has_type) {
-		if (type != NULL) {
-			if (while_data->while_.type == NULL) {
+		if (type.value != NULL) {
+			if (while_data->while_.type.value == NULL) {
 				handle_semantic_error(node->location, "Expected no value");
-			} else if (!value_equal(type, while_data->while_.type)) {
+			} else if (!value_equal(type.value, while_data->while_.type.value)) {
 				char previous_string[64] = {};
 				print_type_outer(type, previous_string);
 				char current_string[64] = {};
@@ -1254,8 +1318,8 @@ static void process_break(Context *context, Node *node) {
 			}
 		}
 
-		if (while_data->while_.type != NULL) {
-			if (type == NULL) {
+		if (while_data->while_.type.value != NULL) {
+			if (type.value == NULL) {
 				handle_semantic_error(node->location, "Expected value");
 			}
 		}
@@ -1317,16 +1381,16 @@ static void process_if(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(IF_NODE);
 	if (if_.static_) {
-		Value *evaluated = evaluate(context, if_.condition);
+		Value evaluated = evaluate(context, if_.condition);
 
-		data->if_.static_condition = evaluated->boolean.value;
+		data->if_.static_condition = evaluated.value->boolean.value;
 	}
 
 	Node **saved_left_blocks = context->left_blocks;
 	context->left_blocks = NULL;
 	process_node(context, if_.if_body);
 
-	Value *if_type = get_type(context, if_.if_body);
+	Value if_type = get_type(context, if_.if_body);
 	if (if_.else_body != NULL) {
 		Node **saved_if_left_blocks = context->left_blocks;
 		context->left_blocks = NULL;
@@ -1344,19 +1408,19 @@ static void process_if(Context *context, Node *node) {
 			}
 		}
 
-		Value *else_type = get_type(context, if_.else_body);
-		if (else_type != NULL) {
-			if (if_type == NULL) {
+		Value else_type = get_type(context, if_.else_body);
+		if (else_type.value != NULL) {
+			if (if_type.value == NULL) {
 				handle_semantic_error(node->location, "Expected value from if");
 			}
 		}
 
-		if (if_type != NULL) {
-			if (else_type == NULL) {
+		if (if_type.value != NULL) {
+			if (else_type.value == NULL) {
 				handle_semantic_error(node->location, "Expected value from else");
 			}
 
-			if (!value_equal(if_type, else_type)) {
+			if (!value_equal(if_type.value, else_type.value)) {
 				char if_string[64] = {};
 				print_type_outer(if_type, if_string);
 				char else_string[64] = {};
@@ -1369,7 +1433,7 @@ static void process_if(Context *context, Node *node) {
 		}
 	} else {
 		context->left_blocks = saved_left_blocks;
-		if (if_type != NULL) {
+		if (if_type.value != NULL) {
 			handle_semantic_error(node->location, "Expected else");
 		}
 	}
@@ -1386,14 +1450,14 @@ static void process_switch(Context *context, Node *node) {
 
 	Node **saved_left_blocks = context->left_blocks;
 
-	Value *type = get_type(context, switch_.value);
-	if (type->tag != ENUM_TYPE_VALUE) {
+	Value type = get_type(context, switch_.value);
+	if (type.value->tag != ENUM_TYPE_VALUE) {
 		char string[64] = {};
 		print_type_outer(type, string);
 		handle_semantic_error(node->location, "Expected enum, but got %s", string);
 	}
 
-	Value *switch_type = NULL;
+	Value switch_type = {};
 	bool set_switch_type = false;
 	long int case_count = 0;
 	bool else_case = false;
@@ -1424,9 +1488,9 @@ static void process_switch(Context *context, Node *node) {
 			}
 		}
 
-		Value *case_type = get_type(context, switch_case.body);
-		if (case_type != NULL) {
-			if (switch_type == NULL) {
+		Value case_type = get_type(context, switch_case.body);
+		if (case_type.value != NULL) {
+			if (switch_type.value == NULL) {
 				if (set_switch_type) {
 					handle_semantic_error(node->location, "Expected value from case");
 				} else {
@@ -1437,12 +1501,12 @@ static void process_switch(Context *context, Node *node) {
 			set_switch_type = true;
 		}
 
-		if (switch_type != NULL) {
-			if (case_type == NULL) {
+		if (switch_type.value != NULL) {
+			if (case_type.value == NULL) {
 				handle_semantic_error(node->location, "Expected value from case");
 			}
 
-			if (!value_equal(switch_type, case_type)) {
+			if (!value_equal(switch_type.value, case_type.value)) {
 				char switch_string[64] = {};
 				print_type_outer(switch_type, switch_string);
 				char case_string[64] = {};
@@ -1455,9 +1519,9 @@ static void process_switch(Context *context, Node *node) {
 		}
 	}
 
-	if (case_count < arrlen(type->enum_type.items) && !else_case) {
+	if (case_count < arrlen(type.value->enum_type.items) && !else_case) {
 		context->left_blocks = saved_left_blocks;
-		if (switch_type != NULL) {
+		if (switch_type.value != NULL) {
 			handle_semantic_error(node->location, "Expected generic case");
 		}
 	}
@@ -1470,7 +1534,7 @@ static void process_while(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(WHILE_NODE);
 	data->while_.wanted_type = context->temporary_context.wanted_type;
-	data->while_.type = NULL;
+	data->while_.type = (Value) {};
 	set_data(context, node, data);
 
 	arrpush(context->scopes, (Scope) { .node = node });
@@ -1482,12 +1546,12 @@ static void process_while(Context *context, Node *node) {
 		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
 		process_node_context(context, temporary_context, while_.else_body);
 
-		Value *type = get_type(context, while_.else_body);
+		Value type = get_type(context, while_.else_body);
 		if (data->while_.has_type) {
-			if (type != NULL) {
-				if (data->while_.type == NULL) {
+			if (type.value != NULL) {
+				if (data->while_.type.value == NULL) {
 					handle_semantic_error(node->location, "Expected no value in else");
-				} else if (!value_equal(type, data->while_.type)) {
+				} else if (!value_equal(type.value, data->while_.type.value)) {
 					char previous_string[64] = {};
 					print_type_outer(type, previous_string);
 					char current_string[64] = {};
@@ -1496,8 +1560,8 @@ static void process_while(Context *context, Node *node) {
 				}
 			}
 
-			if (data->while_.type != NULL) {
-				if (type == NULL) {
+			if (data->while_.type.value != NULL) {
+				if (type.value == NULL) {
 					handle_semantic_error(node->location, "Expected value in else");
 				}
 			}
@@ -1511,7 +1575,7 @@ static void process_while(Context *context, Node *node) {
 	}
 }
 
-static bool can_compare(Value *type) {
+static bool can_compare(Value_Data *type) {
 	if (type->tag == ENUM_TYPE_VALUE) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "uint") == 0) return true;
 	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) return true;
@@ -1527,9 +1591,9 @@ static void process_binary_operator(Context *context, Node *node) {
 	Temporary_Context temporary_context = { .wanted_type = get_type(context, binary_operator.left) };
 	process_node_context(context, temporary_context, binary_operator.right);
 
-	Value *left_type = get_type(context, binary_operator.left);
-	Value *right_type = get_type(context, binary_operator.right);
-	if (!type_assignable(left_type, right_type)) {
+	Value left_type = get_type(context, binary_operator.left);
+	Value right_type = get_type(context, binary_operator.right);
+	if (!type_assignable(left_type.value, right_type.value)) {
 		char left_string[64] = {};
 		print_type_outer(left_type, left_string);
 		char right_string[64] = {};
@@ -1537,25 +1601,25 @@ static void process_binary_operator(Context *context, Node *node) {
 		handle_semantic_error(node->location, "Mismatched types %s and %s", left_string, right_string);
 	}
 
-	Value *type = left_type;
-	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "uint") == 0) {}
-	else if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) {}
-	else if (can_compare(type) && binary_operator.operator == OPERATOR_EQUALS) {}
+	Value type = left_type;
+	if (type.value->tag == INTERNAL_VALUE && strcmp(type.value->internal.identifier, "uint") == 0) {}
+	else if (type.value->tag == INTERNAL_VALUE && strcmp(type.value->internal.identifier, "flt") == 0) {}
+	else if (can_compare(type.value) && binary_operator.operator == OPERATOR_EQUALS) {}
 	else {
 		char left_string[64] = {};
 		print_type_outer(left_type, left_string);
 		handle_semantic_error(node->location, "Cannot operate on %s", left_string);
 	}
 
-	Value *result_type = NULL;
+	Value result_type = {};
 	switch (binary_operator.operator) {
 		case OPERATOR_EQUALS:
 		case OPERATOR_LESS:
 		case OPERATOR_LESS_EQUALS:
 		case OPERATOR_GREATER:
 		case OPERATOR_GREATER_EQUALS:
-			result_type = value_new(INTERNAL_VALUE);
-			result_type->internal.identifier = "bool";
+			result_type.value = value_new(INTERNAL_VALUE);
+			result_type.value->internal.identifier = "bool";
 			break;
 		case OPERATOR_ADD:
 		case OPERATOR_SUBTRACT:
@@ -1581,21 +1645,21 @@ static void process_function(Context *context, Node *node) {
 
 	Node_Data *function_type_data = get_data(context, function.function_type);
 
-	Value *function_type_value = function_type_data->function_type.value;
+	Value function_type_value = function_type_data->function_type.value;
 
 	set_type(context, node, function_type_value);
 
 	if (function.body != NULL) {
 		arrpush(context->scopes, (Scope) { .node = node });
 
-		Temporary_Context temporary_context = { .wanted_type = function_type_value->function_type.return_type };
+		Temporary_Context temporary_context = { .wanted_type = function_type_value.value->function_type.return_type };
 		process_node_context(context, temporary_context, function.body);
 
-		if (function_type_value->function_type.return_type != NULL) {
-			Value *returned_type = get_type(context, function.body);
+		if (function_type_value.value->function_type.return_type.value != NULL) {
+			Value returned_type = get_type(context, function.body);
 
-			if (!value_equal(function_type_value->function_type.return_type, returned_type)) {
-				handle_type_error(node, function_type_value->function_type.return_type, returned_type);
+			if (!value_equal(function_type_value.value->function_type.return_type.value, returned_type.value)) {
+				handle_type_error(node, function_type_value.value->function_type.return_type, returned_type);
 			}
 		}
 		(void) arrpop(context->scopes);
@@ -1623,19 +1687,19 @@ static void process_function_type(Context *context, Node *node) {
 		arrpush(argument_type_values, argument);
 	}
 
-	Value *return_type_value = NULL;
+	Value return_type_value = {};
 	if (function_type.return_ != NULL) {
 		process_node(context, function_type.return_);
 		return_type_value = evaluate(context, function_type.return_);
 	}
 
-	Value *function_type_value = value_new(FUNCTION_TYPE_VALUE);
+	Value_Data *function_type_value = value_new(FUNCTION_TYPE_VALUE);
 	function_type_value->function_type.arguments = argument_type_values;
 	function_type_value->function_type.return_type = return_type_value;
 	function_type_value->function_type.variadic = function_type.variadic;
 
 	Node_Data *data = node_data_new(FUNCTION_TYPE_NODE);
-	data->function_type.value = function_type_value;
+	data->function_type.value.value = function_type_value;
 	set_data(context, node, data);
 }
 
@@ -1643,9 +1707,9 @@ static void process_pointer(Context *context, Node *node) {
 	Pointer_Node pointer = node->pointer;
 	process_node(context, pointer.inner);
 
-	Value *value = value_new(INTERNAL_VALUE);
+	Value_Data *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
-	set_type(context, node, value);
+	set_type(context, node, (Value) { .value = value });
 }
 
 static void process_array_type(Context *context, Node *node) {
@@ -1655,14 +1719,14 @@ static void process_array_type(Context *context, Node *node) {
 		process_node(context, array_type.size);
 	}
 
-	Value *value = value_new(INTERNAL_VALUE);
+	Value_Data *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
-	set_type(context, node, value);
+	set_type(context, node, (Value) { .value = value });
 }
 
 void process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
-	Value* type = get_type(context, node);
-	if (type != NULL) {
+	Value type = get_type(context, node);
+	if (type.value != NULL) {
 		return;
 	}
 
@@ -1682,10 +1746,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_call(context, node);
 			break;
 		}
-		case CALL_METHOD_NODE: {
-			process_call_method(context, node);
-			break;
-		}
+		// case CALL_METHOD_NODE: {
+		// 	process_call_method(context, node);
+		// 	break;
+		// }
 		case IDENTIFIER_NODE: {
 			process_identifier(context, node);
 			break;

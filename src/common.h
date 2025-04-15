@@ -3,11 +3,22 @@
 
 #include "ast.h"
 
-typedef struct Value Value;
+typedef struct Value_Data Value_Data;
+
+// typedef struct {
+// 	Value *type;
+// 	Node *source;
+// 	bool pointer;
+// } Value_Data;
 
 typedef struct {
-	Value *binding;
-	Value *type;
+	Value_Data *value;
+	Node *node;
+} Value;
+
+typedef struct {
+	Value binding;
+	Value type;
 } Generic_Binding;
 
 typedef struct {
@@ -15,8 +26,6 @@ typedef struct {
 	struct { char *key; Generic_Binding value; } *generic_bindings; // stb_ds
 	Node *node;
 } Scope;
-
-typedef struct Value Value;
 
 typedef enum {
 	FUNCTION_VALUE,
@@ -42,31 +51,41 @@ typedef enum {
 
 typedef struct {
 	char *identifier;
-	Value *type;
+	Value_Data *type;
 } Identifier_Value_Pair;
 
 typedef struct {
-	Value *type;
+	Value_Data *type;
 	Node *body;
 	size_t generic_id;
 	bool compile_only;
 	char *extern_name;
 } Function_Value;
 
-typedef Identifier_Value_Pair Function_Argument_Value;
+typedef struct {
+	char *identifier;
+	Value type;
+} Function_Argument_Value;
 
 typedef struct {
 	Function_Argument_Value *arguments; // stb_ds
-	Value *return_type;
+	Value return_type;
 	bool variadic;
 } Function_Type_Value;
 
-typedef Identifier_Value_Pair Struct_Item_Value;
+typedef struct {
+	char *identifier;
+	Value type;
+} Struct_Item_Value;
 typedef struct {
 	Struct_Item_Value *items; // stb_ds
+	Node *node;
 } Struct_Type_Value;
 
-typedef Identifier_Value_Pair Union_Item_Value;
+typedef struct {
+	char *identifier;
+	Value type;
+} Union_Item_Value;
 typedef struct {
 	Union_Item_Value *items; // stb_ds
 } Union_Type_Value;
@@ -82,11 +101,11 @@ typedef struct {
 } Module_Value;
 
 typedef struct {
-	Value *value;
+	Value_Data *value;
 } Pointer_Value;
 
 typedef struct {
-	Value **values;
+	Value_Data **values;
 	size_t length;
 } Array_Value;
 
@@ -108,12 +127,12 @@ typedef struct {
 } String_Value;
 
 typedef struct {
-	Value *inner;
+	Value inner;
 } Pointer_Type_Value;
 
 typedef struct {
-	Value *inner;
-	Value *size;
+	Value inner;
+	Value size;
 } Array_Type_Value;
 
 typedef struct {
@@ -129,9 +148,9 @@ typedef struct {
 	Generic_Binding *bindings;
 	Scope *scopes;
 	size_t generic_id;
-} Value_Data;
+} Value_Data_Old;
 
-struct Value {
+struct Value_Data {
 	Value_Tag tag;
 	union {
 		Function_Value function;
@@ -151,10 +170,10 @@ struct Value {
 		String_Value string;
 		Internal_Value internal;
 	};
-	Value_Data *value_data; // stb_ds
+	Value_Data_Old *value_data; // stb_ds
 };
 
-Value *value_new(Value_Tag tag);
+Value_Data *value_new(Value_Tag tag);
 
 typedef struct {
 	enum {
@@ -165,46 +184,46 @@ typedef struct {
 	union {
 		Node *variable_definition;
 		size_t argument_index;
-		Value *value;
+		Value value;
 	};
-	Value *type;
+	Value type;
 	bool want_pointer;
 	Node *assign_value;
 } Identifier_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 } Variable_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 	char *value;
 	size_t length;
 } String_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 } Number_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 } Structure_Data;
 
 typedef struct {
-	Value *value;
+	Value value;
 } Run_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 } Null_Data;
 
 typedef struct {
-	Value *function_type;
+	Value function_type;
 } Call_Data;
 
 typedef struct {
-	Value *function;
-	Value *function_type;
+	Value_Data *function;
+	Value function_type;
 } Custom_Operator_Function;
 
 typedef struct {
@@ -214,11 +233,11 @@ typedef struct {
 
 typedef struct {
 	bool static_condition;
-	Value *type;
+	Value type;
 } If_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 } Switch_Data;
 
 typedef struct {
@@ -242,48 +261,48 @@ typedef struct {
 } Function_Data;
 
 typedef struct {
-	Value *value;
+	Value value;
 } Function_Type_Data;
 
 typedef struct {
-	Value *value;
+	Value_Data *value;
 } Module_Access_Data;
 
 typedef struct {
-	Value *structure_value;
+	Value structure_value;
 	Node *assign_value;
 	bool want_pointer;
 } Structure_Access_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 	Node *assign_value;
 } Dereference_Data;
 
 typedef struct {
-	Value *type;
+	Value_Data *type;
 	Node *assign_value;
 } Deoption_Data;
 
 typedef struct {
-	Value *type;
+	Value_Data *type;
 } Deoption_Present_Data;
 
 typedef struct {
-	Value *array_type;
-	Value *item_type;
+	Value array_type;
+	Value item_type;
 	Custom_Operator_Function custom_operator_function;
 	Node *assign_value;
 	bool want_pointer;
 } Array_Access_Data;
 
 typedef struct {
-	Value *type;
+	Value type;
 } Binary_Operator_Data;
 
 typedef struct {
-	Value *wanted_type;
-	Value *type;
+	Value wanted_type;
+	Value type;
 	bool has_type;
 } Block_Data;
 
@@ -292,8 +311,8 @@ typedef struct {
 } Yield_Data;
 
 typedef struct {
-	Value *wanted_type;
-	Value *type;
+	Value wanted_type;
+	Value type;
 	bool has_type;
 } While_Data;
 
@@ -334,7 +353,7 @@ typedef struct {
 
 Node_Data *node_data_new(Node_Kind kind);
 
-typedef struct { Node *key; Value *value; } *Node_Types;
+typedef struct { Node *key; Value value; } *Node_Types;
 
 typedef struct { Node *key; Node_Data *value; } *Node_Datas;
 
@@ -343,23 +362,23 @@ typedef struct { char *key; Node *value; } *Define_Operators;
 typedef struct Context Context;
 
 typedef struct {
-	size_t (*size_fn)(Value *, void *data);
+	size_t (*size_fn)(Value_Data *, void *data);
 	void (*build_fn)(Context context, Node *root, void *data);
 	void *data;
 } Codegen;
 
 typedef struct {
 	char *path;
-	Value *value;
+	Value value;
 } Cached_File;
 
 typedef struct {
 	Node *assign_value;
 	Node *assign_node;
-	Value *wanted_type;
+	Value wanted_type;
 	bool want_pointer;
-	Value **call_argument_types;
-	Value *call_wanted_type;
+	Value *call_argument_types;
+	Value call_wanted_type;
 } Temporary_Context;
 
 struct Context {
@@ -376,18 +395,16 @@ struct Context {
 	Cached_File *cached_files; // stb_ds
 };
 
-Value *get_type(Context *context, Node *node);
-void set_type(Context *context, Node *node, Value *value);
+Value get_type(Context *context, Node *node);
+void set_type(Context *context, Node *node, Value type);
 
 Node_Data *get_data(Context *context, Node *node);
-void set_data(Context *context, Node *node, Node_Data *value);
+void set_data(Context *context, Node *node, Node_Data *data);
 
 void reset_node(Context *context, Node *node);
 
-Value *create_string_type();
-Value *create_boolean_type();
-Value *create_slice_type(Value *inner);
-Value *create_option_type(Value *inner);
-Value *create_internal_type(char *identifier);
+Value create_string_type();
+Value create_boolean_type();
+Value create_internal_type(char *identifier);
 
 #endif

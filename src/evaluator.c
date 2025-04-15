@@ -1,6 +1,8 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stdlib.h>
 
+#include "common.h"
 #include "stb/ds.h"
 
 #include "ast.h"
@@ -12,23 +14,25 @@
 #include <stdio.h>
 
 jmp_buf jmp;
-Value *jmp_result;
+Value jmp_result;
 
-bool value_equal(Value *value1, Value *value2) {
+Value *function_arguments;
+
+bool value_equal(Value_Data *value1, Value_Data *value2) {
 	if (value2 == NULL) return false;
 	if (value1->tag != value2->tag) return false;
 
 	switch (value1->tag) {
 		case POINTER_TYPE_VALUE: {
-			return value_equal(value1->pointer_type.inner, value2->pointer_type.inner);
+			return value_equal(value1->pointer_type.inner.value, value2->pointer_type.inner.value);
 		}
 		case ARRAY_TYPE_VALUE: {
-			if ((value1->array_type.size == NULL && value2->array_type.size != NULL) || (value1->array_type.size != NULL && value2->array_type.size == NULL)) return false;
-			if (value1->array_type.size != NULL) {
-				if (!value_equal(value1->array_type.size, value2->array_type.size)) return false;
+			if ((value1->array_type.size.value == NULL && value2->array_type.size.value != NULL) || (value1->array_type.size.value != NULL && value2->array_type.size.value == NULL)) return false;
+			if (value1->array_type.size.value != NULL) {
+				if (!value_equal(value1->array_type.size.value, value2->array_type.size.value)) return false;
 			}
 
-			return value_equal(value1->array_type.inner, value2->array_type.inner);
+			return value_equal(value1->array_type.inner.value, value2->array_type.inner.value);
 		}
 		case INTERNAL_VALUE: {
 			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
@@ -38,7 +42,7 @@ bool value_equal(Value *value1, Value *value2) {
 
 			for (long int i = 0; i < arrlen(value1->struct_type.items); i++) {
 				if (strcmp(value1->struct_type.items[i].identifier, value2->struct_type.items[i].identifier) != 0) return false;
-				if (!value_equal(value1->struct_type.items[i].type, value2->struct_type.items[i].type)) return false;
+				if (!value_equal(value1->struct_type.items[i].type.value, value2->struct_type.items[i].type.value)) return false;
 			}
 
 			return true;
@@ -56,12 +60,12 @@ bool value_equal(Value *value1, Value *value2) {
 			if (arrlen(value1->function_type.arguments) != arrlen(value2->function_type.arguments)) return false;
 			for (long int i = 0; i < arrlen(value1->function_type.arguments); i++) {
 				if (strcmp(value1->function_type.arguments[i].identifier, value2->function_type.arguments[i].identifier) != 0) return false;
-				if (!value_equal(value1->function_type.arguments[i].type, value2->function_type.arguments[i].type)) return false;
+				if (!value_equal(value1->function_type.arguments[i].type.value, value2->function_type.arguments[i].type.value)) return false;
 			}
 
-			if ((value1->function_type.return_type == NULL && value2->function_type.return_type != NULL) || (value1->function_type.return_type != NULL && value2->function_type.return_type == NULL)) return false;
-			if (value1->function_type.return_type != NULL) {
-				if (!value_equal(value1->function_type.return_type, value2->function_type.return_type)) {
+			if ((value1->function_type.return_type.value == NULL && value2->function_type.return_type.value != NULL) || (value1->function_type.return_type.value != NULL && value2->function_type.return_type.value == NULL)) return false;
+			if (value1->function_type.return_type.value != NULL) {
+				if (!value_equal(value1->function_type.return_type.value, value2->function_type.return_type.value)) {
 					return false;
 				}
 			}
@@ -84,37 +88,38 @@ bool value_equal(Value *value1, Value *value2) {
 	}
 }
 
-bool type_assignable(Value *type1, Value *type2) {
+bool type_assignable(Value_Data *type1, Value_Data *type2) {
 	if (type2 == NULL) return false;
 	if (type1->tag != type2->tag) return false;
 
 	switch (type1->tag) {
 		case POINTER_TYPE_VALUE: {
-			if ((type1->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type1->pointer_type.inner->internal.identifier, "void") == 0) || (type2->pointer_type.inner->tag == INTERNAL_VALUE && strcmp(type2->pointer_type.inner->internal.identifier, "void") == 0)) {
+			if ((type1->pointer_type.inner.value->tag == INTERNAL_VALUE && strcmp(type1->pointer_type.inner.value->internal.identifier, "void") == 0) || (type2->pointer_type.inner.value->tag == INTERNAL_VALUE && strcmp(type2->pointer_type.inner.value->internal.identifier, "void") == 0)) {
 				return true;
 			}
 
-			return type_assignable(type1->pointer_type.inner, type2->pointer_type.inner);
+			return type_assignable(type1->pointer_type.inner.value, type2->pointer_type.inner.value);
 		}
 		case ARRAY_TYPE_VALUE: {
-			if ((type1->array_type.size == NULL && type2->array_type.size != NULL)) return type_assignable(type1->array_type.inner, type2->array_type.inner);
-			if (type1->array_type.size != NULL && type2->array_type.size == NULL) return false;
+			if ((type1->array_type.size.value == NULL && type2->array_type.size.value != NULL)) return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
+			if (type1->array_type.size.value != NULL && type2->array_type.size.value == NULL) return false;
 
-			if (type1->array_type.size != NULL) {
-				if (!type_assignable(type1->array_type.size, type2->array_type.size)) return false;
+			if (type1->array_type.size.value != NULL) {
+				if (!type_assignable(type1->array_type.size.value, type2->array_type.size.value)) return false;
 			}
 
-			return type_assignable(type1->array_type.inner, type2->array_type.inner);
+			return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
 		}
 		case INTERNAL_VALUE: {
 			return strcmp(type1->internal.identifier, type2->internal.identifier) == 0;
 		}
 		case STRUCT_TYPE_VALUE: {
+			if (type1->struct_type.node != type2->struct_type.node) return false;
 			if (arrlen(type1->struct_type.items) != arrlen(type2->struct_type.items)) return false;
 
 			for (long int i = 0; i < arrlen(type1->struct_type.items); i++) {
 				if (strcmp(type1->struct_type.items[i].identifier, type2->struct_type.items[i].identifier) != 0) return false;
-				if (!type_assignable(type1->struct_type.items[i].type, type2->struct_type.items[i].type)) return false;
+				if (!type_assignable(type1->struct_type.items[i].type.value, type2->struct_type.items[i].type.value)) return false;
 			}
 
 			return true;
@@ -132,12 +137,12 @@ bool type_assignable(Value *type1, Value *type2) {
 			if (arrlen(type1->function_type.arguments) != arrlen(type2->function_type.arguments)) return false;
 			for (long int i = 0; i < arrlen(type1->function_type.arguments); i++) {
 				if (strcmp(type1->function_type.arguments[i].identifier, type2->function_type.arguments[i].identifier) != 0) return false;
-				if (!type_assignable(type1->function_type.arguments[i].type, type2->function_type.arguments[i].type)) return false;
+				if (!type_assignable(type1->function_type.arguments[i].type.value, type2->function_type.arguments[i].type.value)) return false;
 			}
 
-			if ((type1->function_type.return_type == NULL && type2->function_type.return_type != NULL) || (type1->function_type.return_type != NULL && type2->function_type.return_type == NULL)) return false;
-			if (type1->function_type.return_type != NULL) {
-				if (!type_assignable(type1->function_type.return_type, type2->function_type.return_type)) {
+			if ((type1->function_type.return_type.value == NULL && type2->function_type.return_type.value != NULL) || (type1->function_type.return_type.value != NULL && type2->function_type.return_type.value == NULL)) return false;
+			if (type1->function_type.return_type.value != NULL) {
+				if (!type_assignable(type1->function_type.return_type.value, type2->function_type.return_type.value)) {
 					return false;
 				}
 			}
@@ -160,17 +165,17 @@ bool type_assignable(Value *type1, Value *type2) {
 	}
 }
 
-Value *get_cached_file(Context *context, char *path) {
+Value get_cached_file(Context *context, char *path) {
 	for (long int i = 0; i < arrlen(context->cached_files); i++) {
 		if (strcmp(context->cached_files[i].path, path) == 0) {
 			return context->cached_files[i].value;
 		}
 	}
 
-	return NULL;
+	return (Value) {};
 }
 
-void add_cached_file(Context *context, char *path, Value *value) {
+void add_cached_file(Context *context, char *path, Value value) {
 	Cached_File file = {
 		.path = path,
 		.value = value
@@ -184,14 +189,18 @@ void add_cached_file(Context *context, char *path, Value *value) {
 	exit(1); \
 }
 
-Value *evaluate(Context *context, Node *node) {
+Value create_value_data(Value_Data *value, Node *node) {
+	return (Value) { .value = value, .node = node };
+}
+
+Value evaluate(Context *context, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE: {
 			Function_Node function = node->function;
-			Value *function_type_value = get_data(context, function.function_type)->function_type.value;
+			Value function_type_value = get_data(context, function.function_type)->function_type.value;
 
-			Value *function_value = value_new(FUNCTION_VALUE);
-			function_value->function.type = function_type_value;
+			Value_Data *function_value = value_new(FUNCTION_VALUE);
+			function_value->function.type = function_type_value.value;
 			if (function.body != NULL) {
 				function_value->function.body = function.body;
 			}
@@ -200,16 +209,16 @@ Value *evaluate(Context *context, Node *node) {
 			function_value->function.generic_id = context->generic_id;
 			function_value->function.extern_name = function.extern_name;
 
-			return function_value;
+			return create_value_data(function_value, node);
 		}
 		case FUNCTION_TYPE_NODE: {
-			Value *function_type_value = get_data(context, node)->function_type.value;
-			return function_type_value;
+			return create_value_data(get_data(context, node)->function_type.value.value, node);
 		}
 		case STRUCT_TYPE_NODE: {
 			Struct_Type_Node struct_type = node->struct_type;
 
-			Value *struct_value = value_new(STRUCT_TYPE_VALUE);
+			Value_Data *struct_value = value_new(STRUCT_TYPE_VALUE);
+			struct_value->struct_type.node = node;
 			struct_value->struct_type.items = NULL;
 			for (long int i = 0; i < arrlen(struct_type.items); i++) {
 				Struct_Item_Value item = {
@@ -219,37 +228,37 @@ Value *evaluate(Context *context, Node *node) {
 				arrpush(struct_value->struct_type.items, item);
 			}
 
-			return struct_value;
+			return create_value_data(struct_value, node);
 		}
 		case UNION_TYPE_NODE: {
 			Union_Type_Node union_type = node->union_type;
 
-			Value *union_value = value_new(UNION_TYPE_VALUE);
+			Value_Data *union_value = value_new(UNION_TYPE_VALUE);
 			union_value->union_type.items = NULL;
 			for (long int i = 0; i < arrlen(union_type.items); i++) {
-				Struct_Item_Value item = {
+				Union_Item_Value item = {
 					.identifier = union_type.items[i].identifier,
 					.type = evaluate(context, union_type.items[i].type)
 				};
 				arrpush(union_value->union_type.items, item);
 			}
 
-			return union_value;
+			return create_value_data(union_value, node);
 		}
 		case ENUM_TYPE_NODE: {
 			Enum_Type_Node enum_type = node->enum_type;
 
-			Value *enum_value = value_new(ENUM_TYPE_VALUE);
+			Value_Data *enum_value = value_new(ENUM_TYPE_VALUE);
 			enum_value->enum_type.items = NULL;
 			for (long int i = 0; i < arrlen(enum_type.items); i++) {
 				arrpush(enum_value->enum_type.items, enum_type.items[i]);
 			}
 
-			return enum_value;
+			return create_value_data(enum_value, node);
 		}
 		case MODULE_NODE: {
 			Module_Node module = node->module;
-			Value *module_value = value_new(MODULE_VALUE);
+			Value_Data *module_value = value_new(MODULE_VALUE);
 
 			Scope *scopes = NULL;
 			for (long int i = 0; i < arrlen(context->scopes); i++) {
@@ -262,31 +271,34 @@ Value *evaluate(Context *context, Node *node) {
 			module_value->module.generic_id = context->generic_id;
 			module_value->module.scopes = scopes;
 
-			return module_value;
+			return create_value_data(module_value, node);
 		}
 		case POINTER_NODE: {
 			Pointer_Node pointer = node->pointer;
 
-			Value *pointer_type_value = value_new(POINTER_TYPE_VALUE);
+			Value_Data *pointer_type_value = value_new(POINTER_TYPE_VALUE);
 			pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
-			return pointer_type_value;
+			return create_value_data(pointer_type_value, node);
 		}
 		case ARRAY_TYPE_NODE: {
 			Array_Type_Node array_type = node->array_type;
 
-			Value *array_type_value = value_new(ARRAY_TYPE_VALUE);
+			Value_Data *array_type_value = value_new(ARRAY_TYPE_VALUE);
 			if (array_type.size != NULL) array_type_value->array_type.size = evaluate(context, array_type.size);
 			array_type_value->array_type.inner = evaluate(context, array_type.inner);
-			return array_type_value;
+			return create_value_data(array_type_value, node);
 		}
 		case IDENTIFIER_NODE: {
 			Identifier_Data identifier_data = get_data(context, node)->identifier;
-			if (identifier_data.kind != IDENTIFIER_VALUE) {
-				handle_evaluate_error(node->location, "Cannot evaluate at compile time");
-			}
 
-			if (identifier_data.value != NULL) {
-				return identifier_data.value;
+			switch (identifier_data.kind) {
+				case IDENTIFIER_VALUE:
+					return identifier_data.value;
+				case IDENTIFIER_ARGUMENT:
+					return function_arguments[identifier_data.argument_index];
+				default:
+					handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
+					break;
 			}
 
 			assert(false);
@@ -297,68 +309,68 @@ Value *evaluate(Context *context, Node *node) {
 			char *string_value = string_data.value;
 			size_t string_length = string_data.length;
 
-			if (string_data.type->tag == STRING_TYPE_VALUE) {
+			if (string_data.type.value->tag == STRING_TYPE_VALUE) {
 				char *data = malloc(string_length);
 				for (size_t i = 0; i < string_length; i++) {
 					data[i] = string_value[i];
 				}
 
-				Value *string = value_new(STRING_VALUE);
+				Value_Data *string = value_new(STRING_VALUE);
 				string->string.length = string_length;
 				string->string.data = data;
 
-				return string;
+				return create_value_data(string, node);
 			} else {
-				Value **values = malloc(sizeof(Value *) * string_length);
+				Value_Data **values = malloc(sizeof(Value_Data *) * string_length);
 				for (size_t i = 0; i < string_length; i++) {
-					Value *byte = value_new(BYTE_VALUE);
+					Value_Data *byte = value_new(BYTE_VALUE);
 					byte->byte.value = string_value[i];
 					values[i] = byte;
 				}
 
-				Value *pointer = value_new(POINTER_VALUE);
-				Value *array = value_new(ARRAY_VALUE);
+				Value_Data *pointer = value_new(POINTER_VALUE);
+				Value_Data *array = value_new(ARRAY_VALUE);
 				array->array.length = string_length;
 				array->array.values = values;
 				pointer->pointer.value = array;
 
-				return pointer;
+				return create_value_data(pointer, node);
 			}
 		}
 		case NUMBER_NODE: {
 			Number_Node number = node->number;
 			switch (number.tag) {
 				case INTEGER_NUMBER: {
-					Value *value = value_new(INTEGER_VALUE);
+					Value_Data *value = value_new(INTEGER_VALUE);
 					value->integer.value = number.integer;
-					return value;
+					return create_value_data(value, node);
 				}
 				default:
 					assert(false);
 			}
-			return NULL;
+			break;
 		}
 		case CALL_NODE: {
 			Call_Node call = node->call;
 
-			Value *function = evaluate(context, call.function);
+			Value function = evaluate(context, call.function);
 
-			Value **arguments = NULL;
+			Value *arguments = NULL;
 			for (long int i = 0; i < arrlen(call.arguments); i++) {
 				arrpush(arguments, evaluate(context, call.arguments[i]));
 			}
 
-			switch (function->tag) {
+			switch (function.value->tag) {
 				case INTERNAL_VALUE: {
-					char *identifier = function->internal.identifier;
+					char *identifier = function.value->internal.identifier;
 					if (strcmp(identifier, "import") == 0) {
-						Value *string = arguments[0];
-						char *source = malloc(string->string.length + 1);
-						source[string->string.length] = '\0';
-						memcpy(source, string->string.data, string->string.length); 
+						Value string = arguments[0];
+						char *source = malloc(string.value->string.length + 1);
+						source[string.value->string.length] = '\0';
+						memcpy(source, string.value->string.data, string.value->string.length); 
 
-						Value *value = get_cached_file(context, source);
-						if (value != NULL) {
+						Value value = get_cached_file(context, source);
+						if (value.value != NULL) {
 							return value;
 						}
 
@@ -374,70 +386,74 @@ Value *evaluate(Context *context, Node *node) {
 
 						return value;
 					} else if (strcmp(identifier, "size_of") == 0) {
-						Value *value = value_new(INTEGER_VALUE);
-						value->integer.value = context->codegen.size_fn(arguments[0], context->codegen.data);
-						return value;
+						Value_Data *value = value_new(INTEGER_VALUE);
+						value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
+						return create_value_data(value, node);
 					} else {
 						assert(false);
 					}
-					return NULL;
+					return (Value) {};
 				}
 				case FUNCTION_VALUE: {
-					jmp_buf prev_jmp;
-					memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-					Value *result;
-					if (!setjmp(jmp)) {
-						result = evaluate(context, function->function.body);
-					} else {
-						result = jmp_result;
-					}
-					memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
-					return result;
+					Value *saved_function_arguments = function_arguments;
+					function_arguments = arguments;
+					Value result = evaluate(context, function.value->function.body);
+					function_arguments = saved_function_arguments;
+					return create_value_data(result.value, node);
 				}
 				default:
 					assert(false);
 			}
 
-			return NULL;
+			return (Value) {};
 		}
 		case BINARY_OPERATOR_NODE: {
 			Binary_Operator_Node binary_operator = node->binary_operator;
 
-			Value *left_value = evaluate(context, binary_operator.left);
-			Value *right_value = evaluate(context, binary_operator.right);
+			Value left_value = evaluate(context, binary_operator.left);
+			Value right_value = evaluate(context, binary_operator.right);
 
-			if (value_equal(left_value, right_value)) {
-				Value *true_value = value_new(BOOLEAN_VALUE);
+			if (value_equal(left_value.value, right_value.value)) {
+				Value_Data *true_value = value_new(BOOLEAN_VALUE);
 				true_value->boolean.value = true;
-				return true_value;
+				return create_value_data(true_value, node);
 			} else {
-				Value *false_value = value_new(BOOLEAN_VALUE);
+				Value_Data *false_value = value_new(BOOLEAN_VALUE);
 				false_value->boolean.value = false;
-				return false_value;
+				return create_value_data(false_value, node);
 			}
 		}
 		case BLOCK_NODE: {
 			Block_Node block = node->block;
 
-			for (long int i = 0; i < arrlen(block.statements); i++) {
-				evaluate(context, block.statements[i]);
+			jmp_buf prev_jmp;
+			memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+			Value result;
+			if (!setjmp(jmp)) {
+				for (long int i = 0; i < arrlen(block.statements); i++) {
+					evaluate(context, block.statements[i]);
+				}
+				result = create_value_data(value_new(NONE_VALUE), node);
+			} else {
+				result = jmp_result;
+			}
+			memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+
+			return result;
+		}
+		case YIELD_NODE: {
+			Yield_Node yield = node->yield;
+
+			Value result;
+			if (yield.value != NULL) {
+				result = evaluate(context, yield.value);
+			} else {
+				result = create_value_data(value_new(NONE_VALUE), node);
 			}
 
-			return value_new(NONE_VALUE);
+			jmp_result = result;
+			longjmp(jmp, 1);
 		}
-		// case RETURN_NODE: {
-		// 	Return_Node return_ = node->return_;
-
-		// 	Value *result;
-		// 	if (return_.value != NULL) {
-		// 		result = evaluate(context, return_.value);
-		// 	} else {
-		// 		result = value_new(NONE_VALUE);
-		// 	}
-
-		// 	jmp_result = result;
-		// 	longjmp(jmp, 1);
-		// }
 		default:
 			assert(false);
 	}
