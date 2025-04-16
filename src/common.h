@@ -148,7 +148,7 @@ typedef struct {
 	Generic_Binding *bindings;
 	Scope *scopes;
 	size_t generic_id;
-} Value_Data_Old;
+} Value_Define_Data;
 
 struct Value_Data {
 	Value_Tag tag;
@@ -170,7 +170,7 @@ struct Value_Data {
 		String_Value string;
 		Internal_Value internal;
 	};
-	Value_Data_Old *value_data; // stb_ds
+	Value_Define_Data *value_define_data; // stb_ds
 };
 
 Value_Data *value_new(Value_Tag tag);

@@ -241,17 +241,16 @@ def main = fn() {
 };
 
 def slice = mod {
-	// Generic(Operator(Struct))
-	def slice = #(T: type) struct {
+	def slice = struct (T: type) {
 		len: uint,
 		ptr: ^[]T,
-	} op {
+	} {
 		[] = fn(slice: ^slice#(T), index: uint): ^T {
 			yield &slice.ptr[index];
-		},
+		};
 		slice = fn(slice: slice#(T), start: uint, end: uint): slice#(T) {
 			yield .{ end - start, &slice.ptr[start] };
-		}
+		};
 	};
 
 	def new = #(T: type, U: type) fn(array: ^[U]T): slice#(T) {

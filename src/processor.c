@@ -20,7 +20,7 @@ typedef struct {
 			Scope *scope;
 		} define;
 		Node *variable;
-		Value_Data *generic;
+		Value generic;
 		size_t argument;
 		size_t enum_variant;
 	};
@@ -72,10 +72,10 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			}
 		}
 
-		// Generic_Binding binding = shget(scope->generic_bindings, identifier);
-		// if (binding.type != NULL) {
-		// 	return (Lookup_Result) { .tag = LOOKUP_RESULT_GENERIC, .generic = binding.binding, .type = binding.type };
-		// }
+		Generic_Binding binding = shget(scope->generic_bindings, identifier);
+		if (binding.type.value != NULL) {
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_GENERIC, .generic = binding.binding, .type = binding.type };
+		}
 
 		Node *node = scope->node;
 		switch (node->kind) {
@@ -303,58 +303,58 @@ typedef struct {
 	Value type;
 } Process_Define_Result;
 
-typedef struct { char *key; Value_Data *value; } *Pattern_Match_Result;
+typedef struct { char *key; Value value; } *Pattern_Match_Result;
 
-// static bool pattern_match(Node *node, Value *value, Context *context, Generic_Argument *generics, Pattern_Match_Result *match_result) {
-// 	switch (node->kind) {
-// 		case POINTER_NODE: {
-// 			if (value->tag == POINTER_TYPE_VALUE) {
-// 				return pattern_match(node->pointer.inner, value->pointer_type.inner, context, generics, match_result);
-// 			}
-// 			break;
-// 		}
-// 		case ARRAY_TYPE_NODE: {
-// 			if (value->tag == ARRAY_TYPE_VALUE) {
-// 				if (!pattern_match(node->array_type.inner, value->array_type.inner, context, generics, match_result)) return false;
-// 				return pattern_match(node->array_type.size, value->array_type.size, context, generics, match_result);
-// 			}
-// 			break;
-// 		}
-// 		case IDENTIFIER_NODE: {
-// 			for (long int i = 0; i < arrlen(generics); i++) {
-// 				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
-// 					Value *previous_value = shget(*match_result, generics[i].identifier);
-// 					if (previous_value != NULL) {
-// 						if (!value_equal(previous_value, value)) {
-// 							return false;
-// 						}
-// 					}
-//
-// 					shput(*match_result, generics[i].identifier, value);
-// 					break;
-// 				}
-// 			}
-//
-// 			for (long i = 0; i < arrlen(value->value_data); i++) {
-// 				Value_Data value_data = value->value_data[i];
-// 				Lookup_Result result = lookup(context, node->identifier.value);
-// 				assert(result.tag == LOOKUP_RESULT_DEFINE);
-// 				if (value_data.define_node == result.define.node) {
-// 					for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
-// 						if (!pattern_match(node->identifier.generics[i], value_data.bindings[i].binding, context, generics, match_result)) {
-// 							return false;
-// 						}
-// 					}
-// 				}
-// 			}
-// 			break;
-// 		}
-// 		default:
-// 			break;
-// 	}
-//
-// 	return true;
-// }
+static bool pattern_match(Node *node, Value value, Context *context, Generic_Argument *generics, Pattern_Match_Result *match_result) {
+	switch (node->kind) {
+		case POINTER_NODE: {
+			if (value.value->tag == POINTER_TYPE_VALUE) {
+				return pattern_match(node->pointer.inner, value.value->pointer_type.inner, context, generics, match_result);
+			}
+			break;
+		}
+		case ARRAY_TYPE_NODE: {
+			if (value.value->tag == ARRAY_TYPE_VALUE) {
+				if (!pattern_match(node->array_type.inner, value.value->array_type.inner, context, generics, match_result)) return false;
+				return pattern_match(node->array_type.size, value.value->array_type.size, context, generics, match_result);
+			}
+			break;
+		}
+		case IDENTIFIER_NODE: {
+			for (long int i = 0; i < arrlen(generics); i++) {
+				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
+					Value previous_value = shget(*match_result, generics[i].identifier);
+					if (previous_value.value != NULL) {
+						if (!value_equal(previous_value.value, value.value)) {
+							return false;
+						}
+					}
+
+					shput(*match_result, generics[i].identifier, value);
+					break;
+				}
+			}
+
+			for (long i = 0; i < arrlen(value.value->value_define_data); i++) {
+				Value_Define_Data value_define_data = value.value->value_define_data[i];
+				Lookup_Result result = lookup(context, node->identifier.value);
+				assert(result.tag == LOOKUP_RESULT_DEFINE);
+				if (value_define_data.define_node == result.define.node) {
+					for (long int i = 0; i < arrlen(node->identifier.generics); i++) {
+						if (!pattern_match(node->identifier.generics[i], value_define_data.bindings[i].binding, context, generics, match_result)) {
+							return false;
+						}
+					}
+				}
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
+	return true;
+}
 
 static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Define_Node define = node->define;
@@ -366,73 +366,73 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	size_t saved_saved_generic_id = context->generic_id;
 	context->generic_id = generic_id;
 
-	for (long int i = 0; i < arrlen(define.operators); i++) {
-		Operator_Definition operator = define.operators[i];
+	// for (long int i = 0; i < arrlen(define.operators); i++) {
+	// 	Operator_Definition operator = define.operators[i];
 
-		Lookup_Result lookup_result = lookup(context, operator.function);
-		assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
-		Node *function_define_node = lookup_result.define.node;
+	// 	Lookup_Result lookup_result = lookup(context, operator.function);
+	// 	assert(lookup_result.tag == LOOKUP_RESULT_DEFINE);
+	// 	Node *function_define_node = lookup_result.define.node;
 
-		Define_Operators *operators = hmget(context->operators, node);
-		if (operators == NULL) {
-			operators = malloc(sizeof(Node_Types *));
-			*operators = NULL;
-			hmput(context->operators, node, operators);
-		}
-
-		shput(*operators, operator.operator, function_define_node);
-	}
-
-	// if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
-	// 	if (context->temporary_context.call_argument_types != NULL || context->temporary_context.call_wanted_type != NULL) {
-	// 		bool pattern_match_collision = false;
-	// 		if (define.expression->kind == FUNCTION_NODE) {
-	// 			Function_Type_Node function_type = define.expression->function.function_type->function_type;
-	// 			Pattern_Match_Result result = NULL;
-	// 			if (context->temporary_context.call_argument_types != NULL) {
-	// 				for (long int i = 0; i < arrlen(function_type.arguments) && i < arrlen(context->temporary_context.call_argument_types); i++) {
-	// 					Node *argument = function_type.arguments[i].type;
-	// 					Value *argument_value = context->temporary_context.call_argument_types[i];
-	// 					if (!pattern_match(argument, argument_value, context, define.generics, &result)) {
-	// 						pattern_match_collision = true;
-	// 					};
-	// 				}
-	// 			}
-
-	// 			Node *return_ = function_type.return_;
-	// 			if (return_ != NULL && context->temporary_context.call_wanted_type != NULL) {
-	// 				if (!pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result)) {
-	// 					pattern_match_collision = true;
-	// 				};
-	// 			}
-
-	// 			generics = NULL;
-	// 			for (long int i = 0; i < arrlen(define.generics); i++) {
-	// 				process_node(context, define.generics[i].type);
-
-	// 				Value *binding = shget(result, define.generics[i].identifier);
-	// 				if (binding != NULL) {
-	// 					Generic_Binding generic_binding = {
-	// 						.type = evaluate(context, define.generics[i].type),
-	// 						.binding = binding
-	// 					};
-
-	// 					arrpush(generics, generic_binding);
-	// 				}
-	// 			}
-	// 		}
-
-	// 		if (arrlen(generics) < arrlen(define.generics) || pattern_match_collision) {
-	// 			(void) arrpop(context->scopes);
-	// 			if (scopes != NULL) context->scopes = saved_scopes;
-	// 			return (Process_Define_Result) {};
-	// 		}
-	// 	} else {
-	// 		(void) arrpop(context->scopes);
-	// 		if (scopes != NULL) context->scopes = saved_scopes;
-	// 		return (Process_Define_Result) {};
+	// 	Define_Operators *operators = hmget(context->operators, node);
+	// 	if (operators == NULL) {
+	// 		operators = malloc(sizeof(Node_Types *));
+	// 		*operators = NULL;
+	// 		hmput(context->operators, node, operators);
 	// 	}
+
+	// 	shput(*operators, operator.operator, function_define_node);
 	// }
+
+	if (arrlen(generics) == 0 && arrlen(define.generics) > 0) {
+		if (context->temporary_context.call_argument_types != NULL || context->temporary_context.call_wanted_type.value != NULL) {
+			bool pattern_match_collision = false;
+			if (define.expression->kind == FUNCTION_NODE) {
+				Function_Type_Node function_type = define.expression->function.function_type->function_type;
+				Pattern_Match_Result result = NULL;
+				if (context->temporary_context.call_argument_types != NULL) {
+					for (long int i = 0; i < arrlen(function_type.arguments) && i < arrlen(context->temporary_context.call_argument_types); i++) {
+						Node *argument = function_type.arguments[i].type;
+						Value argument_value = context->temporary_context.call_argument_types[i];
+						if (!pattern_match(argument, argument_value, context, define.generics, &result)) {
+							pattern_match_collision = true;
+						};
+					}
+				}
+
+				Node *return_ = function_type.return_;
+				if (return_ != NULL && context->temporary_context.call_wanted_type.value != NULL) {
+					if (!pattern_match(return_, context->temporary_context.call_wanted_type, context, define.generics, &result)) {
+						pattern_match_collision = true;
+					};
+				}
+
+				generics = NULL;
+				for (long int i = 0; i < arrlen(define.generics); i++) {
+					process_node(context, define.generics[i].type);
+
+					Value binding = shget(result, define.generics[i].identifier);
+					if (binding.value != NULL) {
+						Generic_Binding generic_binding = {
+							.type = evaluate(context, define.generics[i].type),
+							.binding = binding
+						};
+
+						arrpush(generics, generic_binding);
+					}
+				}
+			}
+
+			if (arrlen(generics) < arrlen(define.generics) || pattern_match_collision) {
+				(void) arrpop(context->scopes);
+				if (scopes != NULL) context->scopes = saved_scopes;
+				return (Process_Define_Result) {};
+			}
+		} else {
+			(void) arrpop(context->scopes);
+			if (scopes != NULL) context->scopes = saved_scopes;
+			return (Process_Define_Result) {};
+		}
+	}
 
 	Node_Data *cached_data = get_data(context, node);
 	if (cached_data != NULL) {
@@ -489,21 +489,22 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		arrpush(copied_scopes, context->scopes[i]);
 	}
 
-	// Value *wrapped_value = malloc(sizeof(Value));
-	// memcpy(wrapped_value, value, sizeof(Value));
-	// Value_Data_Old value_data = {
-	// 	.define_node = node,
-	// 	.bindings = generics,
-	// 	.scopes = copied_scopes,
-	// 	.generic_id = generic_id
-	// };
+	Value_Data *wrapped_value_data = malloc(sizeof(Value_Data));
+	memcpy(wrapped_value_data, value.value, sizeof(Value_Data));
+	Value_Define_Data value_data = {
+		.define_node = node,
+		.bindings = generics,
+		.scopes = copied_scopes,
+		.generic_id = generic_id
+	};
 
-	// Value_Data_Old *cloned_value_data = NULL;
-	// for (long int i = 0; i < arrlen(wrapped_value->value_data); i++) {
-	// 	arrpush(cloned_value_data, wrapped_value->value_data[i]);
-	// }
-	// wrapped_value->value_data = cloned_value_data;
-	// arrpush(wrapped_value->value_data, value_data);
+	Value_Define_Data *cloned_value_data = NULL;
+	for (long int i = 0; i < arrlen(wrapped_value_data->value_define_data); i++) {
+		arrpush(cloned_value_data, wrapped_value_data->value_define_data[i]);
+	}
+	wrapped_value_data->value_define_data = cloned_value_data;
+	arrpush(wrapped_value_data->value_define_data, value_data);
+	value.value = wrapped_value_data;
 
 	context->generic_id = saved_generic_id;
 	(void) arrpop(context->scopes);
@@ -602,13 +603,13 @@ static void process_call(Context *context, Node *node) {
 	set_type(context, node, function_type.value->function_type.return_type);
 }
 
-// static Scope *clone_scopes(Scope *scopes) {
-// 	Scope *cloned = NULL;
-// 	for (long int i = 0; i < arrlen(scopes); i++) {
-// 		arrpush(cloned, scopes[i]);
-// 	}
-// 	return cloned;
-// }
+static Scope *clone_scopes(Scope *scopes) {
+	Scope *cloned = NULL;
+	for (long int i = 0; i < arrlen(scopes); i++) {
+		arrpush(cloned, scopes[i]);
+	}
+	return cloned;
+}
 
 static Process_Define_Result process_define_context(Context *context, Temporary_Context temporary_context, Node *node, Scope *scopes, Generic_Binding *generics, size_t generic_id) {
 	Temporary_Context saved_temporary_context = context->temporary_context;
@@ -622,53 +623,53 @@ static Process_Define_Result process_define_context(Context *context, Temporary_
 	return process_define_result;
 }
 
-// static Node *get_operator(Context *context, Node *define_node, char *operator) {
-// 	Define_Operators *operators = hmget(context->operators, define_node);
-// 	if (operators != NULL) {
-// 		return shget(*operators, operator);
-// 	}
-//
-// 	return NULL;
-// }
+static Node *get_operator(Context *context, Node *define_node, char *operator) {
+	Define_Operators *operators = hmget(context->operators, define_node);
+	if (operators != NULL) {
+		return shget(*operators, operator);
+	}
 
-// static void process_call_method(Context *context, Node *node) {
-// 	Call_Method_Node call_method = node->call_method;
-//
-// 	Node **arguments = NULL;
-// 	arrpush(arguments, call_method.argument1);
-// 	for (long int i = 0; i < arrlen(call_method.arguments); i++) {
-// 		arrpush(arguments, call_method.arguments[i]);
-// 	}
-//
-// 	process_node(context, call_method.argument1);
-// 	Value_Data argument1_type = get_type(context, call_method.argument1);
-// 	if (argument1_type.value->tag != POINTER_TYPE_VALUE) {
-// 		reset_node(context, call_method.argument1);
-//
-// 		Temporary_Context temporary_context = { .want_pointer = true };
-// 		process_node_context(context, temporary_context, call_method.argument1);
-//
-// 		argument1_type = get_type(context, call_method.argument1);
-// 	}
-//
-// 	Value_Data_Old value_data = argument1_type.value->pointer_type.inner->value_data[arrlen(argument1_type.type->pointer_type.inner->value_data) - 1];
-// 	Node *define_node = value_data.define_node;
-//
-// 	Node *method_define_node = get_operator(context, define_node, call_method.method);
-// 	Temporary_Context temporary_context = process_call_generic1(context, arguments);
-// 	Process_Define_Result process_define_result = process_define_context(context, temporary_context, method_define_node, clone_scopes(value_data.scopes), NULL, value_data.generic_id);
-//
-// 	process_call_generic2(context, node, arguments, process_define_result.type);
-//
-// 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
-// 	data->call_method.arguments = arguments;
-// 	data->call_method.custom_operator_function = (Custom_Operator_Function) {
-// 		.function = process_define_result.value,
-// 		.function_type = process_define_result.type
-// 	};
-// 	set_data(context, node, data);
-// 	set_type(context, node, process_define_result.type.value->function_type.return_type);
-// }
+	return NULL;
+}
+
+static void process_call_method(Context *context, Node *node) {
+	Call_Method_Node call_method = node->call_method;
+
+	Node **arguments = NULL;
+	arrpush(arguments, call_method.argument1);
+	for (long int i = 0; i < arrlen(call_method.arguments); i++) {
+		arrpush(arguments, call_method.arguments[i]);
+	}
+
+	process_node(context, call_method.argument1);
+	Value argument1_type = get_type(context, call_method.argument1);
+	if (argument1_type.value->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, call_method.argument1);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, call_method.argument1);
+
+		argument1_type = get_type(context, call_method.argument1);
+	}
+
+	Value_Define_Data value_define_data = argument1_type.value->pointer_type.inner.value->value_define_data[arrlen(argument1_type.value->pointer_type.inner.value->value_define_data) - 1];
+	Node *define_node = value_define_data.define_node;
+
+	Node *method_define_node = get_operator(context, define_node, call_method.method);
+	Temporary_Context temporary_context = process_call_generic1(context, arguments);
+	Process_Define_Result process_define_result = process_define_context(context, temporary_context, method_define_node, clone_scopes(value_define_data.scopes), NULL, value_define_data.generic_id);
+
+	process_call_generic2(context, node, arguments, process_define_result.type);
+
+	Node_Data *data = node_data_new(CALL_METHOD_NODE);
+	data->call_method.arguments = arguments;
+	data->call_method.custom_operator_function = (Custom_Operator_Function) {
+		.function = process_define_result.value.value,
+		.function_type = process_define_result.type
+	};
+	set_data(context, node, data);
+	set_type(context, node, process_define_result.type.value->function_type.return_type);
+}
 
 static void process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
@@ -817,10 +818,10 @@ static void process_identifier(Context *context, Node *node) {
 			}
 		}
 
-		// if (lookup_result.tag == LOOKUP_RESULT_GENERIC) {
-		// 	value = lookup_result.generic;
-		// 	type = lookup_result.type;
-		// }
+		if (lookup_result.tag == LOOKUP_RESULT_GENERIC) {
+			value = lookup_result.generic;
+			type = lookup_result.type;
+		}
 
 		if (lookup_result.tag == LOOKUP_RESULT_ENUM_VARIANT) {
 			value.value = value_new(ENUM_VALUE);
@@ -857,6 +858,10 @@ static void process_struct_type(Context *context, Node *node) {
 	Struct_Type_Node struct_type = node->struct_type;
 	for (long int i = 0; i < arrlen(struct_type.items); i++) {
 		process_node(context, struct_type.items[i].type);
+	}
+
+	for (long int i = 0; i < arrlen(struct_type.operators); i++) {
+		process_node(context, struct_type.operators[i].function);
 	}
 
 	Value_Data *value = value_new(INTERNAL_VALUE);
@@ -1746,10 +1751,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_call(context, node);
 			break;
 		}
-		// case CALL_METHOD_NODE: {
-		// 	process_call_method(context, node);
-		// 	break;
-		// }
+		case CALL_METHOD_NODE: {
+			process_call_method(context, node);
+			break;
+		}
 		case IDENTIFIER_NODE: {
 			process_identifier(context, node);
 			break;

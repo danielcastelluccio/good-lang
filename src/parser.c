@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "ast.h"
 #include "stb/ds.h"
 
 #include "parser.h"
@@ -315,8 +316,40 @@ static Node *parse_struct_type(Lexer *lexer) {
 	}
 	consume_check(lexer, CLOSED_CURLY_BRACE);
 
+	Operator_Definition *operator_definitions = NULL;
+	if (lexer_next(lexer, false).kind == OPEN_CURLY_BRACE) {
+		while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
+			Token_Data operator_token = lexer_next(lexer, true);
+			char *operator = NULL;
+			switch (operator_token.kind) {
+				case IDENTIFIER:
+					operator = operator_token.string;
+					break;
+				case OPEN_BRACE:
+					consume_check(lexer, CLOSED_BRACE);
+					operator = "[]";
+					break;
+				default:
+					assert(false);
+			}
+
+			consume_check(lexer, COLON);
+			Node *function = parse_expression(lexer);
+
+			Operator_Definition operator_definition = {
+				.operator = operator,
+				.function = function
+			};
+			arrpush(operator_definitions, operator_definition);
+
+			consume_check(lexer, SEMICOLON);
+		}
+		consume_check(lexer, CLOSED_CURLY_BRACE);
+	}
+
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 	struct_->struct_type.items = items;
+	struct_->struct_type.operators = operator_definitions;
 
 	return struct_;
 }
@@ -418,34 +451,34 @@ static Node *parse_define(Lexer *lexer) {
 		consume_check(lexer, CLOSED_PARENTHESIS);
 	}
 
-	Operator_Definition *operators = NULL;
-	while (lexer_next(lexer, false).kind == KEYWORD && strcmp(lexer_next(lexer, false).string, "op") == 0) {
-		consume_check(lexer, KEYWORD);
-		consume_check(lexer, OPEN_PARENTHESIS);
+	// Operator_Definition *operators = NULL;
+	// while (lexer_next(lexer, false).kind == KEYWORD && strcmp(lexer_next(lexer, false).string, "op") == 0) {
+	// 	consume_check(lexer, KEYWORD);
+	// 	consume_check(lexer, OPEN_PARENTHESIS);
 
-		Token_Data token = lexer_next(lexer, true);
-		char *operator = NULL;
-		switch (token.kind) {
-			case IDENTIFIER:
-				operator = token.string;
-				break;
-			case OPEN_BRACE:
-				consume_check(lexer, CLOSED_BRACE);
-				operator = "[]";
-				break;
-			default:
-				assert(false);
-		}
+	// 	Token_Data token = lexer_next(lexer, true);
+	// 	char *operator = NULL;
+	// 	switch (token.kind) {
+	// 		case IDENTIFIER:
+	// 			operator = token.string;
+	// 			break;
+	// 		case OPEN_BRACE:
+	// 			consume_check(lexer, CLOSED_BRACE);
+	// 			operator = "[]";
+	// 			break;
+	// 		default:
+	// 			assert(false);
+	// 	}
 
-		consume_check(lexer, COMMA);
+	// 	consume_check(lexer, COMMA);
 
-		char *function = consume_check(lexer, IDENTIFIER).string;
+	// 	char *function = consume_check(lexer, IDENTIFIER).string;
 
-		consume_check(lexer, CLOSED_PARENTHESIS);
+	// 	consume_check(lexer, CLOSED_PARENTHESIS);
 
-		Operator_Definition operator_definition = { .operator = operator, .function = function };
-		arrpush(operators, operator_definition);
-	}
+	// 	Operator_Definition operator_definition = { .operator = operator, .function = function };
+	// 	arrpush(operators, operator_definition);
+	// }
 
 	consume_check(lexer, EQUALS);
 
@@ -458,7 +491,7 @@ static Node *parse_define(Lexer *lexer) {
 	define->define.expression = expression;
 	define->define.generics = generics;
 	define->define.generic_constraint = constraint;
-	define->define.operators = operators;
+	// define->define.operators = operators;
 
 	return define;
 }

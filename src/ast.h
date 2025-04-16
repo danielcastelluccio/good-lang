@@ -35,8 +35,10 @@ typedef struct {
 } Function_Type_Node;
 
 typedef Identifier_Type_Pair Struct_Item;
+typedef struct { char *operator; Node *function; } Operator_Definition;
 typedef struct {
 	Struct_Item *items; // stb_ds
+	Operator_Definition *operators; // stb_ds
 } Struct_Type_Node;
 
 typedef Identifier_Type_Pair Union_Item;
@@ -189,14 +191,12 @@ typedef struct {
 } Binary_Operator_Node;
 
 typedef Identifier_Type_Pair Generic_Argument;
-typedef struct { char *operator; char *function; } Operator_Definition;
 
 typedef struct {
 	char *identifier;
 	Node *expression;
 	Generic_Argument *generics; // stb_ds
 	Node *generic_constraint;
-	Operator_Definition *operators; // stb_ds
 } Define_Node;
 
 typedef struct {
