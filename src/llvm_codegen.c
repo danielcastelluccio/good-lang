@@ -138,10 +138,6 @@ static void generate_define(Node *node, State *state) {
 		return;
 	}
 
-	if (data->define.kind != DEFINE_SINGLE) {
-		return;
-	}
-
 	Value value = data->define.value.binding;
 	if (value.value == NULL) {
 		return;

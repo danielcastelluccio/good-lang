@@ -150,13 +150,6 @@ typedef struct {
 	char *identifier;
 } Internal_Value;
 
-typedef struct {
-	Node *define_node;
-	Generic_Binding *bindings;
-	Scope *scopes;
-	size_t generic_id;
-} Value_Define_Data;
-
 struct Value_Data {
 	Value_Tag tag;
 	union {
@@ -177,7 +170,6 @@ struct Value_Data {
 		String_Value string;
 		Internal_Value internal;
 	};
-	Value_Define_Data *value_define_data; // stb_ds
 };
 
 Value_Data *value_new(Value_Tag tag);
@@ -252,19 +244,7 @@ typedef struct {
 } Switch_Data;
 
 typedef struct {
-	Generic_Binding *generics;
 	Generic_Binding value;
-} Generic_Value;
-
-typedef struct {
-	enum {
-		DEFINE_SINGLE,
-		DEFINE_GENERIC
-	} kind;
-	union {
-		Generic_Binding value;
-		Generic_Value *generic_values;
-	};
 } Define_Data;
 
 typedef struct {
@@ -272,7 +252,13 @@ typedef struct {
 } Function_Data;
 
 typedef struct {
+	Value *generics;
+	Generic_Binding value;
+} Generic_Value;
+
+typedef struct {
 	Value value;
+	Generic_Value *function_values;
 } Function_Type_Data;
 
 typedef struct {
