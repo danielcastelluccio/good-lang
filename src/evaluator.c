@@ -197,7 +197,9 @@ Value evaluate(Context *context, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE: {
 			Function_Node function = node->function;
-			Value function_type_value = get_data(context, function.function_type)->function_type.value;
+
+			Node_Data *function_type_data = get_data(context, function.function_type);
+			Value function_type_value = function_type_data->function_type.value;
 
 			Value_Data *function_value = value_new(FUNCTION_VALUE);
 			function_value->function.type = function_type_value.value;
@@ -208,6 +210,7 @@ Value evaluate(Context *context, Node *node) {
 			function_value->function.compile_only = get_data(context, node)->function.compile_only;
 			function_value->function.generic_id = context->generic_id;
 			function_value->function.extern_name = function.extern_name;
+			function_value->function.node = node;
 
 			return create_value_data(function_value, node);
 		}
@@ -220,12 +223,16 @@ Value evaluate(Context *context, Node *node) {
 			Value_Data *struct_value = value_new(STRUCT_TYPE_VALUE);
 			struct_value->struct_type.node = node;
 			struct_value->struct_type.items = NULL;
-			for (long int i = 0; i < arrlen(struct_type.items); i++) {
-				Struct_Item_Value item = {
-					.identifier = struct_type.items[i].identifier,
-					.type = evaluate(context, struct_type.items[i].type)
-				};
-				arrpush(struct_value->struct_type.items, item);
+			if (arrlen(struct_type.arguments) > 0) {
+				struct_value->struct_type.incomplete = true;
+			} else {
+				for (long int i = 0; i < arrlen(struct_type.items); i++) {
+					Struct_Item_Value item = {
+						.identifier = struct_type.items[i].identifier,
+						.type = evaluate(context, struct_type.items[i].type)
+					};
+					arrpush(struct_value->struct_type.items, item);
+				}
 			}
 
 			return create_value_data(struct_value, node);
@@ -295,6 +302,7 @@ Value evaluate(Context *context, Node *node) {
 				case IDENTIFIER_VALUE:
 					return identifier_data.value;
 				case IDENTIFIER_ARGUMENT:
+					printf("%li %li %li\n", identifier_data.argument_index, arrlen(function_arguments), node->location.row);
 					return function_arguments[identifier_data.argument_index];
 				default:
 					handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
@@ -400,6 +408,9 @@ Value evaluate(Context *context, Node *node) {
 					Value result = evaluate(context, function.value->function.body);
 					function_arguments = saved_function_arguments;
 					return create_value_data(result.value, node);
+				}
+				case STRUCT_TYPE_VALUE: {
+					return get_data(context, node)->call.struct_type;
 				}
 				default:
 					assert(false);

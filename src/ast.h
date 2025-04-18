@@ -26,7 +26,12 @@ typedef struct {
 	Node *size;
 } Array_Type_Node;
 
-typedef Identifier_Type_Pair Function_Argument;
+typedef struct {
+	char *identifier;
+	Node *type;
+	bool static_;
+	bool inferred;
+} Function_Argument;
 
 typedef struct {
 	Function_Argument *arguments; // std_ds
@@ -34,11 +39,17 @@ typedef struct {
 	bool variadic;
 } Function_Type_Node;
 
+typedef struct {
+	char *identifier;
+	Node *type;
+} Struct_Argument;
+
 typedef Identifier_Type_Pair Struct_Item;
 typedef struct { char *operator; Node *function; } Operator_Definition;
 typedef struct {
 	Struct_Item *items; // stb_ds
 	Operator_Definition *operators; // stb_ds
+	Struct_Argument *arguments; // stb_ds
 } Struct_Type_Node;
 
 typedef Identifier_Type_Pair Union_Item;

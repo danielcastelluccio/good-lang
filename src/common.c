@@ -91,7 +91,8 @@ void reset_node(Context *context, Node *node) {
 }
 
 Value create_string_type() {
-	return (Value) { .value = value_new(STRING_TYPE_VALUE) };
+	// return (Value) { .value = value_new(STRING_TYPE_VALUE) };
+	return create_internal_type("str");
 }
 
 Value create_boolean_type() {

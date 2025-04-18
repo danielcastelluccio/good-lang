@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <llvm-c/Types.h>
 #include <stdbool.h>
 #include <unistd.h>
 
@@ -6,6 +7,7 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 
+#include "common.h"
 #include "stb/ds.h"
 
 #include "llvm_codegen.h"
@@ -50,6 +52,7 @@ static LLVMTypeRef create_llvm_function_literal_type(Value_Data *value, State *s
 
 	LLVMTypeRef *arguments = NULL;
 	for (long int i = 0; i < arrlen(function_type.arguments); i++) {
+		if (function_type.arguments[i].static_) continue;
 		arrpush(arguments, create_llvm_type(function_type.arguments[i].type.value, state));
 	}
 
@@ -84,6 +87,12 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 			else if (strcmp(internal.identifier, "uint") == 0) return LLVMInt64Type();
 			else if (strcmp(internal.identifier, "flt") == 0) return LLVMDoubleType();
 			else if (strcmp(internal.identifier, "bool") == 0) return LLVMInt1Type();
+			else if (strcmp(internal.identifier, "str") == 0) {
+				LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
+				items[0] = LLVMInt64Type();
+				items[1] = LLVMPointerType(LLVMVoidType(), 0);
+				return LLVMStructType(items, 2, false);
+			}
 			else assert(false);
 			break;
 		}
@@ -173,10 +182,15 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 	return NULL;
 }
 
+int printf(const char *, ...);
 static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Value_Data *function_type, Node **arguments, State *state) {
 	LLVMValueRef *llvm_arguments = NULL;
-	for (unsigned int i = 0; i < arrlen(arguments); i++) {
-		arrpush(llvm_arguments, generate_node(arguments[i], state));
+	long int j = 0;
+	for (long int i = 0; i < arrlen(arguments); i++) {
+		while (function_type->function_type.arguments[j].inferred) j++;
+		if (j >= arrlen(function_type->function_type.arguments) || !function_type->function_type.arguments[j].static_) {
+			arrpush(llvm_arguments, generate_node(arguments[i], state));
+		}
 	}
 
 	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
@@ -186,8 +200,14 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	assert(node->kind == CALL_NODE);
 	Call_Node call = node->call;
 
-	Value_Data *function_type = get_type(&state->context, call.function).value;
-	return generate_call_generic(generate_node(call.function, state), function_type, call.arguments, state);
+	Call_Data call_data = get_data(&state->context, node)->call;
+	Value function_type = call_data.function_type;
+
+	if (call_data.function_value.value != NULL) {
+		return generate_call_generic(generate_value(call_data.function_value.value, state), function_type.value, call.arguments, state);
+	} else {
+		return generate_call_generic(generate_node(call.function, state), function_type.value, call.arguments, state);
+	}
 }
 
 static LLVMValueRef generate_call_method(Node *node, State *state) {
@@ -219,8 +239,9 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			}
 		}
 		case IDENTIFIER_ARGUMENT: {
-			size_t argument = get_data(&state->context, node)->identifier.argument_index;
-			LLVMValueRef value_pointer = state->function_arguments[argument];
+			size_t argument_index = get_data(&state->context, node)->identifier.argument_index;
+
+			LLVMValueRef value_pointer = state->function_arguments[argument_index];
 			if (identifier_data->identifier.want_pointer) {
 				return value_pointer;
 			} else {
@@ -249,7 +270,7 @@ static LLVMValueRef generate_string(Node *node, State *state) {
 
 	LLVMValueRef pointer_llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8Type(), 0), "");
 
-	if (string_data.type.value->tag == STRING_TYPE_VALUE) {
+	if (string_data.type.value->tag == INTERNAL_VALUE && strcmp(string_data.type.value->internal.identifier, "str") == 0) {
 		LLVMValueRef string_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(string_data.type.value, state), "");
 
 		LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(string_data.type.value, state), string_value, 0, "");
@@ -797,7 +818,7 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	size_t saved_generic_id = state->context.generic_id;
 	state->context.generic_id = function.generic_id;
 
-	if (function.compile_only) {
+	if (function.compile_only || function.type->function_type.incomplete) {
 		return NULL;
 	}
 
@@ -816,10 +837,17 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 		LLVMBasicBlockRef entry = LLVMAppendBasicBlock(llvm_function, "");
 		LLVMPositionBuilderAtEnd(state->llvm_builder, entry);
 
+		long int j = 0;
 		for (long int i = 0; i < LLVMCountParams(llvm_function); i++) {
-			LLVMValueRef allocated = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(function.type->function_type.arguments[i].type.value, state), "");
+			while (function.type->function_type.arguments[j].static_) {
+				j++;
+			}
+
+			LLVMTypeRef type = create_llvm_type(function.type->function_type.arguments[j].type.value, state);
+			LLVMValueRef allocated = LLVMBuildAlloca(state->llvm_builder, type, "");
 			LLVMBuildStore(state->llvm_builder, LLVMGetParam(llvm_function, i), allocated);
 			arrpush(state->function_arguments, allocated);
+			j++;
 		}
 
 		LLVMValueRef value = generate_node(function.body, state);

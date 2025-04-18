@@ -60,17 +60,22 @@ typedef struct {
 	size_t generic_id;
 	bool compile_only;
 	char *extern_name;
+	Node *node;
 } Function_Value;
 
 typedef struct {
 	char *identifier;
 	Value type;
+	bool static_;
+	bool inferred;
 } Function_Argument_Value;
 
 typedef struct {
 	Function_Argument_Value *arguments; // stb_ds
 	Value return_type;
 	bool variadic;
+	bool incomplete;
+	Node *node;
 } Function_Type_Value;
 
 typedef struct {
@@ -80,6 +85,8 @@ typedef struct {
 typedef struct {
 	Struct_Item_Value *items; // stb_ds
 	Node *node;
+	Value *arguments; // stb_ds
+	bool incomplete;
 } Struct_Type_Value;
 
 typedef struct {
@@ -179,7 +186,8 @@ typedef struct {
 	enum {
 		IDENTIFIER_VARIABLE,
 		IDENTIFIER_ARGUMENT,
-		IDENTIFIER_VALUE
+		IDENTIFIER_VALUE,
+		IDENTIFIER_STATIC_ARGUMENT
 	} kind;
 	union {
 		Node *variable_definition;
@@ -219,6 +227,9 @@ typedef struct {
 
 typedef struct {
 	Value function_type;
+	Value function_value;
+	Value struct_type;
+	bool struct_generic;
 } Call_Data;
 
 typedef struct {
