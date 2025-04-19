@@ -220,22 +220,35 @@ Value evaluate(Context *context, Node *node) {
 		case STRUCT_TYPE_NODE: {
 			Struct_Type_Node struct_type = node->struct_type;
 
-			Value_Data *struct_value = value_new(STRUCT_TYPE_VALUE);
-			struct_value->struct_type.node = node;
-			struct_value->struct_type.items = NULL;
-			if (arrlen(struct_type.arguments) > 0) {
-				struct_value->struct_type.incomplete = true;
-			} else {
-				for (long int i = 0; i < arrlen(struct_type.items); i++) {
-					Struct_Item_Value item = {
-						.identifier = struct_type.items[i].identifier,
-						.type = evaluate(context, struct_type.items[i].type)
-					};
-					arrpush(struct_value->struct_type.items, item);
-				}
+			Value_Data *struct_value_data = value_new(STRUCT_TYPE_VALUE);
+			struct_value_data->struct_type.node = node;
+			Value struct_value = create_value_data(struct_value_data, node);
+			Value saved_current_type = context->current_type;
+			context->current_type = struct_value;
+
+			struct_value_data->struct_type.items = NULL;
+			for (long int i = 0; i < arrlen(struct_type.items); i++) {
+				Struct_Item_Value item = {
+					.identifier = struct_type.items[i].identifier,
+					.type = evaluate(context, struct_type.items[i].type)
+				};
+				arrpush(struct_value_data->struct_type.items, item);
 			}
 
-			return create_value_data(struct_value, node);
+			struct_value_data->struct_type.arguments = function_arguments;
+
+			for (long int i = 0; i < arrlen(struct_type.operators); i++) {
+				process_node(context, struct_type.operators[i].function);
+				Operator_Value_Definition item = {
+					.operator = struct_type.operators[i].operator,
+					.function = evaluate(context, struct_type.operators[i].function)
+				};
+				arrpush(struct_value.value->struct_type.operators, item);
+			}
+
+			context->current_type = saved_current_type;
+
+			return struct_value;
 		}
 		case UNION_TYPE_NODE: {
 			Union_Type_Node union_type = node->union_type;
@@ -302,8 +315,9 @@ Value evaluate(Context *context, Node *node) {
 				case IDENTIFIER_VALUE:
 					return identifier_data.value;
 				case IDENTIFIER_ARGUMENT:
-					printf("%li %li %li\n", identifier_data.argument_index, arrlen(function_arguments), node->location.row);
 					return function_arguments[identifier_data.argument_index];
+				case IDENTIFIER_SELF:
+					return context->current_type;
 				default:
 					handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
 					break;
@@ -360,8 +374,14 @@ Value evaluate(Context *context, Node *node) {
 		}
 		case CALL_NODE: {
 			Call_Node call = node->call;
+			Call_Data call_data = get_data(context, node)->call;
 
-			Value function = evaluate(context, call.function);
+			Value function;
+			if (call_data.function_value.value != NULL) {
+				function = call_data.function_value;
+			} else {
+				function = evaluate(context, call.function);
+			}
 
 			Value *arguments = NULL;
 			for (long int i = 0; i < arrlen(call.arguments); i++) {
@@ -403,10 +423,16 @@ Value evaluate(Context *context, Node *node) {
 					return (Value) {};
 				}
 				case FUNCTION_VALUE: {
+					size_t saved_generic_id = context->generic_id;
+					context->generic_id = function.value->function.generic_id;
+
 					Value *saved_function_arguments = function_arguments;
 					function_arguments = arguments;
 					Value result = evaluate(context, function.value->function.body);
 					function_arguments = saved_function_arguments;
+
+					context->generic_id = saved_generic_id;
+
 					return create_value_data(result.value, node);
 				}
 				case STRUCT_TYPE_VALUE: {

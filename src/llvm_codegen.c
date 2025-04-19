@@ -178,7 +178,6 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 	return NULL;
 }
 
-int printf(const char *, ...);
 static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Value_Data *function_type, Node **arguments, State *state) {
 	LLVMValueRef *llvm_arguments = NULL;
 	long int j = 0;

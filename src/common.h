@@ -82,10 +82,12 @@ typedef struct {
 	char *identifier;
 	Value type;
 } Struct_Item_Value;
+typedef struct { char *operator; Value function; } Operator_Value_Definition;
 typedef struct {
 	Struct_Item_Value *items; // stb_ds
 	Node *node;
 	Value *arguments; // stb_ds
+	Operator_Value_Definition *operators; // stb_ds
 	bool incomplete;
 } Struct_Type_Value;
 
@@ -179,7 +181,8 @@ typedef struct {
 		IDENTIFIER_VARIABLE,
 		IDENTIFIER_ARGUMENT,
 		IDENTIFIER_VALUE,
-		IDENTIFIER_STATIC_ARGUMENT
+		IDENTIFIER_STATIC_ARGUMENT,
+		IDENTIFIER_SELF
 	} kind;
 	union {
 		Node *variable_definition;
@@ -318,6 +321,10 @@ typedef struct {
 } Break_Data;
 
 typedef struct {
+	Generic_Value *struct_values;
+} Struct_Type_Data;
+
+typedef struct {
 	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
@@ -345,6 +352,7 @@ typedef struct {
 		Yield_Data yield;
 		Break_Data break_;
 		While_Data while_;
+		Struct_Type_Data struct_type;
 	};
 } Node_Data;
 
@@ -390,6 +398,7 @@ struct Context {
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
+	Value current_type;
 };
 
 Value get_type(Context *context, Node *node);

@@ -39,17 +39,11 @@ typedef struct {
 	bool variadic;
 } Function_Type_Node;
 
-typedef struct {
-	char *identifier;
-	Node *type;
-} Struct_Argument;
-
 typedef Identifier_Type_Pair Struct_Item;
 typedef struct { char *operator; Node *function; } Operator_Definition;
 typedef struct {
 	Struct_Item *items; // stb_ds
 	Operator_Definition *operators; // stb_ds
-	Struct_Argument *arguments; // stb_ds
 } Struct_Type_Node;
 
 typedef Identifier_Type_Pair Union_Item;
@@ -91,7 +85,6 @@ typedef struct {
 typedef struct {
 	Node *module;
 	char *value;
-	Node **generics; // stb_ds
 } Identifier_Node;
 
 typedef struct {

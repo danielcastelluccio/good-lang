@@ -105,24 +105,6 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 	identifier->identifier.module = module;
 	identifier->identifier.value = token.string;
 
-	identifier->identifier.generics = NULL;
-	if (lexer_next(lexer, false).kind == HASHTAG) {
-		consume_check(lexer, HASHTAG);
-		consume_check(lexer, OPEN_PARENTHESIS);
-		while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
-			arrpush(identifier->identifier.generics, parse_expression(lexer));
-
-			Token_Data token = lexer_next(lexer, false);
-			if (token.kind == COMMA) {
-				lexer_next(lexer, true);
-			} else if (token.kind == CLOSED_PARENTHESIS) {
-			} else {
-				handle_token_error_no_expected(token);
-			}
-		}
-		consume_check(lexer, CLOSED_PARENTHESIS);
-	}
-
 	return identifier;
 }
 
@@ -292,37 +274,10 @@ static Node *parse_assign(Lexer *lexer, Node *structure) {
 static Node *parse_struct_type(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 
-	Struct_Argument *arguments = NULL;
-	if (lexer_next(lexer, false).kind == OPEN_PARENTHESIS) {
-		lexer_next(lexer, true);
-
-		while (lexer_next(lexer, false).kind != CLOSED_PARENTHESIS) {
-			Token_Data identifier = consume_check(lexer, IDENTIFIER);
-			consume_check(lexer, COLON);
-			Node *type = parse_expression(lexer);
-
-			Struct_Argument argument = {
-				.identifier = identifier.string,
-				.type = type
-			};
-			arrpush(arguments, argument);
-
-			Token_Data token = lexer_next(lexer, false);
-			if (token.kind == COMMA) {
-				lexer_next(lexer, true);
-			} else if (token.kind == CLOSED_PARENTHESIS) {
-			} else {
-				handle_token_error_no_expected(token);
-			}
-		}
-
-		lexer_next(lexer, true);
-	}
-
 	consume_check(lexer, OPEN_CURLY_BRACE);
 
 	Struct_Item *items = NULL;
-	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
+	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE && lexer_next(lexer, false).kind != SEMICOLON) {
 		Token_Data identifier = consume_check(lexer, IDENTIFIER);
 		consume_check(lexer, COLON);
 		Node *type = parse_expression(lexer);
@@ -337,10 +292,46 @@ static Node *parse_struct_type(Lexer *lexer) {
 		if (token.kind == COMMA) {
 			lexer_next(lexer, true);
 		} else if (token.kind == CLOSED_CURLY_BRACE) {
+		} else if (token.kind == SEMICOLON) {
 		} else {
 			handle_token_error_no_expected(token);
 		}
 	}
+
+	Operator_Definition *operator_definitions = NULL;
+	if (lexer_next(lexer, false).kind == SEMICOLON) {
+		lexer_next(lexer, true);
+
+		while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
+			consume_check(lexer, KEYWORD);
+
+			Token_Data operator_token = lexer_next(lexer, true);
+			char *operator = NULL;
+			switch (operator_token.kind) {
+	 			case IDENTIFIER:
+	 				operator = operator_token.string;
+	 				break;
+	 			case OPEN_BRACE:
+	 				consume_check(lexer, CLOSED_BRACE);
+	 				operator = "[]";
+	 				break;
+	 			default:
+	 				assert(false);
+	 		}
+
+	 		consume_check(lexer, EQUALS);
+	 		Node *function = parse_expression(lexer);
+
+	 		Operator_Definition operator_definition = {
+	 			.operator = operator,
+	 			.function = function
+	 		};
+	 		arrpush(operator_definitions, operator_definition);
+
+	 		consume_check(lexer, SEMICOLON);
+	 	}
+	}
+
 	consume_check(lexer, CLOSED_CURLY_BRACE);
 
 	// Operator_Definition *operator_definitions = NULL;
@@ -376,8 +367,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 	struct_->struct_type.items = items;
-	// struct_->struct_type.operators = operator_definitions;
-	struct_->struct_type.arguments = arguments;
+	struct_->struct_type.operators = operator_definitions;
 
 	return struct_;
 }
@@ -456,7 +446,6 @@ static Node *parse_define(Lexer *lexer) {
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 	define->define.identifier = identifier.string;
 	define->define.expression = expression;
-	// define->define.operators = operators;
 
 	return define;
 }
