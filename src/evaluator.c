@@ -208,7 +208,7 @@ Value evaluate(Context *context, Node *node) {
 			}
 
 			function_value->function.compile_only = get_data(context, node)->function.compile_only;
-			function_value->function.generic_id = context->generic_id;
+			function_value->function.static_argument_id = context->static_argument_id;
 			function_value->function.extern_name = function.extern_name;
 			function_value->function.node = node;
 
@@ -288,7 +288,6 @@ Value evaluate(Context *context, Node *node) {
 			arrpush(scopes, (Scope) { .node = module.body });
 
 			module_value->module.body = module.body;
-			module_value->module.generic_id = context->generic_id;
 			module_value->module.scopes = scopes;
 
 			return create_value_data(module_value, node);
@@ -423,15 +422,15 @@ Value evaluate(Context *context, Node *node) {
 					return (Value) {};
 				}
 				case FUNCTION_VALUE: {
-					size_t saved_generic_id = context->generic_id;
-					context->generic_id = function.value->function.generic_id;
+					size_t saved_static_argument_id = context->static_argument_id;
+					context->static_argument_id = function.value->function.static_argument_id;
 
 					Value *saved_function_arguments = function_arguments;
 					function_arguments = arguments;
 					Value result = evaluate(context, function.value->function.body);
 					function_arguments = saved_function_arguments;
 
-					context->generic_id = saved_generic_id;
+					context->static_argument_id = saved_static_argument_id;
 
 					return create_value_data(result.value, node);
 				}

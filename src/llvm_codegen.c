@@ -13,11 +13,6 @@
 #include "llvm_codegen.h"
 
 typedef struct {
-	LLVMValueRef llvm_value;
-	Value_Data *type;
-} Value_Type_Pair;
-
-typedef struct {
 	LLVMBasicBlockRef block;
 	LLVMValueRef value;
 } Block_Codegen_Data;
@@ -138,7 +133,7 @@ static void generate_define(Node *node, State *state) {
 		return;
 	}
 
-	Value value = data->define.value.binding;
+	Value value = data->define.typed_value.value;
 	if (value.value == NULL) {
 		return;
 	}
@@ -810,8 +805,8 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	assert(value->tag == FUNCTION_VALUE);
 	Function_Value function = value->function;
 
-	size_t saved_generic_id = state->context.generic_id;
-	state->context.generic_id = function.generic_id;
+	size_t saved_static_argument_id = state->context.static_argument_id;
+	state->context.static_argument_id = function.static_argument_id;
 
 	if (function.compile_only || function.type->function_type.incomplete) {
 		return NULL;
@@ -856,7 +851,7 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 
 	state->function_arguments = saved_function_arguments;
 	state->current_function = saved_current_function;
-	state->context.generic_id = saved_generic_id;
+	state->context.static_argument_id = saved_static_argument_id;
 	state->llvm_builder = saved_llvm_builder;
 
 	if (function.extern_name != NULL) {

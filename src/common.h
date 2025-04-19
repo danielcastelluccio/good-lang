@@ -17,13 +17,15 @@ typedef struct {
 } Value;
 
 typedef struct {
-	Value binding;
+	Value value;
 	Value type;
-} Generic_Binding;
+} Typed_Value;
+
+typedef Identifier_Type_Pair Static_Argument_Data;
 
 typedef struct {
 	struct { char *key; Node *value; } *variables; // stb_ds
-	struct { char *key; Generic_Binding value; } *generic_bindings; // stb_ds
+	struct { char *key; Typed_Value value; } *static_arguments; // stb_ds
 	Node *node;
 } Scope;
 
@@ -57,7 +59,7 @@ typedef struct {
 typedef struct {
 	Value_Data *type;
 	Node *body;
-	size_t generic_id;
+	size_t static_argument_id;
 	bool compile_only;
 	char *extern_name;
 	Node *node;
@@ -106,7 +108,6 @@ typedef struct {
 typedef struct {
 	Node *body;
 	Scope *scopes;
-	size_t generic_id;
 } Module_Value;
 
 typedef struct {
@@ -224,7 +225,6 @@ typedef struct {
 	Value function_type;
 	Value function_value;
 	Value struct_type;
-	bool struct_generic;
 } Call_Data;
 
 typedef struct {
@@ -247,7 +247,7 @@ typedef struct {
 } Switch_Data;
 
 typedef struct {
-	Generic_Binding value;
+	Typed_Value typed_value;
 } Define_Data;
 
 typedef struct {
@@ -255,13 +255,13 @@ typedef struct {
 } Function_Data;
 
 typedef struct {
-	Value *generics;
-	Generic_Binding value;
-} Generic_Value;
+	Value *static_arguments;
+	Typed_Value value;
+} Static_Argument_Variation;
 
 typedef struct {
 	Value value;
-	Generic_Value *function_values;
+	Static_Argument_Variation *function_values;
 } Function_Type_Data;
 
 typedef struct {
@@ -321,10 +321,6 @@ typedef struct {
 } Break_Data;
 
 typedef struct {
-	Generic_Value *struct_values;
-} Struct_Type_Data;
-
-typedef struct {
 	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
@@ -352,7 +348,6 @@ typedef struct {
 		Yield_Data yield;
 		Break_Data break_;
 		While_Data while_;
-		Struct_Type_Data struct_type;
 	};
 } Node_Data;
 
@@ -393,8 +388,8 @@ struct Context {
 	Node **left_blocks; // stb_ds
 	Scope *scopes; // stb_ds
 	bool compile_only;
-	size_t generic_id;
-	size_t generic_id_counter;
+	size_t static_argument_id;
+	size_t static_argument_id_counter;
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds

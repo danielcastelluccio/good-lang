@@ -194,8 +194,6 @@ typedef struct {
 	Binary_Operatory_Node_Kind operator;
 } Binary_Operator_Node;
 
-typedef Identifier_Type_Pair Generic_Argument;
-
 typedef struct {
 	char *identifier;
 	Node *expression;

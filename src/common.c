@@ -19,73 +19,73 @@ Node_Data *node_data_new(Node_Kind kind) {
 }
 
 Value get_type(Context *context, Node *node) {
-	Node_Types *node_types = hmget(context->node_types, context->generic_id);
+	Node_Types *node_types = hmget(context->node_types, context->static_argument_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
 		*node_types = NULL;
-		hmput(context->node_types, context->generic_id, node_types);
+		hmput(context->node_types, context->static_argument_id, node_types);
 	}
 
 	Value result = hmget(*node_types, node);
-	if (result.value == NULL && context->generic_id != 0) {
-		size_t saved_generic_id = context->generic_id;
-		context->generic_id = 0;
+	if (result.value == NULL && context->static_argument_id != 0) {
+		size_t saved_static_argument_id = context->static_argument_id;
+		context->static_argument_id = 0;
 		result = get_type(context, node);
-		context->generic_id = saved_generic_id;
+		context->static_argument_id = saved_static_argument_id;
 	}
 	return result;
 }
 
 void set_type(Context *context, Node *node, Value type) {
-	Node_Types *node_types = hmget(context->node_types, context->generic_id);
+	Node_Types *node_types = hmget(context->node_types, context->static_argument_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
 		*node_types = NULL;
-		hmput(context->node_types, context->generic_id, node_types);
+		hmput(context->node_types, context->static_argument_id, node_types);
 	}
 	hmput(*node_types, node, type);
 }
 
 Node_Data *get_data(Context *context, Node *node) {
-	Node_Datas *node_datas = hmget(context->node_datas, context->generic_id);
+	Node_Datas *node_datas = hmget(context->node_datas, context->static_argument_id);
 	if (node_datas == NULL) {
 		node_datas = malloc(sizeof(Node_Datas *));
 		*node_datas = NULL;
-		hmput(context->node_datas, context->generic_id, node_datas);
+		hmput(context->node_datas, context->static_argument_id, node_datas);
 	}
 
 	Node_Data *result = hmget(*node_datas, node);
-	if (result == NULL && context->generic_id != 0) {
-		size_t saved_generic_id = context->generic_id;
-		context->generic_id = 0;
+	if (result == NULL && context->static_argument_id != 0) {
+		size_t saved_static_argument_id = context->static_argument_id;
+		context->static_argument_id = 0;
 		result = get_data(context, node);
-		context->generic_id = saved_generic_id;
+		context->static_argument_id = saved_static_argument_id;
 	}
 	return result;
 }
 
 void set_data(Context *context, Node *node, Node_Data *value) {
-	Node_Datas *node_datas = hmget(context->node_datas, context->generic_id);
+	Node_Datas *node_datas = hmget(context->node_datas, context->static_argument_id);
 	if (node_datas == NULL) {
 		node_datas = malloc(sizeof(Node_Datas *));
 		*node_datas = NULL;
-		hmput(context->node_datas, context->generic_id, node_datas);
+		hmput(context->node_datas, context->static_argument_id, node_datas);
 	}
 	hmput(*node_datas, node, value);
 }
 
 void reset_node(Context *context, Node *node) {
-	Node_Types *node_types = hmget(context->node_types, context->generic_id);
+	Node_Types *node_types = hmget(context->node_types, context->static_argument_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
-		hmput(context->node_types, context->generic_id, node_types);
+		hmput(context->node_types, context->static_argument_id, node_types);
 	}
 	(void) hmdel(*node_types, node);
 
-	Node_Datas *node_datas = hmget(context->node_datas, context->generic_id);
+	Node_Datas *node_datas = hmget(context->node_datas, context->static_argument_id);
 	if (node_datas == NULL) {
 		node_datas = malloc(sizeof(Node_Datas *));
-		hmput(context->node_datas, context->generic_id, node_datas);
+		hmput(context->node_datas, context->static_argument_id, node_datas);
 	}
 	(void) hmdel(*node_datas, node);
 }

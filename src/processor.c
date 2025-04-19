@@ -21,7 +21,7 @@ typedef struct {
 			Scope *scope;
 		} define;
 		Node *variable;
-		Value generic;
+		Value static_argument;
 		size_t argument;
 		size_t enum_variant;
 	};
@@ -31,7 +31,7 @@ typedef struct {
 		LOOKUP_RESULT_DEFINE,
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_ARGUMENT,
-		LOOKUP_RESULT_GENERIC,
+		LOOKUP_RESULT_STATIC_ARGUMENT,
 		LOOKUP_RESULT_ENUM_VARIANT,
 		LOOKUP_RESULT_SELF
 	} tag;
@@ -82,9 +82,9 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			}
 		}
 
-		Generic_Binding binding = shget(scope->generic_bindings, identifier);
-		if (binding.type.value != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_GENERIC, .generic = binding.binding, .type = binding.type };
+		Typed_Value value = shget(scope->static_arguments, identifier);
+		if (value.type.value != NULL) {
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_ARGUMENT, .static_argument = value.value, .type = value.type };
 		}
 
 		Node *node = scope->node;
@@ -229,20 +229,6 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "()");
 			break;
 		}
-		// case DEFINE_DATA_VALUE: {
-		// 	buffer += sprintf(buffer, "%s", type.value->define_data.define_node->define.identifier);
-		// 	if (arrlen(type.value->define_data.bindings) > 0) {
-		// 		buffer += sprintf(buffer, "#(");
-		// 		for (long int i = 0; i < arrlen(value->define_data.bindings); i++) {
-		// 			buffer += print_type(value->define_data.bindings[i].binding, buffer);
-		// 			if (i + 1 < arrlen(value->define_data.bindings)) {
-		// 				buffer += sprintf(buffer, ", ");
-		// 			}
-		// 		}
-		// 		buffer += sprintf(buffer, ")");
-		// 	}
-		// 	break;
-		// }
 		default:
 			assert(false);
 	}
@@ -309,27 +295,27 @@ typedef struct {
 	Value type;
 } Process_Define_Result;
 
-typedef struct { char *key; Generic_Binding value; } *Pattern_Match_Result;
+typedef struct { char *key; Typed_Value value; } *Pattern_Match_Result;
 
-static bool pattern_match(Node *node, Value value, Context *context, Generic_Argument *generics, Pattern_Match_Result *match_result) {
+static bool pattern_match(Node *node, Value value, Context *context, char **inferred_arguments, Pattern_Match_Result *match_result) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (value.value->tag == POINTER_TYPE_VALUE) {
-				return pattern_match(node->pointer.inner, value.value->pointer_type.inner, context, generics, match_result);
+				return pattern_match(node->pointer.inner, value.value->pointer_type.inner, context, inferred_arguments, match_result);
 			}
 			break;
 		}
 		case ARRAY_TYPE_NODE: {
 			if (value.value->tag == ARRAY_TYPE_VALUE) {
-				if (!pattern_match(node->array_type.inner, value.value->array_type.inner, context, generics, match_result)) return false;
-				return pattern_match(node->array_type.size, value.value->array_type.size, context, generics, match_result);
+				if (!pattern_match(node->array_type.inner, value.value->array_type.inner, context, inferred_arguments, match_result)) return false;
+				return pattern_match(node->array_type.size, value.value->array_type.size, context, inferred_arguments, match_result);
 			}
 			break;
 		}
 		case CALL_NODE: {
 			if (value.value->tag == STRUCT_TYPE_VALUE) {
 				for (long int i = 0; i < arrlen(node->call.arguments); i++) {
-			 		if (!pattern_match(node->call.arguments[i], value.value->struct_type.arguments[i], context, generics, match_result)) {
+					if (!pattern_match(node->call.arguments[i], value.value->struct_type.arguments[i], context, inferred_arguments, match_result)) {
 			 			return false;
 			 		}
 				}
@@ -337,20 +323,20 @@ static bool pattern_match(Node *node, Value value, Context *context, Generic_Arg
 			break;
 		}
 		case IDENTIFIER_NODE: {
-			for (long int i = 0; i < arrlen(generics); i++) {
-				if (strcmp(generics[i].identifier, node->identifier.value) == 0) {
-					Generic_Binding previous_value = shget(*match_result, generics[i].identifier);
-					if (previous_value.binding.value != NULL) {
-						if (!value_equal(previous_value.binding.value, value.value)) {
+			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
+				if (strcmp(inferred_arguments[i], node->identifier.value) == 0) {
+					Typed_Value previous_value = shget(*match_result, inferred_arguments[i]);
+					if (previous_value.value.value != NULL) {
+						if (!value_equal(previous_value.value.value, value.value)) {
 							return false;
 						}
 					}
 
-					Generic_Binding binding = {
-						.binding = value,
+					Typed_Value typed_value = {
+						.value = value,
 						.type = create_internal_type("type")
 					};
-					shput(*match_result, generics[i].identifier, binding);
+					shput(*match_result, inferred_arguments[i], typed_value);
 					break;
 				}
 			}
@@ -375,8 +361,8 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		(void) arrpop(context->scopes);
 		if (scopes != NULL) context->scopes = saved_scopes;
 		return (Process_Define_Result) {
-			.value = cached_data->define.value.binding,
-			.type = cached_data->define.value.type
+			.value = cached_data->define.typed_value.value,
+			.type = cached_data->define.typed_value.type
 		};
 	}
 
@@ -392,8 +378,8 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	(void) arrpop(context->scopes);
 	if (scopes != NULL) context->scopes = saved_scopes;
 
-	Generic_Binding binding = {
-		.binding = value,
+	Typed_Value typed_value = {
+		.value = value,
 		.type = type
 	};
 
@@ -405,7 +391,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		set_data(context, node, data);
 	}
 
-	data->define.value = binding;
+	data->define.typed_value = typed_value;
 
 	return (Process_Define_Result) {
 		.value = value,
@@ -493,19 +479,15 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 static Value process_call_generic2(Context *context, Node *node, Node *function, Node **arguments, Value *argument_types, Value *function_type) {
 	typedef struct {
 		char *identifier;
-		Generic_Binding binding;
-	} Generic_Info;
+		Typed_Value value;
+	} Static_Argument_Value;
 
 	Value function_value = {};
-
-	if (function != NULL) {
-		*function_type = get_type(context, function);
-	}
 
 	Node *function_type_node = function_type->value->function_type.node;
 
 	bool compile_only_parent = context->compile_only;
-	Generic_Info *generic_infos = NULL;
+	Static_Argument_Value *static_arguments = NULL;
 	long int j = 0;
 	for (long int i = 0; i < arrlen(arguments); i++) {
 		if (j >= arrlen(function_type_node->function_type.arguments)) break;
@@ -523,21 +505,18 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 			Temporary_Context temporary_context = { .wanted_type = wanted_type };
 			process_node_context(context, temporary_context, arguments[i]);
 
-			Generic_Info generic_info = {
+			Static_Argument_Value static_argument = {
 				.identifier = function_type_node->function_type.arguments[j].identifier,
-				.binding = { .binding = evaluate(context, arguments[i]), .type = get_type(context, arguments[i]) }
+				.value = { .value = evaluate(context, arguments[i]), .type = get_type(context, arguments[i]) }
 			};
 			char buffer[32];
 			print_type(get_type(context, arguments[i]), buffer);
-			arrpush(generic_infos, generic_info);
+			arrpush(static_arguments, static_argument);
 		} else {
-			Generic_Argument *generics = NULL;
+			char **inferred_arguments = NULL;
 			for (long int k = 0; k < arrlen(function_type_node->function_type.arguments); k++) {
 				if (function_type_node->function_type.arguments[k].inferred) {
-					Generic_Argument argument = {
-						.identifier = function_type_node->function_type.arguments[k].identifier
-					};
-					arrpush(generics, argument);
+					arrpush(inferred_arguments, function_type_node->function_type.arguments[k].identifier);
 				}
 			}
 
@@ -549,7 +528,7 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 
 				Node *argument = function_type_node->function_type.arguments[k].type;
 				Value argument_value = argument_types[i];
-				if (!pattern_match(argument, argument_value, context, generics, &result)) {
+				if (!pattern_match(argument, argument_value, context, inferred_arguments, &result)) {
 					pattern_match_collision = true;
 				};
 			}
@@ -557,14 +536,14 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 			for (long int k = 0; k < arrlen(function_type_node->function_type.arguments); k++) {
 				if (!function_type_node->function_type.arguments[k].inferred) continue;
 
-				Generic_Binding binding = shget(result, function_type_node->function_type.arguments[k].identifier);
-				if (binding.binding.value != NULL) {
-					Generic_Info generic_info = {
+				Typed_Value typed_value = shget(result, function_type_node->function_type.arguments[k].identifier);
+				if (typed_value.value.value != NULL) {
+					Static_Argument_Value static_argument = {
 						.identifier = function_type_node->function_type.arguments[k].identifier,
-						.binding = binding
+						.value = typed_value
 					};
 
-					arrpush(generic_infos, generic_info);
+					arrpush(static_arguments, static_argument);
 				}
 			}
 
@@ -573,18 +552,18 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 		j++;
 	}
 
-	if (arrlen(generic_infos) > 0) {
+	if (arrlen(static_arguments) > 0) {
 		arrpush(context->scopes, (Scope) { .node = node });
 
-		for (long int i = 0; i < arrlen(generic_infos); i++) {
-			shput(arrlast(context->scopes).generic_bindings, generic_infos[i].identifier, generic_infos[i].binding);
+		for (long int i = 0; i < arrlen(static_arguments); i++) {
+			shput(arrlast(context->scopes).static_arguments, static_arguments[i].identifier, static_arguments[i].value);
 		}
 
 		Value *values = NULL;
 		for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
 			Function_Argument argument = function_type_node->function_type.arguments[i];
 			if (argument.static_) {
-				arrpush(values, shget(arrlast(context->scopes).generic_bindings, argument.identifier).binding);
+				arrpush(values, shget(arrlast(context->scopes).static_arguments, argument.identifier).value);
 			}
 		}
 
@@ -595,16 +574,16 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 		set_data(context, function_type_node, function_data);
 
 		for (long int i = 0; i < arrlen(function_data->function_type.function_values); i++) {
-			bool match = arrlen(function_data->function_type.function_values[i].generics) == arrlen(values);
-			for (long int j = 0; j < arrlen(function_data->function_type.function_values[i].generics); j++) {
-				if (!value_equal(function_data->function_type.function_values[i].generics[j].value, values[j].value)) {
+			bool match = arrlen(function_data->function_type.function_values[i].static_arguments) == arrlen(values);
+			for (long int j = 0; j < arrlen(function_data->function_type.function_values[i].static_arguments); j++) {
+				if (!value_equal(function_data->function_type.function_values[i].static_arguments[j].value, values[j].value)) {
 					match = false;
 				}
 			}
 
 			if (match) {
-				Generic_Binding matched = function_data->function_type.function_values[i].value;
-				function_value = matched.binding;
+				Typed_Value matched = function_data->function_type.function_values[i].value;
+				function_value = matched.value;
 				*function_type = matched.type;
 			}
 		}
@@ -614,8 +593,8 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 				function_value = get_data(context, function)->identifier.value;
 			}
 
-			size_t saved_generic_id = context->generic_id;
-			context->generic_id = ++context->generic_id_counter;
+			size_t saved_static_argument_id = context->static_argument_id;
+			context->static_argument_id = ++context->static_argument_id_counter;
 
 			reset_node(context, function_value.node);
 			process_function(context, function_value.node, true);
@@ -626,13 +605,13 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 
 			function_value = evaluate(context, function_value.node);
 
-			Generic_Value generic_value = {
-				.generics = values,
-				.value = { .binding = function_value, .type = *function_type }
+			Static_Argument_Variation static_argument_variation = {
+				.static_arguments = values,
+				.value = { .value = function_value, .type = *function_type }
 			};
-			arrpush(function_data->function_type.function_values, generic_value);
+			arrpush(function_data->function_type.function_values, static_argument_variation);
 
-			context->generic_id = saved_generic_id;
+			context->static_argument_id = saved_static_argument_id;
 		}
 
 		(void) arrpop(context->scopes);
@@ -885,10 +864,6 @@ static void process_identifier(Context *context, Node *node) {
 			Process_Define_Result result = process_define_context(context, context->temporary_context, define_node, define_scopes);
 			type = result.type;
 			value = result.value;
-
-			if (type.value == NULL) {
-				handle_semantic_error(node->location, "Unable to resolve generics for identifier '%s'", identifier.value);
-			}
 		}
 
 		if (lookup_result.tag == LOOKUP_RESULT_VARIABLE) {
@@ -927,8 +902,8 @@ static void process_identifier(Context *context, Node *node) {
 			}
 		}
 
-		if (lookup_result.tag == LOOKUP_RESULT_GENERIC) {
-			value = lookup_result.generic;
+		if (lookup_result.tag == LOOKUP_RESULT_STATIC_ARGUMENT) {
+			value = lookup_result.static_argument;
 			type = lookup_result.type;
 		}
 
@@ -1232,11 +1207,7 @@ static void process_array_access(Context *context, Node *node) {
 	}
 
 	Custom_Operator_Function custom_operator_function = {};
-	// Process_Define_Result array_access_define_result;
 	if (array_type.value->pointer_type.inner.value->tag == STRUCT_TYPE_VALUE) {
-		// Value_Data_Old value_data = array_type.value->pointer_type.inner->value_data[arrlen(array_type.type->pointer_type.inner->value_data) - 1];
-		// Node *define_node = value_data.define_node;
-
 		Operator_Definition *operators = array_type.value->pointer_type.inner.value->struct_type.node->struct_type.operators;
 		for (long int i = 0; i < arrlen(operators); i++) {
 			if (strcmp(operators[i].operator, "[]") == 0) {
@@ -1247,18 +1218,6 @@ static void process_array_access(Context *context, Node *node) {
 				break;
 			}
 		}
-
-		// Value_Data *argument_types = NULL;
-		// arrpush(argument_types, array_type);
-		// arrpush(argument_types, get_type(context, array_access.index));
-		// Temporary_Context temporary_context = { .call_argument_types = argument_types };
-
-		// array_access_define_result = process_define_context(context, temporary_context, array_access_define_node, clone_scopes(value_data.scopes), NULL, value_data.generic_id);
-
-		// custom_operator_function = (Custom_Operator_Function) {
-		// 	.function = array_access_define_result.value,
-		// 	.function_type = array_access_define_result.type
-		// };
 	}
 
 	if (custom_operator_function.function == NULL && array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE) {
@@ -1630,7 +1589,7 @@ static void process_switch(Context *context, Node *node) {
 	if (case_count < arrlen(type.value->enum_type.items) && !else_case) {
 		context->left_blocks = saved_left_blocks;
 		if (switch_type.value != NULL) {
-			handle_semantic_error(node->location, "Expected generic case");
+			handle_semantic_error(node->location, "Expected else case");
 		}
 	}
 
