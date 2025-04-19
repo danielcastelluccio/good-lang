@@ -27,9 +27,11 @@ typedef struct {
 	struct { char *key; Node *value; } *variables; // stb_ds
 	struct { char *key; Typed_Value value; } *static_arguments; // stb_ds
 	Node *node;
+	Value current_type;
 } Scope;
 
 typedef enum {
+	NONE_VALUE,
 	FUNCTION_VALUE,
 	FUNCTION_TYPE_VALUE,
 	STRUCT_TYPE_VALUE,
@@ -47,7 +49,6 @@ typedef enum {
 	ENUM_VALUE,
 	STRING_VALUE,
 	MODULE_TYPE_VALUE,
-	NONE_VALUE,
 	INTERNAL_VALUE
 } Value_Tag;
 
@@ -59,6 +60,7 @@ typedef struct {
 typedef struct {
 	Value_Data *type;
 	Node *body;
+	Scope *scopes;
 	size_t static_argument_id;
 	bool compile_only;
 	char *extern_name;
@@ -393,7 +395,6 @@ struct Context {
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
-	Value current_type;
 };
 
 Value get_type(Context *context, Node *node);

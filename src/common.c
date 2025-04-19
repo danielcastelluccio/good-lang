@@ -78,6 +78,7 @@ void reset_node(Context *context, Node *node) {
 	Node_Types *node_types = hmget(context->node_types, context->static_argument_id);
 	if (node_types == NULL) {
 		node_types = malloc(sizeof(Node_Types *));
+		*node_types = NULL;
 		hmput(context->node_types, context->static_argument_id, node_types);
 	}
 	(void) hmdel(*node_types, node);
@@ -85,6 +86,7 @@ void reset_node(Context *context, Node *node) {
 	Node_Datas *node_datas = hmget(context->node_datas, context->static_argument_id);
 	if (node_datas == NULL) {
 		node_datas = malloc(sizeof(Node_Datas *));
+		*node_datas = NULL;
 		hmput(context->node_datas, context->static_argument_id, node_datas);
 	}
 	(void) hmdel(*node_datas, node);

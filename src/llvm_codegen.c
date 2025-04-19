@@ -606,10 +606,10 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 
 	if (if_.static_) {
 		if (if_data.static_condition) {
-			generate_node(if_.if_body, state);
+			return generate_node(if_.if_body, state);
 		} else {
 			if (if_.else_body != NULL) {
-				generate_node(if_.else_body, state);
+				return generate_node(if_.else_body, state);
 			}
 		}
 

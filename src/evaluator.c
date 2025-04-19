@@ -212,6 +212,13 @@ Value evaluate(Context *context, Node *node) {
 			function_value->function.extern_name = function.extern_name;
 			function_value->function.node = node;
 
+			Scope *scopes = NULL;
+			for (long int i = 0; i < arrlen(context->scopes); i++) {
+				arrpush(scopes, context->scopes[i]);
+			}
+
+			function_value->function.scopes = scopes;
+
 			return create_value_data(function_value, node);
 		}
 		case FUNCTION_TYPE_NODE: {
@@ -223,8 +230,12 @@ Value evaluate(Context *context, Node *node) {
 			Value_Data *struct_value_data = value_new(STRUCT_TYPE_VALUE);
 			struct_value_data->struct_type.node = node;
 			Value struct_value = create_value_data(struct_value_data, node);
-			Value saved_current_type = context->current_type;
-			context->current_type = struct_value;
+
+			Scope scope = {
+				.node = node,
+				.current_type = struct_value
+			};
+			arrpush(context->scopes, scope);
 
 			struct_value_data->struct_type.items = NULL;
 			for (long int i = 0; i < arrlen(struct_type.items); i++) {
@@ -246,7 +257,7 @@ Value evaluate(Context *context, Node *node) {
 				arrpush(struct_value.value->struct_type.operators, item);
 			}
 
-			context->current_type = saved_current_type;
+			(void) arrpop(context->scopes);
 
 			return struct_value;
 		}
@@ -316,7 +327,12 @@ Value evaluate(Context *context, Node *node) {
 				case IDENTIFIER_ARGUMENT:
 					return function_arguments[identifier_data.argument_index];
 				case IDENTIFIER_SELF:
-					return context->current_type;
+					for (long int i = arrlen(context->scopes) - 1; i >= 0; i--) {
+						if (context->scopes[i].current_type.value != NULL) {
+							return context->scopes[i].current_type;
+						}
+					}
+					break;
 				default:
 					handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
 					break;
