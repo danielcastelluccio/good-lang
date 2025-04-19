@@ -399,7 +399,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	};
 }
 
-static Value *process_call_generic1(Context *context, Node **arguments) {
+static Value *get_initial_argument_types(Context *context, Node **arguments) {
 	Value *argument_types = NULL;
 	for (long int i = 0; i < arrlen(arguments); i++) {
 		Value type = get_type(context, arguments[i]);
@@ -414,7 +414,6 @@ static Value *process_call_generic1(Context *context, Node **arguments) {
 		arrpush(argument_types, type);
 	}
 
-	// return (Temporary_Context) { .call_argument_types = argument_types, .call_wanted_type = context->temporary_context.wanted_type };
 	return argument_types;
 }
 
@@ -476,7 +475,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	context->compile_only = compile_only_parent;
 }
 
-static Value process_call_generic2(Context *context, Node *node, Node *function, Node **arguments, Value *argument_types, Value *function_type) {
+static Value process_call_generic(Context *context, Node *node, Node *function, Node **arguments, Value *argument_types, Value *function_type) {
 	typedef struct {
 		char *identifier;
 		Typed_Value value;
@@ -488,68 +487,70 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 
 	bool compile_only_parent = context->compile_only;
 	Static_Argument_Value *static_arguments = NULL;
-	long int j = 0;
-	for (long int i = 0; i < arrlen(arguments); i++) {
-		if (j >= arrlen(function_type_node->function_type.arguments)) break;
-		while (function_type_node->function_type.arguments[j].inferred) j++;
+	bool pattern_match_fail = false;
 
-		if (function_type_node->function_type.arguments[j].static_) {
+	Function_Argument *function_node_arguments = function_type_node->function_type.arguments;
+
+	char **inferred_arguments = NULL;
+	for (long int k = 0; k < arrlen(function_node_arguments); k++) {
+		if (function_node_arguments[k].inferred) {
+			arrpush(inferred_arguments, function_node_arguments[k].identifier);
+		}
+	}
+
+	for (long int argument_index = 0; argument_index < arrlen(arguments); argument_index++) {
+		long int function_argument_index = argument_index + arrlen(inferred_arguments);
+		if (function_argument_index >= arrlen(function_node_arguments)) break;
+
+		if (function_node_arguments[function_argument_index].static_) {
 			Value wanted_type = {};
-			if (!function_type_node->function_type.arguments[j].inferred) {
-				if (i < arrlen(function_type_node->function_type.arguments) || !function_type_node->function_type.variadic) {
-					process_node(context, function_type_node->function_type.arguments[j].type);
-					wanted_type = evaluate(context, function_type_node->function_type.arguments[j].type);
+			if (!function_node_arguments[function_argument_index].inferred) {
+				if (argument_index < arrlen(function_node_arguments) || !function_type_node->function_type.variadic) {
+					process_node(context, function_node_arguments[function_argument_index].type);
+					wanted_type = evaluate(context, function_node_arguments[function_argument_index].type);
 				}
 			}
 
 			Temporary_Context temporary_context = { .wanted_type = wanted_type };
-			process_node_context(context, temporary_context, arguments[i]);
+			process_node_context(context, temporary_context, arguments[argument_index]);
 
 			Static_Argument_Value static_argument = {
-				.identifier = function_type_node->function_type.arguments[j].identifier,
-				.value = { .value = evaluate(context, arguments[i]), .type = get_type(context, arguments[i]) }
+				.identifier = function_node_arguments[function_argument_index].identifier,
+				.value = { .value = evaluate(context, arguments[argument_index]), .type = get_type(context, arguments[argument_index]) }
 			};
-			char buffer[32];
-			print_type(get_type(context, arguments[i]), buffer);
 			arrpush(static_arguments, static_argument);
 		} else {
-			char **inferred_arguments = NULL;
-			for (long int k = 0; k < arrlen(function_type_node->function_type.arguments); k++) {
-				if (function_type_node->function_type.arguments[k].inferred) {
-					arrpush(inferred_arguments, function_type_node->function_type.arguments[k].identifier);
-				}
-			}
-
-			bool pattern_match_collision = false;
-
 			Pattern_Match_Result result = NULL;
-			for (long int k = 0; k < arrlen(function_type_node->function_type.arguments); k++) {
-				if (function_type_node->function_type.arguments[k].inferred) continue;
+			for (long int k = 0; k < arrlen(function_node_arguments); k++) {
+				if (function_node_arguments[k].inferred || function_node_arguments[k].static_) continue;
 
-				Node *argument = function_type_node->function_type.arguments[k].type;
-				Value argument_value = argument_types[i];
+				Node *argument = function_node_arguments[k].type;
+				Value argument_value = argument_types[argument_index];
 				if (!pattern_match(argument, argument_value, context, inferred_arguments, &result)) {
-					pattern_match_collision = true;
+					pattern_match_fail = true;
 				};
 			}
 
-			for (long int k = 0; k < arrlen(function_type_node->function_type.arguments); k++) {
-				if (!function_type_node->function_type.arguments[k].inferred) continue;
+			for (long int k = 0; k < arrlen(function_node_arguments); k++) {
+				if (!function_node_arguments[k].inferred) continue;
 
-				Typed_Value typed_value = shget(result, function_type_node->function_type.arguments[k].identifier);
+				Typed_Value typed_value = shget(result, function_node_arguments[k].identifier);
 				if (typed_value.value.value != NULL) {
 					Static_Argument_Value static_argument = {
-						.identifier = function_type_node->function_type.arguments[k].identifier,
+						.identifier = function_node_arguments[k].identifier,
 						.value = typed_value
 					};
 
 					arrpush(static_arguments, static_argument);
+				} else {
+					pattern_match_fail = true;
 				}
 			}
-
-			(void) pattern_match_collision;
 		}
-		j++;
+	}
+
+	if (pattern_match_fail) {
+		handle_semantic_error(node->location, "Pattern matching failed");
 	}
 
 	if (arrlen(static_arguments) > 0) {
@@ -596,14 +597,14 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 			size_t saved_static_argument_id = context->static_argument_id;
 			context->static_argument_id = ++context->static_argument_id_counter;
 
-			reset_node(context, function_value.node);
-			process_function(context, function_value.node, true);
+			reset_node(context, function_value.value->function.node);
+			process_function(context, function_value.value->function.node, true);
 			context->compile_only = compile_only_parent;
 
-			*function_type = get_type(context, function_value.node);
+			*function_type = get_type(context, function_value.value->function.node);
 			set_type(context, function, *function_type);
 
-			function_value = evaluate(context, function_value.node);
+			function_value = evaluate(context, function_value.value->function.node);
 
 			Static_Argument_Variation static_argument_variation = {
 				.static_arguments = values,
@@ -631,24 +632,24 @@ static Value process_call_generic2(Context *context, Node *node, Node *function,
 		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", real_argument_count, arrlen(arguments));
 	}
 
-	long int k = 0;
-	for (long int i = 0; i < arrlen(arguments); i++) {
-		while (function_type->value->function_type.arguments[k].inferred) k++;
-		if (function_type->value->function_type.arguments[k].static_) continue;
+	Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
+	for (long int argument_index = 0; argument_index < arrlen(arguments); argument_index++) {
+		long int function_argument_index = argument_index + arrlen(inferred_arguments);
+		if (function_type_arguments[function_argument_index].static_) continue;
 
 		Value wanted_type = {};
-		if (k < arrlen(function_type->value->function_type.arguments) || !function_type->value->function_type.variadic) {
-			wanted_type = function_type->value->function_type.arguments[k].type;
+		if (function_argument_index < arrlen(function_type_arguments) || !function_type->value->function_type.variadic) {
+			wanted_type = function_type_arguments[function_argument_index].type;
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = wanted_type };
-		process_node_context(context, temporary_context, arguments[i]);
-		Value type = get_type(context, arguments[i]);
+		process_node_context(context, temporary_context, arguments[argument_index]);
+		Value type = get_type(context, arguments[argument_index]);
 
 		if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
 			handle_type_error(node, wanted_type, type);
 		}
-		k++;
+		function_argument_index++;
 	}
 
 	return function_value;
@@ -659,10 +660,6 @@ static void process_struct_type(Context *context, Node *node) {
 	for (long int i = 0; i < arrlen(struct_type.items); i++) {
 		process_node(context, struct_type.items[i].type);
 	}
-
-	// for (long int i = 0; i < arrlen(struct_type.operators); i++) {
-	// 	process_node(context, struct_type.operators[i].function);
-	// }
 
 	Value_Data *value = value_new(INTERNAL_VALUE);
 	value->internal.identifier = "type";
@@ -675,28 +672,20 @@ static void process_call(Context *context, Node *node) {
 	process_node(context, call.function);
 	Value function_type = get_type(context, call.function);
 
-	Value *argument_types = process_call_generic1(context, call.arguments);
+	Value *argument_types = get_initial_argument_types(context, call.arguments);
 
 	Node_Data *data = get_data(context, node);
 	if (data == NULL) {
 		data = node_data_new(CALL_NODE);
 	}
 
-	Value function_value = process_call_generic2(context, node, call.function, call.arguments, argument_types, &function_type);
+	Value function_value = process_call_generic(context, node, call.function, call.arguments, argument_types, &function_type);
 
 	data->call.function_type = function_type;
 	data->call.function_value = function_value;
 	set_data(context, node, data);
 	set_type(context, node, function_type.value->function_type.return_type);
 }
-
-// static Scope *clone_scopes(Scope *scopes) {
-// 	Scope *cloned = NULL;
-// 	for (long int i = 0; i < arrlen(scopes); i++) {
-// 		arrpush(cloned, scopes[i]);
-// 	}
-// 	return cloned;
-// }
 
 static Process_Define_Result process_define_context(Context *context, Temporary_Context temporary_context, Node *node, Scope *scopes) {
 	Temporary_Context saved_temporary_context = context->temporary_context;
@@ -751,8 +740,8 @@ static void process_call_method(Context *context, Node *node) {
 		}
 	}
 
-	Value *argument_types = process_call_generic1(context, arguments);
-	process_call_generic2(context, node, NULL, arguments, argument_types, &custom_operator_function.function_type);
+	Value *argument_types = get_initial_argument_types(context, arguments);
+	process_call_generic(context, node, NULL, arguments, argument_types, &custom_operator_function.function_type);
 
 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
 	data->call_method.arguments = arguments;
