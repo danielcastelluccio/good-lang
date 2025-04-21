@@ -40,6 +40,12 @@ typedef enum {
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	STRING_TYPE_VALUE,
+	INTEGER_TYPE_VALUE,
+	FLOAT_TYPE_VALUE,
+	BYTE_TYPE_VALUE,
+	VOID_TYPE_VALUE,
+	TYPE_TYPE_VALUE,
+	BOOLEAN_TYPE_VALUE,
 	BOOLEAN_VALUE,
 	MODULE_VALUE,
 	POINTER_VALUE,
@@ -49,7 +55,8 @@ typedef enum {
 	ENUM_VALUE,
 	STRING_VALUE,
 	MODULE_TYPE_VALUE,
-	INTERNAL_VALUE
+	IMPORT_FUNCTION_VALUE,
+	SIZE_OF_FUNCTION_VALUE
 } Value_Tag;
 
 typedef struct {
@@ -148,6 +155,15 @@ typedef struct {
 } Array_Type_Value;
 
 typedef struct {
+	bool signed_;
+	size_t size;
+} Integer_Type_Value;
+
+typedef struct {
+	size_t size;
+} Float_Type_Value;
+
+typedef struct {
 	bool value;
 } Boolean_Value;
 
@@ -166,6 +182,8 @@ struct Value_Data {
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
 		Array_Type_Value array_type;
+		Integer_Type_Value integer_type;
+		Float_Type_Value float_type;
 		Boolean_Value boolean;
 		Pointer_Value pointer;
 		Array_Value array;
@@ -367,6 +385,7 @@ typedef struct Context Context;
 typedef struct {
 	size_t (*size_fn)(Value_Data *, void *data);
 	void (*build_fn)(Context context, Node *root, void *data);
+	size_t default_integer_size;
 	void *data;
 } Codegen;
 
@@ -406,10 +425,10 @@ void set_data(Context *context, Node *node, Node_Data *data);
 
 void reset_node(Context *context, Node *node);
 
-Value create_string_type();
-Value create_boolean_type();
-Value create_internal_type(char *identifier);
+Value create_value(Value_Tag tag);
 Value create_pointer_type(Value value);
 Value create_array_type(Value value);
+Value create_integer_type(bool signed_, size_t size);
+Value create_float_type(size_t size);
 
 #endif

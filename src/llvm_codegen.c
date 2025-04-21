@@ -75,17 +75,6 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 		case FUNCTION_TYPE_VALUE: {
 			return LLVMPointerType(create_llvm_function_literal_type(value, state), 0);
 		}
-		case INTERNAL_VALUE: {
-			Internal_Value internal = value->internal;
-
-			if (strcmp(internal.identifier, "byte") == 0) return LLVMInt8Type();
-			else if (strcmp(internal.identifier, "void") == 0) return LLVMStructType(NULL, 0, false);
-			else if (strcmp(internal.identifier, "uint") == 0) return LLVMInt64Type();
-			else if (strcmp(internal.identifier, "flt") == 0) return LLVMDoubleType();
-			else if (strcmp(internal.identifier, "bool") == 0) return LLVMInt1Type();
-			else assert(false);
-			break;
-		}
 		case STRUCT_TYPE_VALUE: {
 			Struct_Type_Value struct_type = value->struct_type;
 
@@ -109,6 +98,33 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 		}
 		case ENUM_TYPE_VALUE: {
 			return LLVMInt64Type();
+		}
+		case BYTE_TYPE_VALUE: {
+			return LLVMInt8Type();
+		}
+		case VOID_TYPE_VALUE: {
+			return LLVMStructType(NULL, 0, false);
+		}
+		case BOOLEAN_TYPE_VALUE: {
+			return LLVMInt1Type();
+		}
+		case INTEGER_TYPE_VALUE: {
+			Integer_Type_Value integer_type = value->integer_type;
+			return LLVMIntType(integer_type.size);
+		}
+		case FLOAT_TYPE_VALUE: {
+			Float_Type_Value float_type = value->float_type;
+			switch (float_type.size) {
+				case 16:
+					return LLVMHalfType();
+				case 32:
+					return LLVMFloatType();
+				case 64:
+					return LLVMDoubleType();
+				default:
+					assert(false);
+			}
+			return NULL;
 		}
 		case STRING_TYPE_VALUE: {
 			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
@@ -474,19 +490,17 @@ static bool is_type_signed(Value_Data *type) {
 }
 
 static bool is_type_float(Value_Data *type) {
-	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) return true;
+	if (type->tag == FLOAT_TYPE_VALUE) return true;
 	return false;
 }
 
 static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValueRef value2, State *state) {
 	switch (type->tag) {
-		case INTERNAL_VALUE: {
-			char *internal = type->internal.identifier;
-			if (strcmp(internal, "uint") == 0 || strcmp(internal, "byte") == 0) {
-				return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
-			}
-			assert(false);
-			return NULL;
+		case BYTE_TYPE_VALUE: {
+			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
+		}
+		case INTEGER_TYPE_VALUE: {
+			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
 		}
 		default:
 			assert(false);
@@ -1030,6 +1044,7 @@ Codegen llvm_codegen() {
 	return (Codegen) {
 		.size_fn = size_llvm,
 		.build_fn = build_llvm,
+		.default_integer_size = 64,
 		.data = data
 	};
 }

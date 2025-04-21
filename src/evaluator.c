@@ -34,8 +34,8 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 
 			return value_equal(value1->array_type.inner.value, value2->array_type.inner.value);
 		}
-		case INTERNAL_VALUE: {
-			return strcmp(value1->internal.identifier, value2->internal.identifier) == 0;
+		case INTEGER_TYPE_VALUE: {
+			return value1->integer_type.signed_ == value2->integer_type.signed_ && value1->integer_type.size == value2->integer_type.size;
 		}
 		case STRUCT_TYPE_VALUE: {
 			if (arrlen(value1->struct_type.items) != arrlen(value2->struct_type.items)) return false;
@@ -77,12 +77,12 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case STRING_TYPE_VALUE: {
 			return true;
 		}
+		case TYPE_TYPE_VALUE: {
+			return true;
+		}
 		case INTEGER_VALUE: {
 			return value1->integer.value == value2->integer.value;
 		}
-		// case DEFINE_DATA_VALUE: {
-		// 	return value_equal(value1->define_data.value, value2->define_data.value);
-		// }
 		default:
 			assert(false);
 	}
@@ -94,7 +94,7 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 
 	switch (type1->tag) {
 		case POINTER_TYPE_VALUE: {
-			if ((type1->pointer_type.inner.value->tag == INTERNAL_VALUE && strcmp(type1->pointer_type.inner.value->internal.identifier, "void") == 0) || (type2->pointer_type.inner.value->tag == INTERNAL_VALUE && strcmp(type2->pointer_type.inner.value->internal.identifier, "void") == 0)) {
+			if (type1->pointer_type.inner.value->tag == VOID_TYPE_VALUE || type2->pointer_type.inner.value->tag == VOID_TYPE_VALUE) {
 				return true;
 			}
 
@@ -109,9 +109,6 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 			}
 
 			return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
-		}
-		case INTERNAL_VALUE: {
-			return strcmp(type1->internal.identifier, type2->internal.identifier) == 0;
 		}
 		case STRUCT_TYPE_VALUE: {
 			if (type1->struct_type.node != type2->struct_type.node) return false;
@@ -154,12 +151,18 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 		case STRING_TYPE_VALUE: {
 			return true;
 		}
+		case BYTE_TYPE_VALUE: {
+			return true;
+		}
+		case TYPE_TYPE_VALUE: {
+			return true;
+		}
+		case INTEGER_TYPE_VALUE: {
+			return type1->integer_type.signed_ == type2->integer_type.signed_ && type1->integer_type.size == type2->integer_type.size;
+		}
 		case INTEGER_VALUE: {
 			return type1->integer.value == type2->integer.value;
 		}
-		// case DEFINE_DATA_VALUE: {
-		// 	return type_assignable(type1->define_data.value, type2->define_data.value);
-		// }
 		default:
 			assert(false);
 	}
@@ -404,38 +407,33 @@ Value evaluate(Context *context, Node *node) {
 			}
 
 			switch (function.value->tag) {
-				case INTERNAL_VALUE: {
-					char *identifier = function.value->internal.identifier;
-					if (strcmp(identifier, "import") == 0) {
-						Value string = arguments[0];
-						char *source = malloc(string.value->string.length + 1);
-						source[string.value->string.length] = '\0';
-						memcpy(source, string.value->string.data, string.value->string.length); 
+				case IMPORT_FUNCTION_VALUE: {
+					Value string = arguments[0];
+					char *source = malloc(string.value->string.length + 1);
+					source[string.value->string.length] = '\0';
+					memcpy(source, string.value->string.data, string.value->string.length); 
 
-						Value value = get_cached_file(context, source);
-						if (value.value != NULL) {
-							return value;
-						}
-
-						Node *file_node = parse_file(source);
-
-						Scope *saved_scopes = context->scopes;
-						context->scopes = NULL;
-						process_node(context, file_node);
-						value = evaluate(context, file_node);
-						context->scopes = saved_scopes;
-
-						add_cached_file(context, source, value);
-
+					Value value = get_cached_file(context, source);
+					if (value.value != NULL) {
 						return value;
-					} else if (strcmp(identifier, "size_of") == 0) {
-						Value_Data *value = value_new(INTEGER_VALUE);
-						value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
-						return create_value_data(value, node);
-					} else {
-						assert(false);
 					}
-					return (Value) {};
+
+					Node *file_node = parse_file(source);
+
+					Scope *saved_scopes = context->scopes;
+					context->scopes = NULL;
+					process_node(context, file_node);
+					value = evaluate(context, file_node);
+					context->scopes = saved_scopes;
+
+					add_cached_file(context, source, value);
+
+					return value;
+				}
+				case SIZE_OF_FUNCTION_VALUE: {
+					Value_Data *value = value_new(INTEGER_VALUE);
+					value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
+					return create_value_data(value, node);
 				}
 				case FUNCTION_VALUE: {
 					size_t saved_static_argument_id = context->static_argument_id;
@@ -449,9 +447,6 @@ Value evaluate(Context *context, Node *node) {
 					context->static_argument_id = saved_static_argument_id;
 
 					return create_value_data(result.value, node);
-				}
-				case STRUCT_TYPE_VALUE: {
-					return get_data(context, node)->call.struct_type;
 				}
 				default:
 					assert(false);

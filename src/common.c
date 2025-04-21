@@ -92,28 +92,31 @@ void reset_node(Context *context, Node *node) {
 	(void) hmdel(*node_datas, node);
 }
 
-Value create_string_type() {
-	return (Value) { .value = value_new(STRING_TYPE_VALUE) };
-}
-
-Value create_boolean_type() {
-	return create_internal_type("bool");
-}
-
-Value create_internal_type(char *identifier) {
-	Value_Data *internal_type = value_new(INTERNAL_VALUE);
-	internal_type->internal.identifier = identifier;
-	return (Value) { .value = internal_type };
+Value create_value(Value_Tag tag) {
+	return (Value) { .value = value_new(tag) };
 }
 
 Value create_pointer_type(Value value) {
-	Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
-	pointer_type->pointer_type.inner = value;
-	return (Value) { .value = pointer_type };
+	Value pointer_type = create_value(POINTER_TYPE_VALUE);
+	pointer_type.value->pointer_type.inner = value;
+	return pointer_type;
 }
 
 Value create_array_type(Value value) {
-	Value_Data *array_type = value_new(ARRAY_TYPE_VALUE);
-	array_type->array_type.inner = value;
-	return (Value) { .value = array_type };
+	Value array_type = create_value(ARRAY_TYPE_VALUE);
+	array_type.value->array_type.inner = value;
+	return array_type;
+}
+
+Value create_integer_type(bool signed_, size_t size) {
+	Value integer_type = create_value(INTEGER_TYPE_VALUE);
+	integer_type.value->integer_type.signed_ = signed_;
+	integer_type.value->integer_type.size = size;
+	return integer_type;
+}
+
+Value create_float_type(size_t size) {
+	Value float_type = create_value(FLOAT_TYPE_VALUE);
+	float_type.value->float_type.size = size;
+	return float_type;
 }

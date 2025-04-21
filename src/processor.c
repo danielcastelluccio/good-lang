@@ -161,10 +161,6 @@ static int print_type(Value type, char *buffer) {
 			buffer += print_type(type.value->array_type.inner, buffer);
 			break;
 		}
-		case INTERNAL_VALUE: {
-			buffer += sprintf(buffer, "%s", type.value->internal.identifier);
-			break;
-		}
 		case STRUCT_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
 			for (long int i = 0; i < arrlen(type.value->struct_type.items); i++) {
@@ -202,6 +198,10 @@ static int print_type(Value type, char *buffer) {
 		}
 		case STRING_TYPE_VALUE: {
 			buffer += sprintf(buffer, "str");
+			break;
+		}
+		case INTEGER_TYPE_VALUE: {
+			buffer += sprintf(buffer, "int(%s,%li)", type.value->integer_type.signed_ ? "true" : "false", type.value->integer_type.size);
 			break;
 		}
 		case INTEGER_VALUE: {
@@ -311,13 +311,14 @@ static bool pattern_match(Node *node, Value value, Context *context, char **infe
 					Typed_Value previous_value = shget(*match_result, inferred_arguments[i]);
 					if (previous_value.value.value != NULL) {
 						if (!value_equal(previous_value.value.value, value.value)) {
+							__builtin_trap();
 							return false;
 						}
 					}
 
 					Typed_Value typed_value = {
 						.value = value,
-						.type = create_internal_type("type")
+						.type = create_value(TYPE_TYPE_VALUE)
 					};
 					shput(*match_result, inferred_arguments[i], typed_value);
 					break;
@@ -509,7 +510,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 					if (function_node_arguments[k].inferred || function_node_arguments[k].static_) continue;
 
 					Node *argument = function_node_arguments[k].type;
-					Value argument_value = argument_types[argument_index];
+					Value argument_value = argument_types[k - arrlen(inferred_arguments)];
 					if (!pattern_match(argument, argument_value, context, inferred_arguments, &result)) {
 						pattern_match_fail = true;
 					};
@@ -663,9 +664,8 @@ static void process_struct_type(Context *context, Node *node) {
 		process_node(context, struct_type.items[i].type);
 	}
 
-	Value_Data *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, (Value) { .value = value });
+	Value value = create_value(TYPE_TYPE_VALUE);
+	set_type(context, node, value);
 }
 
 static void process_call(Context *context, Node *node) {
@@ -701,15 +701,6 @@ static Process_Define_Result process_define_context(Context *context, Temporary_
 	return process_define_result;
 }
 
-// static Node *get_operator(Context *context, Node *define_node, char *operator) {
-// 	Define_Operators *operators = hmget(context->operators, define_node);
-// 	if (operators != NULL) {
-// 		return shget(*operators, operator);
-// 	}
-//
-// 	return NULL;
-// }
-
 static void process_call_method(Context *context, Node *node) {
 	Call_Method_Node call_method = node->call_method;
 
@@ -731,12 +722,12 @@ static void process_call_method(Context *context, Node *node) {
 	}
 
 	Custom_Operator_Function custom_operator_function = {};
-	Operator_Definition *operators = argument1_type.value->pointer_type.inner.value->struct_type.node->struct_type.operators;
+	Operator_Value_Definition *operators = argument1_type.value->pointer_type.inner.value->struct_type.operators;
 	for (long int i = 0; i < arrlen(operators); i++) {
 		if (strcmp(operators[i].operator, call_method.method) == 0) {
 			custom_operator_function = (Custom_Operator_Function) {
 				.function = argument1_type.value->pointer_type.inner.value->struct_type.operators[i].function.value,
-				.function_type = (Value) { .value = argument1_type.value->pointer_type.inner.value->struct_type.operators[i].function.value->function.type },
+				.function_type = (Value) { .value = operators[i].function.value->function.type },
 			};
 			break;
 		}
@@ -760,57 +751,47 @@ static void process_identifier(Context *context, Node *node) {
 
 	Value value = {};
 	Value type = {};
-	if (identifier.module == NULL &&
-			(strcmp(identifier.value, "byte") == 0
-			|| strcmp(identifier.value, "uint") == 0
-			|| strcmp(identifier.value, "flt") == 0
-			|| strcmp(identifier.value, "void") == 0
-			|| strcmp(identifier.value, "type") == 0)) {
-		value.value = value_new(INTERNAL_VALUE);
-		value.value->internal.identifier = identifier.value;
-
-		type.value = value_new(INTERNAL_VALUE);
-		type.value->internal.identifier = "type";
-	} else if (strcmp(identifier.value, "str") == 0) {
+	if (identifier.module == NULL && strcmp(identifier.value, "void") == 0) {
+		value = create_value(VOID_TYPE_VALUE);
+		type = create_value(TYPE_TYPE_VALUE);
+	} else if (identifier.module == NULL && strcmp(identifier.value, "type") == 0) {
+		value = create_value(TYPE_TYPE_VALUE);
+		type = create_value(TYPE_TYPE_VALUE);
+	} else if (identifier.module == NULL && strcmp(identifier.value, "byte") == 0) {
+		value.value = value_new(BYTE_TYPE_VALUE);
+		type = create_value(TYPE_TYPE_VALUE);
+	} else if (identifier.module == NULL && strcmp(identifier.value, "uint") == 0) {
+		value.value = value_new(INTEGER_TYPE_VALUE);
+		value.value->integer_type.size = 64;
+		value.value->integer_type.signed_ = false;
+		type = create_value(TYPE_TYPE_VALUE);
+	} else if (identifier.module == NULL && strcmp(identifier.value, "flt64") == 0) {
+		value.value = value_new(FLOAT_TYPE_VALUE);
+		value.value->float_type.size = 64;
+		type = create_value(TYPE_TYPE_VALUE);
+	} else if (identifier.module == NULL && strcmp(identifier.value, "str") == 0) {
 		value.value = value_new(STRING_TYPE_VALUE);
-
-		type.value = value_new(INTERNAL_VALUE);
-		type.value->internal.identifier = "type";
+		type = create_value(TYPE_TYPE_VALUE);
 	} else if (strcmp(identifier.value, "import") == 0) {
-		value.value = value_new(INTERNAL_VALUE);
-		value.value->internal.identifier = identifier.value;
+		value = create_value(IMPORT_FUNCTION_VALUE);
 
 		type.value = value_new(FUNCTION_TYPE_VALUE);
 		Function_Argument_Value argument = {
 			.identifier = "",
-			.type = create_string_type()
+			.type = create_value(STRING_TYPE_VALUE)
 		};
 		arrpush(type.value->function_type.arguments, argument);
 		type.value->function_type.return_type = (Value) { .value = value_new(MODULE_TYPE_VALUE) };
-	// } else if (strcmp(identifier.value, "self") == 0) {
-	// 	if (context->current_type.value == NULL) {
-	// 		context->current_type_waiting = &data->identifier.value;
-	// 	} else {
-	// 		value = context->current_type;
-	// 	}
-
-	// 	type.value = value_new(INTERNAL_VALUE);
-	// 	type.value->internal.identifier = "type";
 	} else if (strcmp(identifier.value, "size_of") == 0) {
-		value.value = value_new(INTERNAL_VALUE);
-		value.value->internal.identifier = identifier.value;
-
-		Value_Data *type_value = value_new(INTERNAL_VALUE);
-		type_value->internal.identifier = "type";
+		value = create_value(SIZE_OF_FUNCTION_VALUE);
 
 		type.value = value_new(FUNCTION_TYPE_VALUE);
 		Function_Argument_Value argument = {
 			.identifier = "",
-			.type = (Value) { .value = type_value }
+			.type = create_value(TYPE_TYPE_VALUE) 
 		};
 		arrpush(type.value->function_type.arguments, argument);
-		type.value->function_type.return_type.value = value_new(INTERNAL_VALUE);
-		type.value->function_type.return_type.value->internal.identifier = "uint";
+		type.value->function_type.return_type = create_integer_type(false, 64);
 	} else {
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
@@ -843,7 +824,7 @@ static void process_identifier(Context *context, Node *node) {
 				}
 			} else if (strcmp(identifier.value, "self") == 0) {
 				data->identifier.kind = IDENTIFIER_SELF;
-				type = create_internal_type("type");
+				type = create_value(TYPE_TYPE_VALUE);
 			} else {
 				lookup_result = lookup(context, identifier.value);
 			}
@@ -912,7 +893,9 @@ static void process_identifier(Context *context, Node *node) {
 	}
 
 	if (value.value != NULL) {
-		if (value.value->tag == INTERNAL_VALUE && strcmp(value.value->internal.identifier, "type") == 0) {
+		value.node = node;
+
+		if (value.value->tag == TYPE_TYPE_VALUE) {
 			context->compile_only = true;
 		}
 
@@ -937,15 +920,11 @@ static void process_union_type(Context *context, Node *node) {
 		process_node(context, union_type.items[i].type);
 	}
 
-	Value_Data *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, (Value) { .value = value });
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
 static void process_enum_type(Context *context, Node *node) {
-	Value_Data *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, (Value) { .value = value });
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
 static void process_string(Context *context, Node *node) {
@@ -981,10 +960,10 @@ static void process_string(Context *context, Node *node) {
 	Value type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
 	if (type.value == NULL) invalid_type = true;
-	else if (type.value->tag == POINTER_TYPE_VALUE && type.value->pointer_type.inner.value->tag == ARRAY_TYPE_VALUE && type.value->pointer_type.inner.value->array_type.inner.value->tag == INTERNAL_VALUE && strcmp(type.value->pointer_type.inner.value->array_type.inner.value->internal.identifier, "byte") == 0) {
+	else if (type.value->tag == POINTER_TYPE_VALUE && type.value->pointer_type.inner.value->tag == ARRAY_TYPE_VALUE && type.value->pointer_type.inner.value->array_type.inner.value->tag == BYTE_TYPE_VALUE) {
 		type.value = value_new(POINTER_TYPE_VALUE);
 		type.value->pointer_type.inner.value = value_new(ARRAY_TYPE_VALUE);
-		type.value->pointer_type.inner.value->array_type.inner = create_internal_type("byte");
+		type.value->pointer_type.inner.value->array_type.inner = create_value(BYTE_TYPE_VALUE);
 		type.value->pointer_type.inner.value->array_type.size.value = value_new(INTEGER_VALUE);
 		type.value->pointer_type.inner.value->array_type.size.value->integer.value = new_index;
 	}
@@ -992,7 +971,7 @@ static void process_string(Context *context, Node *node) {
 	else invalid_type = true;
 
 	if (invalid_type) {
-		type = create_string_type();
+		type = create_value(STRING_TYPE_VALUE);
 	}
 
 	Node_Data *data = node_data_new(STRING_NODE);
@@ -1009,17 +988,15 @@ static void process_number(Context *context, Node *node) {
 	Value wanted_type = context->temporary_context.wanted_type;
 	bool invalid_wanted_type = false;
 	if (wanted_type.value == NULL) invalid_wanted_type = true;
-	else if (wanted_type.value->tag == INTERNAL_VALUE && strcmp(wanted_type.value->internal.identifier, "uint") == 0) {}
-	else if (wanted_type.value->tag == INTERNAL_VALUE && strcmp(wanted_type.value->internal.identifier, "flt") == 0) {}
+	else if (wanted_type.value->tag == INTEGER_TYPE_VALUE) {}
+	else if (wanted_type.value->tag == FLOAT_TYPE_VALUE) {}
 	else invalid_wanted_type = true;
 
 	if (invalid_wanted_type) {
-		wanted_type.value = value_new(INTERNAL_VALUE);
-
 		if (number.tag == DECIMAL_NUMBER) {
-			wanted_type.value->internal.identifier = "flt";
+			wanted_type = create_float_type(context->codegen.default_integer_size);
 		} else {
-			wanted_type.value->internal.identifier = "uint";
+			wanted_type = create_integer_type(true, context->codegen.default_integer_size);
 		}
 	}
 
@@ -1042,7 +1019,7 @@ static void process_null(Context *context, Node *node) {
 }
 
 static void process_boolean(Context *context, Node *node) {
-	set_type(context, node, create_boolean_type());
+	set_type(context, node, create_value(BOOLEAN_TYPE_VALUE));
 }
 
 static void process_structure(Context *context, Node *node) {
@@ -1170,9 +1147,9 @@ static void process_structure_access(Context *context, Node *node) {
 		}
 		case STRING_TYPE_VALUE: {
 			if (strcmp("len", structure_access.item) == 0) {
-				item_type = create_internal_type("uint");
+				item_type = create_integer_type(false, context->codegen.default_integer_size);
 			} else if (strcmp("ptr", structure_access.item) == 0) {
-				item_type = create_pointer_type(create_array_type(create_internal_type("byte")));
+				item_type = create_pointer_type(create_array_type(create_value(BYTE_TYPE_VALUE)));
 			} else {
 				assert(false);
 			}
@@ -1212,7 +1189,9 @@ static void process_array_access(Context *context, Node *node) {
 	Array_Access_Node array_access = node->array_access;
 
 	process_node(context, array_access.array);
-	process_node(context, array_access.index);
+
+	Temporary_Context temporary_context = { .wanted_type = create_integer_type(false, context->codegen.default_integer_size) };
+	process_node_context(context, temporary_context, array_access.index);
 
 	Value array_type = get_type(context, array_access.array);
 	Value array_type_original = array_type;
@@ -1670,9 +1649,9 @@ static void process_while(Context *context, Node *node) {
 
 static bool can_compare(Value_Data *type) {
 	if (type->tag == ENUM_TYPE_VALUE) return true;
-	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "uint") == 0) return true;
-	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "flt") == 0) return true;
-	if (type->tag == INTERNAL_VALUE && strcmp(type->internal.identifier, "byte") == 0) return true;
+	if (type->tag == INTEGER_TYPE_VALUE) return true;
+	if (type->tag == BYTE_TYPE_VALUE) return true;
+	if (type->tag == FLOAT_TYPE_VALUE) return true;
 
 	return false;
 }
@@ -1695,9 +1674,9 @@ static void process_binary_operator(Context *context, Node *node) {
 	}
 
 	Value type = left_type;
-	if (type.value->tag == INTERNAL_VALUE && strcmp(type.value->internal.identifier, "uint") == 0) {}
-	else if (type.value->tag == INTERNAL_VALUE && strcmp(type.value->internal.identifier, "flt") == 0) {}
-	else if (type.value->tag == INTERNAL_VALUE && strcmp(type.value->internal.identifier, "type") == 0) {}
+	if (type.value->tag == INTEGER_TYPE_VALUE) {}
+	else if (type.value->tag == FLOAT_TYPE_VALUE) {}
+	else if (type.value->tag == TYPE_TYPE_VALUE) {}
 	else if (can_compare(type.value) && binary_operator.operator == OPERATOR_EQUALS) {}
 	else {
 		char left_string[64] = {};
@@ -1712,8 +1691,7 @@ static void process_binary_operator(Context *context, Node *node) {
 		case OPERATOR_LESS_EQUALS:
 		case OPERATOR_GREATER:
 		case OPERATOR_GREATER_EQUALS:
-			result_type.value = value_new(INTERNAL_VALUE);
-			result_type.value->internal.identifier = "bool";
+			result_type = create_value(BOOLEAN_TYPE_VALUE);
 			break;
 		case OPERATOR_ADD:
 		case OPERATOR_SUBTRACT:
@@ -1776,9 +1754,7 @@ static void process_pointer(Context *context, Node *node) {
 	Pointer_Node pointer = node->pointer;
 	process_node(context, pointer.inner);
 
-	Value_Data *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, (Value) { .value = value });
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
 static void process_array_type(Context *context, Node *node) {
@@ -1788,9 +1764,7 @@ static void process_array_type(Context *context, Node *node) {
 		process_node(context, array_type.size);
 	}
 
-	Value_Data *value = value_new(INTERNAL_VALUE);
-	value->internal.identifier = "type";
-	set_type(context, node, (Value) { .value = value });
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
 void process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
