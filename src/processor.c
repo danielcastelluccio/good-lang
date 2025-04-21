@@ -31,9 +31,7 @@ typedef struct {
 		LOOKUP_RESULT_DEFINE,
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_ARGUMENT,
-		LOOKUP_RESULT_STATIC_ARGUMENT,
-		LOOKUP_RESULT_ENUM_VARIANT,
-		LOOKUP_RESULT_SELF
+		LOOKUP_RESULT_STATIC_ARGUMENT
 	} tag;
 } Lookup_Result;
 
@@ -43,21 +41,6 @@ typedef struct {
 } Lookup_Define_Result;
 
 static Lookup_Result lookup(Context *context, char *identifier) {
-	if (strcmp(identifier, "self") == 0) {
-		return (Lookup_Result) { .tag = LOOKUP_RESULT_SELF, .type = create_internal_type("type") };
-	}
-
-	if (context->temporary_context.wanted_type.value != NULL) {
-		Value wanted_type = context->temporary_context.wanted_type;
-		if (wanted_type.value->tag == ENUM_TYPE_VALUE) {
-			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
-				if (strcmp(identifier, wanted_type.value->enum_type.items[i]) == 0) {
-					return (Lookup_Result) { .tag = LOOKUP_RESULT_ENUM_VARIANT, .enum_variant = i, .type = context->temporary_context.wanted_type };
-				}
-			}
-		}
-	}
-
 	bool found_function = false;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
@@ -845,12 +828,21 @@ static void process_identifier(Context *context, Node *node) {
 
 		Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
 		if (identifier.module == NULL) {
-			lookup_result = lookup(context, identifier.value);
-		}
-
-		if (lookup_result.tag == LOOKUP_RESULT_SELF) {
-			data->identifier.kind = IDENTIFIER_SELF;
-			type = lookup_result.type;
+			Value wanted_type = context->temporary_context.wanted_type;
+			if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
+				for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
+					if (strcmp(identifier.value, wanted_type.value->enum_type.items[i]) == 0) {
+						value.value = value_new(ENUM_VALUE);
+						value.value->enum_.value = i;
+						type = context->temporary_context.wanted_type;
+					}
+				}
+			} else if (strcmp(identifier.value, "self") == 0) {
+				data->identifier.kind = IDENTIFIER_SELF;
+				type = create_internal_type("type");
+			} else {
+				lookup_result = lookup(context, identifier.value);
+			}
 		}
 
 		if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
@@ -907,12 +899,6 @@ static void process_identifier(Context *context, Node *node) {
 
 		if (lookup_result.tag == LOOKUP_RESULT_STATIC_ARGUMENT) {
 			value = lookup_result.static_argument;
-			type = lookup_result.type;
-		}
-
-		if (lookup_result.tag == LOOKUP_RESULT_ENUM_VARIANT) {
-			value.value = value_new(ENUM_VALUE);
-			value.value->enum_.value = lookup_result.enum_variant;
 			type = lookup_result.type;
 		}
 	}
