@@ -632,7 +632,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 	Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
 	for (long int argument_index = 0; argument_index < arrlen(arguments); argument_index++) {
 		long int function_argument_index = argument_index + arrlen(inferred_arguments);
-		if (function_type_arguments[function_argument_index].static_) continue;
+		if (function_argument_index < arrlen(function_type_arguments) && function_type_arguments[function_argument_index].static_) continue;
 
 		Value wanted_type = {};
 		if (function_argument_index < arrlen(function_type_arguments) || !function_type->value->function_type.variadic) {
@@ -767,8 +767,7 @@ static void process_identifier(Context *context, Node *node) {
 		type.value = value_new(INTERNAL_VALUE);
 		type.value->internal.identifier = "type";
 	} else if (strcmp(identifier.value, "str") == 0) {
-		value.value = value_new(INTERNAL_VALUE);
-		value.value->internal.identifier = identifier.value;
+		value.value = value_new(STRING_TYPE_VALUE);
 
 		type.value = value_new(INTERNAL_VALUE);
 		type.value->internal.identifier = "type";
@@ -1138,24 +1137,50 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_pointer_type = get_type(context, structure_access.structure);
 	}
 
-	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE || (structure_pointer_type.value->pointer_type.inner.value->tag != STRUCT_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != UNION_TYPE_VALUE)) {
+	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE || (structure_pointer_type.value->pointer_type.inner.value->tag != STRUCT_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != UNION_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != STRING_TYPE_VALUE)) {
 		char given_string[64] = {};
 		print_type_outer(structure_pointer_type, given_string);
-		handle_semantic_error(node->location, "Expected structure or union, but got %s", given_string);
+		handle_semantic_error(node->location, "Expected structure or union or string, but got %s", given_string);
 	}
 
 	Value structure_type = structure_pointer_type.value->pointer_type.inner;
 
 	Value item_type = {};
-	for (long int i = 0; i < arrlen(structure_type.value->struct_type.items); i++) {
-		if (strcmp(structure_type.value->struct_type.items[i].identifier, structure_access.item) == 0) {
-			item_type = structure_type.value->struct_type.items[i].type;
+	switch (structure_type.value->tag) {
+		case STRUCT_TYPE_VALUE: {
+			for (long int i = 0; i < arrlen(structure_type.value->struct_type.items); i++) {
+				if (strcmp(structure_type.value->struct_type.items[i].identifier, structure_access.item) == 0) {
+					item_type = structure_type.value->struct_type.items[i].type;
+				}
+			}
+			break;
 		}
+		case UNION_TYPE_VALUE: {
+			for (long int i = 0; i < arrlen(structure_type.value->union_type.items); i++) {
+				if (strcmp(structure_type.value->union_type.items[i].identifier, structure_access.item) == 0) {
+					item_type = structure_type.value->union_type.items[i].type;
+				}
+			}
+			break;
+		}
+		case STRING_TYPE_VALUE: {
+			if (strcmp("len", structure_access.item) == 0) {
+				item_type = create_internal_type("uint");
+			} else if (strcmp("ptr", structure_access.item) == 0) {
+				item_type = create_pointer_type(create_array_type(create_internal_type("byte")));
+			} else {
+				assert(false);
+			}
+			break;
+		}
+		default:
+			assert(false);
 	}
 
 	Node_Data *data = node_data_new(STRUCTURE_ACCESS_NODE);
 	data->structure_access.structure_value = structure_type;
 	data->structure_access.want_pointer = context->temporary_context.want_pointer;
+	data->structure_access.item_type = item_type;
 
 	if (context->temporary_context.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };

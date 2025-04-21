@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <llvm-c/Types.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <unistd.h>
 
 #include <llvm-c/Core.h>
@@ -82,12 +83,6 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 			else if (strcmp(internal.identifier, "uint") == 0) return LLVMInt64Type();
 			else if (strcmp(internal.identifier, "flt") == 0) return LLVMDoubleType();
 			else if (strcmp(internal.identifier, "bool") == 0) return LLVMInt1Type();
-			else if (strcmp(internal.identifier, "str") == 0) {
-				LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
-				items[0] = LLVMInt64Type();
-				items[1] = LLVMPointerType(LLVMVoidType(), 0);
-				return LLVMStructType(items, 2, false);
-			}
 			else assert(false);
 			break;
 		}
@@ -114,6 +109,12 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 		}
 		case ENUM_TYPE_VALUE: {
 			return LLVMInt64Type();
+		}
+		case STRING_TYPE_VALUE: {
+			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
+			items[0] = LLVMInt64Type();
+			items[1] = LLVMPointerType(LLVMVoidType(), 0);
+			return LLVMStructType(items, 2, false);
 		}
 		// case DEFINE_DATA_VALUE: {
 		// 	Define_Data_Value define_data = value->define_data;
@@ -260,7 +261,7 @@ static LLVMValueRef generate_string(Node *node, State *state) {
 
 	LLVMValueRef pointer_llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8Type(), 0), "");
 
-	if (string_data.type.value->tag == INTERNAL_VALUE && strcmp(string_data.type.value->internal.identifier, "str") == 0) {
+	if (string_data.type.value->tag == STRING_TYPE_VALUE) {
 		LLVMValueRef string_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(string_data.type.value, state), "");
 
 		LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(string_data.type.value, state), string_value, 0, "");
@@ -373,21 +374,48 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	Value_Data *structure_type = data.structure_value.value;
 
 	unsigned int index = 0;
-	Value_Data *type = NULL;
-	for (long int i = 0; i < arrlen(structure_type->struct_type.items); i++) {
-		if (strcmp(structure_access.item, structure_type->struct_type.items[i].identifier) == 0) {
-			index = i;
-			type = structure_type->struct_type.items[i].type.value;
+	Value_Data *item_type = data.item_type.value;
+	switch (structure_type->tag) {
+		case STRUCT_TYPE_VALUE: {
+			for (long int i = 0; i < arrlen(structure_type->struct_type.items); i++) {
+				if (strcmp(structure_access.item, structure_type->struct_type.items[i].identifier) == 0) {
+					index = i;
+					break;
+				}
+			}
 			break;
 		}
+		case UNION_TYPE_VALUE: {
+			for (long int i = 0; i < arrlen(structure_type->union_type.items); i++) {
+				if (strcmp(structure_access.item, structure_type->union_type.items[i].identifier) == 0) {
+					index = i;
+					break;
+				}
+			}
+			break;
+		}
+		case STRING_TYPE_VALUE: {
+			if (strcmp(structure_access.item, "len") == 0) {
+				index = 0;
+			} else if (strcmp(structure_access.item, "ptr") == 0) {
+				index = 1;
+			} else {
+				assert(false);
+			}
+			break;
+		}
+		default:
+			assert(false);
 	}
 
 	LLVMValueRef structure_llvm_value = generate_node(structure_access.structure, state);
 	LLVMValueRef element_pointer = NULL;
-	if (structure_type->tag == STRUCT_TYPE_VALUE) {
+	if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == STRING_TYPE_VALUE) {
 		element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type, state), structure_llvm_value, index, "");
+	} else if (structure_type->tag == UNION_TYPE_VALUE) {
+		element_pointer = LLVMBuildBitCast(state->llvm_builder, structure_llvm_value, LLVMPointerType(create_llvm_type(item_type, state), 0), "");
 	} else {
-		element_pointer = LLVMBuildBitCast(state->llvm_builder, structure_llvm_value, LLVMPointerType(create_llvm_type(type, state), 0), "");
+		assert(false);
 	}
 
 	if (data.assign_value != NULL) {
@@ -397,7 +425,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 		if (data.want_pointer) {
 			return element_pointer;
 		} else  {
-			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), element_pointer, "");
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(item_type, state), element_pointer, "");
 		}
 	}
 }

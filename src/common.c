@@ -93,8 +93,7 @@ void reset_node(Context *context, Node *node) {
 }
 
 Value create_string_type() {
-	// return (Value) { .value = value_new(STRING_TYPE_VALUE) };
-	return create_internal_type("str");
+	return (Value) { .value = value_new(STRING_TYPE_VALUE) };
 }
 
 Value create_boolean_type() {
@@ -105,4 +104,16 @@ Value create_internal_type(char *identifier) {
 	Value_Data *internal_type = value_new(INTERNAL_VALUE);
 	internal_type->internal.identifier = identifier;
 	return (Value) { .value = internal_type };
+}
+
+Value create_pointer_type(Value value) {
+	Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
+	pointer_type->pointer_type.inner = value;
+	return (Value) { .value = pointer_type };
+}
+
+Value create_array_type(Value value) {
+	Value_Data *array_type = value_new(ARRAY_TYPE_VALUE);
+	array_type->array_type.inner = value;
+	return (Value) { .value = array_type };
 }

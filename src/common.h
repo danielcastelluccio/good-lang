@@ -274,6 +274,7 @@ typedef struct {
 	Value structure_value;
 	Node *assign_value;
 	bool want_pointer;
+	Value item_type;
 } Structure_Access_Data;
 
 typedef struct {
@@ -408,5 +409,7 @@ void reset_node(Context *context, Node *node);
 Value create_string_type();
 Value create_boolean_type();
 Value create_internal_type(char *identifier);
+Value create_pointer_type(Value value);
+Value create_array_type(Value value);
 
 #endif
