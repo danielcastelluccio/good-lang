@@ -1,0 +1,4 @@
+def printf = fn (s: ^[]byte, ...) extern "printf";
+
+def malloc = fn (size: uint): ^void extern "malloc";
+def realloc = fn (ptr: ^void, size: uint): ^void extern "realloc";

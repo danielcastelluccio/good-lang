@@ -1,6 +1,9 @@
 #include <assert.h>
+#include <linux/limits.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "stb/ds.h"
@@ -412,6 +415,27 @@ Value evaluate(Context *context, Node *node) {
 					char *source = malloc(string.value->string.length + 1);
 					source[string.value->string.length] = '\0';
 					memcpy(source, string.value->string.data, string.value->string.length); 
+
+					if (strcmp(source, "core") == 0) {
+						char *cwd = getcwd(NULL, PATH_MAX);
+						source = malloc(strlen(cwd) + 15);
+						strcpy(source, cwd);
+						strcat(source, "/core/std.lang");
+					} else {
+						size_t slash_index = 0;
+						for (size_t i = 0; i < strlen(node->location.path); i++) {
+							if (node->location.path[i] == '/') {
+								slash_index = i;
+							}
+						}
+
+						node->location.path[slash_index + 1] = '\0';
+
+						char *old_source = source;
+						source = malloc(slash_index + strlen(source) + 2);
+						strcpy(source, node->location.path);
+						strcat(source, old_source);
+					}
 
 					Value value = get_cached_file(context, source);
 					if (value.value != NULL) {

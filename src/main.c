@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "llvm_codegen.h"
 #include "parser.h"
@@ -11,7 +12,7 @@ int main(int argc, char **argv) {
 	}
 
 	char *source = argv[1];
-	Node *root = parse_file(source);
+	Node *root = parse_file(realpath(source, NULL));
 
 	Codegen codegen = llvm_codegen();
 

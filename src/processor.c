@@ -1268,9 +1268,6 @@ static void process_array_access(Context *context, Node *node) {
 static void process_variable(Context *context, Node *node) {
 	Variable_Node variable = node->variable;
 
-	Scope *scope = &arrlast(context->scopes);
-	shput(scope->variables, variable.identifier, node);
-
 	Temporary_Context temporary_context = {};
 	Value type = {};
 	if (variable.type != NULL) {
@@ -1291,6 +1288,9 @@ static void process_variable(Context *context, Node *node) {
 	} else if (type.value == NULL) {
 		handle_semantic_error(node->location, "Expected value");
 	}
+
+	Scope *scope = &arrlast(context->scopes);
+	shput(scope->variables, variable.identifier, node);
 
 	Node_Data *data = node_data_new(VARIABLE_NODE);
 	data->variable.type = type;
