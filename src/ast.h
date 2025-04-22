@@ -27,6 +27,10 @@ typedef struct {
 } Array_Type_Node;
 
 typedef struct {
+	Node *inner;
+} Array_View_Type_Node;
+
+typedef struct {
 	char *identifier;
 	Node *type;
 	bool static_;
@@ -208,6 +212,7 @@ typedef struct {
 typedef enum {
 	POINTER_NODE,
 	ARRAY_TYPE_NODE,
+	ARRAY_VIEW_TYPE_NODE,
 	FUNCTION_TYPE_NODE,
 	STRUCT_TYPE_NODE,
 	UNION_TYPE_NODE,
@@ -244,6 +249,7 @@ struct Node {
 	union {
 		Pointer_Node pointer;
 		Array_Type_Node array_type;
+		Array_View_Type_Node array_view_type;
 		Function_Type_Node function_type;
 		Struct_Type_Node struct_type;
 		Union_Type_Node union_type;

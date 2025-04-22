@@ -2,7 +2,7 @@ def c = import("c.lang");
 
 def List = fn (static T: type): type {
 	return struct {
-		items: ^[]T,
+		items: ^[_]T,
 		length: uint,
 		capacity: uint;
 

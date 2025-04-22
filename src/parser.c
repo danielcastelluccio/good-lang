@@ -29,6 +29,7 @@ static Token_Data consume_check(Lexer *lexer, Token_Kind kind) {
 }
 
 static Node *parse_expression(Lexer *lexer);
+static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
 	if (lexer_next(lexer, false).kind == SEMICOLON || lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE || lexer_next(lexer, false).kind == CLOSED_PARENTHESIS) {
@@ -38,12 +39,12 @@ static Node *parse_expression_or_nothing(Lexer *lexer) {
 	return parse_expression(lexer);
 }
 
-static Node *parse_separated_expression(Lexer *lexer) {
+static Node *parse_separated_statement(Lexer *lexer) {
 	if (lexer_next(lexer, false).kind != OPEN_CURLY_BRACE) {
 		consume_check(lexer, EQUALS_GREATER);
 	}
 
-	return parse_expression(lexer);
+	return parse_statement(lexer);
 }
 
 static Node *parse_string(Lexer *lexer) {
@@ -505,12 +506,12 @@ static Node *parse_if(Lexer *lexer) {
 	}
 
 	if_->if_.condition = parse_expression(lexer);
-	if_->if_.if_body = parse_separated_expression(lexer);
+	if_->if_.if_body = parse_separated_statement(lexer);
 
 	Token_Data next = lexer_next(lexer, false);
 	if (next.kind == KEYWORD && strcmp(next.string, "else") == 0) {
 		consume_check(lexer, KEYWORD);
-		if_->if_.else_body = parse_expression(lexer);
+		if_->if_.else_body = parse_statement(lexer);
 	}
 	return if_;
 }
@@ -520,12 +521,12 @@ static Node *parse_while(Lexer *lexer) {
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
 
 	while_->while_.condition = parse_expression(lexer);
-	while_->while_.body = parse_separated_expression(lexer);
+	while_->while_.body = parse_separated_statement(lexer);
 
 	Token_Data next = lexer_next(lexer, false);
 	if (next.kind == KEYWORD && strcmp(next.string, "else") == 0) {
 		consume_check(lexer, KEYWORD);
-		while_->while_.else_body = parse_expression(lexer);
+		while_->while_.else_body = parse_statement(lexer);
 	}
 
 	return while_;
@@ -540,12 +541,7 @@ static Node *parse_switch(Lexer *lexer) {
 	Token_Data next = lexer_next(lexer, false);
 	while (next.kind == KEYWORD && strcmp(next.string, "case") == 0) {
 		consume_check(lexer, KEYWORD);
-		Node *check = NULL;
-		if (lexer_next(lexer, false).kind != UNDERSCORE) {
-			check = parse_expression(lexer);
-		} else {
-			consume_check(lexer, UNDERSCORE);
-		}
+		Node *check = parse_expression(lexer);
 
 		Switch_Case switch_case = {
 			.check = check,
@@ -565,7 +561,7 @@ static Node *parse_block(Lexer *lexer) {
 	Node *block = ast_new(BLOCK_NODE, first_token.location);
 
 	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
-		arrpush(block->block.statements, parse_expression(lexer));
+		arrpush(block->block.statements, parse_statement(lexer));
 		if (lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE) {
 			block->block.has_result = true;
 		} else {
@@ -596,20 +592,25 @@ static Node *parse_reference(Lexer *lexer) {
 	return reference;
 }
 
-static Node *parse_array_type_or_slice_type(Lexer *lexer) {
+static Node *parse_array_or_array_view_type(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, OPEN_BRACE);
 
 	Node *size = NULL;
 	if (lexer_next(lexer, false).kind != CLOSED_BRACE) {
 		size = parse_expression(lexer);
+		consume_check(lexer, CLOSED_BRACE);
+
+		Node *array_type = ast_new(ARRAY_TYPE_NODE, first_token.location);
+		array_type->array_type.size = size;
+		array_type->array_type.inner = parse_expression(lexer);
+		return array_type;
+	} else {
+		consume_check(lexer, CLOSED_BRACE);
+
+		Node *array_view_type = ast_new(ARRAY_VIEW_TYPE_NODE, first_token.location);
+		array_view_type->array_view_type.inner = parse_expression(lexer);
+		return array_view_type;
 	}
-
-	consume_check(lexer, CLOSED_BRACE);
-
-	Node *array_type = ast_new(ARRAY_TYPE_NODE, first_token.location);
-	array_type->array_type.size = size;
-	array_type->array_type.inner = parse_expression(lexer);
-	return array_type;
 }
 
 static Node *parse_module(Lexer *lexer) {
@@ -716,7 +717,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 
 	Node *body = NULL;
 	if (!extern_) {
-		body = parse_separated_expression(lexer);
+		body = parse_separated_statement(lexer);
 	}
 
 	if (body != NULL || extern_) {
@@ -728,6 +729,25 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 	} else {
 		return function_type;
 	}
+}
+
+static Node *parse_statement(Lexer *lexer) {
+	Node *result = parse_expression(lexer);
+
+	bool operating = true;
+	while (operating) {
+		Token_Data next = lexer_next(lexer, false);
+		switch (next.kind) {
+			case EQUALS:
+				result = parse_assign(lexer, result);
+				break;
+			default:
+				operating = false;
+				break;
+		}
+	}
+
+	return result;
 }
 
 static Node *parse_expression(Lexer *lexer) {
@@ -785,7 +805,7 @@ static Node *parse_expression(Lexer *lexer) {
 			break;
 		}
 		case OPEN_BRACE: {
-			result = parse_array_type_or_slice_type(lexer);
+			result = parse_array_or_array_view_type(lexer);
 			break;
 		}
 		default:
@@ -825,9 +845,6 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case CARET:
 				result = parse_dereference(lexer, result);
-				break;
-			case EQUALS:
-				result = parse_assign(lexer, result);
 				break;
 			default:
 				operating = false;

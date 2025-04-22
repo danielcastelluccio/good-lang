@@ -17,20 +17,20 @@ Lexer lexer_create(char *path, char *source, size_t source_length) {
 	};
 }
 
-static bool is_alphabetical(char character) {
-	return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
+static bool is_alphabetical_underscore(char character) {
+	return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_';
 }
 
 static bool is_numeric(char character) {
 	return (character >= '0' && character <= '9');
 }
 
-static bool is_alphanumeric(char character) {
-	return is_alphabetical(character) || is_numeric(character);
+static bool is_alphanumeric_underscore(char character) {
+	return is_alphabetical_underscore(character) || is_numeric(character);
 }
 
 static bool is_alphanumericplus(char character) {
-	return is_alphanumeric(character) || character == '_';
+	return is_alphanumeric_underscore(character) || character == '_';
 }
 
 static bool is_whitespace(char character) {
@@ -175,9 +175,6 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '@':
 			result = create_token(AT, lexer);
 			break;
-		case '_':
-			result = create_token(UNDERSCORE, lexer);
-			break;
 		case '(':
 			result = create_token(OPEN_PARENTHESIS, lexer);
 			break;
@@ -246,7 +243,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		}
 		default: {
-			if (is_alphabetical(character)) {
+			if (is_alphabetical_underscore(character)) {
 				size_t string_start = lexer->position - 1;
 				size_t string_start_row = lexer->row;
 				size_t string_start_column = lexer->column - 1;
@@ -353,8 +350,6 @@ char *token_to_string(Token_Kind kind) {
 			return "&";
 		case AT:
 			return "@";
-		case UNDERSCORE:
-			return "_";
 		case LESS:
 			return "<";
 		case LESS_EQUALS:

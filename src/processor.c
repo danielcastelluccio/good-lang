@@ -161,6 +161,11 @@ static int print_type(Value type, char *buffer) {
 			buffer += print_type(type.value->array_type.inner, buffer);
 			break;
 		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			buffer += sprintf(buffer, "[]");
+			buffer += print_type(type.value->array_type.inner, buffer);
+			break;
+		}
 		case STRUCT_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
 			for (long int i = 0; i < arrlen(type.value->struct_type.items); i++) {
@@ -194,10 +199,6 @@ static int print_type(Value type, char *buffer) {
 				}
 			}
 			buffer += sprintf(buffer, "}");
-			break;
-		}
-		case STRING_TYPE_VALUE: {
-			buffer += sprintf(buffer, "str");
 			break;
 		}
 		case INTEGER_TYPE_VALUE: {
@@ -757,16 +758,13 @@ static void process_identifier(Context *context, Node *node) {
 		value.value = value_new(FLOAT_TYPE_VALUE);
 		value.value->float_type.size = 64;
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && strcmp(identifier.value, "str") == 0) {
-		value.value = value_new(STRING_TYPE_VALUE);
-		type = create_value(TYPE_TYPE_VALUE);
 	} else if (strcmp(identifier.value, "import") == 0) {
 		value = create_value(IMPORT_FUNCTION_VALUE);
 
 		type.value = value_new(FUNCTION_TYPE_VALUE);
 		Function_Argument_Value argument = {
 			.identifier = "",
-			.type = create_value(STRING_TYPE_VALUE)
+			.type = create_array_view_type(create_value(BYTE_TYPE_VALUE))
 		};
 		arrpush(type.value->function_type.arguments, argument);
 		type.value->function_type.return_type = (Value) { .value = value_new(MODULE_TYPE_VALUE) };
@@ -813,6 +811,9 @@ static void process_identifier(Context *context, Node *node) {
 			} else if (strcmp(identifier.value, "self") == 0) {
 				data->identifier.kind = IDENTIFIER_SELF;
 				type = create_value(TYPE_TYPE_VALUE);
+			} else if (strcmp(identifier.value, "_") == 0) {
+				data->identifier.kind = IDENTIFIER_UNDERSCORE;
+				type = create_value(NONE_VALUE);
 			} else {
 				lookup_result = lookup(context, identifier.value);
 			}
@@ -955,11 +956,11 @@ static void process_string(Context *context, Node *node) {
 		type.value->pointer_type.inner.value->array_type.size.value = value_new(INTEGER_VALUE);
 		type.value->pointer_type.inner.value->array_type.size.value->integer.value = new_index;
 	}
-	else if (type.value->tag == STRING_TYPE_VALUE) {}
+	else if (type.value->tag == ARRAY_VIEW_TYPE_VALUE && type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {}
 	else invalid_type = true;
 
 	if (invalid_type) {
-		type = create_value(STRING_TYPE_VALUE);
+		type = create_array_view_type(create_value(BYTE_TYPE_VALUE));
 	}
 
 	Node_Data *data = node_data_new(STRING_NODE);
@@ -1107,7 +1108,7 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_pointer_type = get_type(context, structure_access.structure);
 	}
 
-	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE || (structure_pointer_type.value->pointer_type.inner.value->tag != STRUCT_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != UNION_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != STRING_TYPE_VALUE)) {
+	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE || (structure_pointer_type.value->pointer_type.inner.value->tag != STRUCT_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != UNION_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE)) {
 		char given_string[64] = {};
 		print_type_outer(structure_pointer_type, given_string);
 		handle_semantic_error(node->location, "Expected structure or union or string, but got %s", given_string);
@@ -1133,11 +1134,11 @@ static void process_structure_access(Context *context, Node *node) {
 			}
 			break;
 		}
-		case STRING_TYPE_VALUE: {
+		case ARRAY_VIEW_TYPE_VALUE: {
 			if (strcmp("len", structure_access.item) == 0) {
 				item_type = create_integer_type(false, context->codegen.default_integer_size);
 			} else if (strcmp("ptr", structure_access.item) == 0) {
-				item_type = create_pointer_type(create_array_type(create_value(BYTE_TYPE_VALUE)));
+				item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
 			} else {
 				assert(false);
 			}
@@ -1206,7 +1207,7 @@ static void process_array_access(Context *context, Node *node) {
 		}
 	}
 
-	if (custom_operator_function.function == NULL && array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE) {
+	if (custom_operator_function.function == NULL && array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE && array_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(array_type_original, given_string);
 		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
@@ -1214,7 +1215,18 @@ static void process_array_access(Context *context, Node *node) {
 
 	Value item_type = {};
 	if (custom_operator_function.function == NULL) {
-		item_type = array_type.value->pointer_type.inner.value->array_type.inner;
+		switch (array_type.value->pointer_type.inner.value->tag) {
+			case ARRAY_TYPE_VALUE: {
+				item_type = array_type.value->pointer_type.inner.value->array_type.inner;
+				break;
+			}
+			case ARRAY_VIEW_TYPE_VALUE: {
+				item_type = array_type.value->pointer_type.inner.value->array_view_type.inner;
+				break;
+			}
+			default:
+				assert(false);
+		}
 	} else {
 		Node **arguments = NULL;
 		arrpush(arguments, array_access.array);
@@ -1676,10 +1688,13 @@ static void process_pointer(Context *context, Node *node) {
 static void process_array_type(Context *context, Node *node) {
 	Array_Type_Node array_type = node->array_type;
 	process_node(context, array_type.inner);
-	if (array_type.size != NULL) {
-		process_node(context, array_type.size);
-	}
+	process_node(context, array_type.size);
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
+}
 
+static void process_array_view_type(Context *context, Node *node) {
+	Array_View_Type_Node array_view_type = node->array_view_type;
+	process_node(context, array_view_type.inner);
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
@@ -1799,6 +1814,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case ARRAY_TYPE_NODE: {
 			process_array_type(context, node);
+			break;
+		}
+		case ARRAY_VIEW_TYPE_NODE: {
+			process_array_view_type(context, node);
 			break;
 		}
 		case STRUCT_TYPE_NODE: {

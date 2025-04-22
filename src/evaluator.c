@@ -77,9 +77,6 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 
 			return true;
 		}
-		case STRING_TYPE_VALUE: {
-			return true;
-		}
 		case TYPE_TYPE_VALUE: {
 			return true;
 		}
@@ -112,6 +109,9 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 			}
 
 			return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
+		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			return type_assignable(type1->array_view_type.inner.value, type2->array_view_type.inner.value);
 		}
 		case STRUCT_TYPE_VALUE: {
 			if (type1->struct_type.node != type2->struct_type.node) return false;
@@ -149,9 +149,6 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 
 			if (type1->function_type.variadic != type2->function_type.variadic) return false;
 
-			return true;
-		}
-		case STRING_TYPE_VALUE: {
 			return true;
 		}
 		case BYTE_TYPE_VALUE: {
@@ -320,8 +317,15 @@ Value evaluate(Context *context, Node *node) {
 			Array_Type_Node array_type = node->array_type;
 
 			Value_Data *array_type_value = value_new(ARRAY_TYPE_VALUE);
-			if (array_type.size != NULL) array_type_value->array_type.size = evaluate(context, array_type.size);
+			array_type_value->array_type.size = evaluate(context, array_type.size);
 			array_type_value->array_type.inner = evaluate(context, array_type.inner);
+			return create_value_data(array_type_value, node);
+		}
+		case ARRAY_VIEW_TYPE_NODE: {
+			Array_View_Type_Node array_view_type = node->array_view_type;
+
+			Value_Data *array_type_value = value_new(ARRAY_VIEW_TYPE_VALUE);
+			array_type_value->array_view_type.inner = evaluate(context, array_view_type.inner);
 			return create_value_data(array_type_value, node);
 		}
 		case IDENTIFIER_NODE: {
@@ -339,6 +343,9 @@ Value evaluate(Context *context, Node *node) {
 						}
 					}
 					break;
+				case IDENTIFIER_UNDERSCORE:
+					return create_value_data(NULL, node);
+					break;
 				default:
 					handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
 					break;
@@ -352,7 +359,7 @@ Value evaluate(Context *context, Node *node) {
 			char *string_value = string_data.value;
 			size_t string_length = string_data.length;
 
-			if (string_data.type.value->tag == STRING_TYPE_VALUE) {
+			if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
 				char *data = malloc(string_length);
 				for (size_t i = 0; i < string_length; i++) {
 					data[i] = string_value[i];

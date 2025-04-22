@@ -39,7 +39,7 @@ typedef enum {
 	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
-	STRING_TYPE_VALUE,
+	ARRAY_VIEW_TYPE_VALUE,
 	INTEGER_TYPE_VALUE,
 	FLOAT_TYPE_VALUE,
 	BYTE_TYPE_VALUE,
@@ -155,6 +155,10 @@ typedef struct {
 } Array_Type_Value;
 
 typedef struct {
+	Value inner;
+} Array_View_Type_Value;
+
+typedef struct {
 	bool signed_;
 	size_t size;
 } Integer_Type_Value;
@@ -182,6 +186,7 @@ struct Value_Data {
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
 		Array_Type_Value array_type;
+		Array_View_Type_Value array_view_type;
 		Integer_Type_Value integer_type;
 		Float_Type_Value float_type;
 		Boolean_Value boolean;
@@ -203,7 +208,8 @@ typedef struct {
 		IDENTIFIER_ARGUMENT,
 		IDENTIFIER_VALUE,
 		IDENTIFIER_STATIC_ARGUMENT,
-		IDENTIFIER_SELF
+		IDENTIFIER_SELF,
+		IDENTIFIER_UNDERSCORE
 	} kind;
 	union {
 		Node *variable_definition;
@@ -416,6 +422,7 @@ void reset_node(Context *context, Node *node);
 Value create_value(Value_Tag tag);
 Value create_pointer_type(Value value);
 Value create_array_type(Value value);
+Value create_array_view_type(Value value);
 Value create_integer_type(bool signed_, size_t size);
 Value create_float_type(size_t size);
 

@@ -108,6 +108,12 @@ Value create_array_type(Value value) {
 	return array_type;
 }
 
+Value create_array_view_type(Value value) {
+	Value array_view_type = create_value(ARRAY_VIEW_TYPE_VALUE);
+	array_view_type.value->array_view_type.inner = value;
+	return array_view_type;
+}
+
 Value create_integer_type(bool signed_, size_t size) {
 	Value integer_type = create_value(INTEGER_TYPE_VALUE);
 	integer_type.value->integer_type.signed_ = signed_;

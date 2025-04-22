@@ -126,16 +126,12 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 			}
 			return NULL;
 		}
-		case STRING_TYPE_VALUE: {
+		case ARRAY_VIEW_TYPE_VALUE: {
 			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
 			items[0] = LLVMInt64Type();
-			items[1] = LLVMPointerType(LLVMVoidType(), 0);
+			items[1] = LLVMPointerType(LLVMArrayType2(create_llvm_type(value->array_view_type.inner.value, state), 0), 0);
 			return LLVMStructType(items, 2, false);
 		}
-		// case DEFINE_DATA_VALUE: {
-		// 	Define_Data_Value define_data = value->define_data;
-		// 	return create_llvm_type(define_data.value, state);
-		// }
 		default:
 			assert(false);
 	}
@@ -277,7 +273,7 @@ static LLVMValueRef generate_string(Node *node, State *state) {
 
 	LLVMValueRef pointer_llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8Type(), 0), "");
 
-	if (string_data.type.value->tag == STRING_TYPE_VALUE) {
+	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
 		LLVMValueRef string_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(string_data.type.value, state), "");
 
 		LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(string_data.type.value, state), string_value, 0, "");
@@ -410,7 +406,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 			}
 			break;
 		}
-		case STRING_TYPE_VALUE: {
+		case ARRAY_VIEW_TYPE_VALUE: {
 			if (strcmp(structure_access.item, "len") == 0) {
 				index = 0;
 			} else if (strcmp(structure_access.item, "ptr") == 0) {
@@ -426,7 +422,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 
 	LLVMValueRef structure_llvm_value = generate_node(structure_access.structure, state);
 	LLVMValueRef element_pointer = NULL;
-	if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == STRING_TYPE_VALUE) {
+	if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
 		element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type, state), structure_llvm_value, index, "");
 	} else if (structure_type->tag == UNION_TYPE_VALUE) {
 		element_pointer = LLVMBuildBitCast(state->llvm_builder, structure_llvm_value, LLVMPointerType(create_llvm_type(item_type, state), 0), "");
@@ -469,7 +465,23 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 			LLVMConstInt(LLVMInt64Type(), 0, false),
 			generate_node(array_access.index, state)
 		};
-		element_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(array_type->pointer_type.inner.value, state), array_llvm_value, indices, 2, "");
+
+		LLVMTypeRef array_llvm_type = create_llvm_type(array_type->pointer_type.inner.value, state);
+		switch (array_type->pointer_type.inner.value->tag) {
+			case ARRAY_TYPE_VALUE: {
+				element_pointer = LLVMBuildGEP2(state->llvm_builder, array_llvm_type, array_llvm_value, indices, 2, "");
+				break;
+			}
+			case ARRAY_VIEW_TYPE_VALUE: {
+				LLVMTypeRef inner_type = create_llvm_type(array_type->pointer_type.inner.value->array_view_type.inner.value, state);
+				LLVMTypeRef actual_array_llvm_type = LLVMArrayType2(inner_type, 0);
+				LLVMValueRef elements_pointer = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(actual_array_llvm_type, 0), LLVMBuildStructGEP2(state->llvm_builder, array_llvm_type, array_llvm_value, 1, ""), "");
+				element_pointer = LLVMBuildGEP2(state->llvm_builder, actual_array_llvm_type, elements_pointer, indices, 2, "");
+				break;
+			}
+			default:
+				assert(false);
+		}
 	}
 
 	if (array_access_data.assign_value != NULL) {
@@ -945,12 +957,86 @@ static LLVMValueRef generate_value(Value_Data *value, State *state) {
 }
 
 static void generate_main(State *state) {
-	LLVMValueRef llvm_function = LLVMAddFunction(state->llvm_module, "", LLVMFunctionType(LLVMVoidType(), NULL, 0, false));
+	LLVMTypeRef argument_types[2] = {
+		LLVMInt32Type(),
+		LLVMPointerType(LLVMPointerType(LLVMInt8Type(), 0), 0)
+	};
+
+	LLVMValueRef llvm_function = LLVMAddFunction(state->llvm_module, "", LLVMFunctionType(LLVMVoidType(), argument_types, 2, false));
 
 	LLVMBasicBlockRef entry = LLVMAppendBasicBlock(llvm_function, "");
 	LLVMPositionBuilderAtEnd(state->llvm_builder, entry);
 
-	LLVMBuildCall2(state->llvm_builder, LLVMGlobalGetValueType(state->main_function), state->main_function, NULL, 0, "");
+	LLVMValueRef argc = LLVMGetParam(llvm_function, 0);
+	LLVMValueRef argv = LLVMGetParam(llvm_function, 1);
+	LLVMValueRef i = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
+	LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), i);
+
+	LLVMTypeRef string_type = create_llvm_type(create_array_view_type(create_value(BYTE_TYPE_VALUE)).value, state);
+	LLVMValueRef array = LLVMBuildArrayAlloca(state->llvm_builder, string_type, argc, "");
+	LLVMBasicBlockRef start_check = LLVMAppendBasicBlock(llvm_function, "");
+	LLVMBasicBlockRef start_loop = LLVMAppendBasicBlock(llvm_function, "");
+	LLVMBasicBlockRef end_loop = LLVMAppendBasicBlock(llvm_function, "");
+
+	LLVMBuildBr(state->llvm_builder, start_check);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, start_check);
+	LLVMValueRef i_load = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, "");
+	LLVMValueRef cmp_result = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, i_load, LLVMBuildZExt(state->llvm_builder, argc, LLVMInt64Type(), ""), "");
+	LLVMBuildCondBr(state->llvm_builder, cmp_result, start_loop, end_loop);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, start_loop);
+
+	LLVMValueRef i_load2 = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, "");
+	LLVMValueRef indices[2] = {
+		LLVMConstInt(LLVMInt64Type(), 0, false),
+		i_load2
+	};
+	LLVMValueRef array_i_ptr = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(string_type, 0), array, indices, 2, "");
+	LLVMValueRef argv_i_ptr = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(LLVMPointerType(LLVMInt8Type(), 0), 0), argv, indices, 2, "");
+	
+	LLVMValueRef raw_string_value = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMInt8Type(), 0), argv_i_ptr, "");
+	LLVMValueRef arg = LLVMBuildAlloca(state->llvm_builder, string_type, "");
+	LLVMBuildStore(state->llvm_builder, raw_string_value, LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 1, ""));
+
+	LLVMBasicBlockRef start_length_check = LLVMAppendBasicBlock(llvm_function, "");
+	LLVMBasicBlockRef start_length_loop = LLVMAppendBasicBlock(llvm_function, "");
+	LLVMBasicBlockRef end_length_loop = LLVMAppendBasicBlock(llvm_function, "");
+
+	LLVMValueRef j = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
+	LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), j);
+
+	LLVMBuildBr(state->llvm_builder, start_length_check);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, start_length_check);
+
+	LLVMValueRef j_load = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), j, "");
+	LLVMValueRef indices2[2] = {
+		LLVMConstInt(LLVMInt64Type(), 0, false),
+		j_load
+	};
+	LLVMValueRef length_cmp_result = LLVMBuildICmp(state->llvm_builder, LLVMIntNE, LLVMBuildLoad2(state->llvm_builder, LLVMInt8Type(), LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(LLVMInt8Type(), 0), raw_string_value, indices2, 2, ""), ""), LLVMConstInt(LLVMInt8Type(), 0, false), "");
+	LLVMBuildCondBr(state->llvm_builder, length_cmp_result, start_length_loop, end_length_loop);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, start_length_loop);
+	LLVMBuildStore(state->llvm_builder, LLVMBuildAdd(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), j, ""), LLVMConstInt(LLVMInt64Type(), 1, false), ""), j);
+	LLVMBuildBr(state->llvm_builder, start_length_check);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, end_length_loop);
+
+	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), j, ""), LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 0, ""));
+	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMInt8Type(), 0), argv_i_ptr, ""), LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 1, ""));
+
+	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, string_type, arg, ""), array_i_ptr);
+
+	LLVMBuildStore(state->llvm_builder, LLVMBuildAdd(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, ""), LLVMConstInt(LLVMInt64Type(), 1, false), ""), i);
+
+	LLVMBuildBr(state->llvm_builder, start_check);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, end_loop);
+
+	LLVMTypeRef args_view_type = create_llvm_type(create_array_view_type(create_array_view_type(create_value(BYTE_TYPE_VALUE))).value, state);
+	LLVMValueRef args_view = LLVMBuildAlloca(state->llvm_builder, args_view_type, "");
+	LLVMBuildStore(state->llvm_builder, argc, LLVMBuildStructGEP2(state->llvm_builder, args_view_type, args_view, 0, ""));
+	LLVMBuildStore(state->llvm_builder, array, LLVMBuildStructGEP2(state->llvm_builder, args_view_type, args_view, 1, ""));
+	LLVMValueRef arguments[1] = {
+		LLVMBuildLoad2(state->llvm_builder, args_view_type, args_view, "")
+	};
+	LLVMBuildCall2(state->llvm_builder, LLVMGlobalGetValueType(state->main_function), state->main_function, arguments, 1, "");
 	LLVMBuildRetVoid(state->llvm_builder);
 
 	LLVMSetValueName(llvm_function, "main");
