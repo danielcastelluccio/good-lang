@@ -990,12 +990,9 @@ static void generate_main(State *state) {
 		LLVMConstInt(LLVMInt64Type(), 0, false),
 		i_load2
 	};
-	LLVMValueRef array_i_ptr = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(string_type, 0), array, indices, 2, "");
-	LLVMValueRef argv_i_ptr = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(LLVMPointerType(LLVMInt8Type(), 0), 0), argv, indices, 2, "");
+	LLVMValueRef argv_i_ptr = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(LLVMPointerType(LLVMArrayType(LLVMInt8Type(), 0), 0), 0), argv, indices, 2, "");
 	
-	LLVMValueRef raw_string_value = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMInt8Type(), 0), argv_i_ptr, "");
-	LLVMValueRef arg = LLVMBuildAlloca(state->llvm_builder, string_type, "");
-	LLVMBuildStore(state->llvm_builder, raw_string_value, LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 1, ""));
+	LLVMValueRef raw_string_value = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMArrayType2(LLVMInt8Type(), 0), 0), argv_i_ptr, "");
 
 	LLVMBasicBlockRef start_length_check = LLVMAppendBasicBlock(llvm_function, "");
 	LLVMBasicBlockRef start_length_loop = LLVMAppendBasicBlock(llvm_function, "");
@@ -1019,9 +1016,11 @@ static void generate_main(State *state) {
 	LLVMBuildBr(state->llvm_builder, start_length_check);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, end_length_loop);
 
+	LLVMValueRef arg = LLVMBuildAlloca(state->llvm_builder, string_type, "");
 	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), j, ""), LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 0, ""));
-	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMInt8Type(), 0), argv_i_ptr, ""), LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 1, ""));
+	LLVMBuildStore(state->llvm_builder, raw_string_value, LLVMBuildStructGEP2(state->llvm_builder, string_type, arg, 1, ""));
 
+	LLVMValueRef array_i_ptr = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(string_type, 0), array, indices, 2, "");
 	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, string_type, arg, ""), array_i_ptr);
 
 	LLVMBuildStore(state->llvm_builder, LLVMBuildAdd(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, ""), LLVMConstInt(LLVMInt64Type(), 1, false), ""), i);
@@ -1031,7 +1030,7 @@ static void generate_main(State *state) {
 
 	LLVMTypeRef args_view_type = create_llvm_type(create_array_view_type(create_array_view_type(create_value(BYTE_TYPE_VALUE))).value, state);
 	LLVMValueRef args_view = LLVMBuildAlloca(state->llvm_builder, args_view_type, "");
-	LLVMBuildStore(state->llvm_builder, argc, LLVMBuildStructGEP2(state->llvm_builder, args_view_type, args_view, 0, ""));
+	LLVMBuildStore(state->llvm_builder, LLVMBuildZExt(state->llvm_builder, argc, LLVMInt64Type(), ""), LLVMBuildStructGEP2(state->llvm_builder, args_view_type, args_view, 0, ""));
 	LLVMBuildStore(state->llvm_builder, array, LLVMBuildStructGEP2(state->llvm_builder, args_view_type, args_view, 1, ""));
 	LLVMValueRef arguments[1] = {
 		LLVMBuildLoad2(state->llvm_builder, args_view_type, args_view, "")
