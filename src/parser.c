@@ -28,7 +28,7 @@ static Token_Data consume_check(Lexer *lexer, Token_Kind kind) {
 	return data;
 }
 
-static Node *parse_statement(Lexer *lexer);
+static Node *parse_statement(Lexer *lexer, bool *brace_terminator);
 static Node *parse_expression(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
@@ -37,6 +37,15 @@ static Node *parse_expression_or_nothing(Lexer *lexer) {
 	}
 
 	return parse_expression(lexer);
+}
+
+static Node *parse_block(Lexer *lexer);
+static Node *parse_block_or_nothing(Lexer *lexer) {
+	if (lexer_next(lexer, false).kind == SEMICOLON || lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE) {
+		return NULL;
+	}
+
+	return parse_block(lexer);
 }
 
 static Node *parse_string(Lexer *lexer) {
@@ -450,15 +459,15 @@ static Node *parse_define(Lexer *lexer) {
 	return define;
 }
 
-// static Node *parse_return(Lexer *lexer) {
-// 	Token_Data first_token = consume_check(lexer, KEYWORD);
-// 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
-// 	return_->return_.value = parse_expression_or_nothing(lexer);
-//
-// 	consume_check(lexer, SEMICOLON);
-//
-// 	return return_;
-// }
+static Node *parse_return(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *return_ = ast_new(RETURN_NODE, first_token.location);
+	return_->return_.value = parse_expression_or_nothing(lexer);
+
+	consume_check(lexer, SEMICOLON);
+
+	return return_;
+}
 
 static Node *parse_variable(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
@@ -477,20 +486,6 @@ static Node *parse_variable(Lexer *lexer) {
 
 	consume_check(lexer, SEMICOLON);
 	return variable;
-}
-
-static Node *parse_yield(Lexer *lexer) {
-	Token_Data first_token = consume_check(lexer, KEYWORD);
-	Node *yield = ast_new(YIELD_NODE, first_token.location);
-	size_t levels = 0;
-	while (lexer_next(lexer, false).kind == AT) {
-		consume_check(lexer, AT);
-		levels++;
-	}
-	yield->yield.value = parse_expression_or_nothing(lexer);
-	yield->yield.levels = levels;
-	consume_check(lexer, SEMICOLON);
-	return yield;
 }
 
 static Node *parse_break(Lexer *lexer) {
@@ -578,7 +573,7 @@ static Node *parse_block(Lexer *lexer) {
 	Node *block = ast_new(BLOCK_NODE, first_token.location);
 
 	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
-		arrpush(block->block.statements, parse_statement(lexer));
+		arrpush(block->block.statements, parse_statement(lexer, &block->block.has_result));
 	}
 
 	consume_check(lexer, CLOSED_CURLY_BRACE);
@@ -724,7 +719,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 
 	Node *body = NULL;
 	if (!extern_) {
-		body = parse_expression_or_nothing(lexer);
+		body = parse_block_or_nothing(lexer);
 	}
 
 	if (body != NULL || extern_) {
@@ -738,16 +733,15 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 	}
 }
 
-static Node *parse_statement(Lexer *lexer) {
+static Node *parse_statement(Lexer *lexer, bool *brace_terminator) {
 	Token_Data token = lexer_next(lexer, false);
 	Node *result = NULL;
 	switch (token.kind) {
 		case KEYWORD: {
 			char *value = token.string;
 			if (strcmp(value, "def") == 0) result = parse_define(lexer);
-			// else if (strcmp(value, "return") == 0) result = parse_return(lexer);
+			else if (strcmp(value, "return") == 0) result = parse_return(lexer);
 			else if (strcmp(value, "var") == 0) result = parse_variable(lexer);
-			else if (strcmp(value, "yield") == 0) result = parse_yield(lexer);
 			else if (strcmp(value, "break") == 0) result = parse_break(lexer);
 			break;
 		}
@@ -771,7 +765,11 @@ static Node *parse_statement(Lexer *lexer) {
 			}
 		}
 
-		consume_check(lexer, SEMICOLON);
+		if (lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE) {
+			if (brace_terminator) *brace_terminator = true;
+		} else {
+			consume_check(lexer, SEMICOLON);
+		}
 	}
 
 	return result;
@@ -897,7 +895,7 @@ Node *parse_file(char *path) {
 	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
 	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
 	while (lexer_next(&lexer, false).kind != END_OF_FILE) {
-		arrpush(block->block.statements, parse_statement(&lexer));
+		arrpush(block->block.statements, parse_statement(&lexer, NULL));
 	}
 	root->module.body = block;
 

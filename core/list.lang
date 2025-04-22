@@ -1,34 +1,36 @@
 def c = import("c.lang");
 
-def List = fn (static T: type): type  struct {
-	items: ^[]T,
-	length: uint,
-	capacity: uint;
+def List = fn (static T: type): type {
+	return struct {
+		items: ^[]T,
+		length: uint,
+		capacity: uint;
 
-	op add = fn (array: ^self, element: T) {
-		if array.length == array.capacity {
-			if array.capacity == 0 {
-				array.capacity = 1;
+		op add = fn (array: ^self, element: T) {
+			if array.length == array.capacity {
+				if array.capacity == 0 {
+					array.capacity = 1;
+				};
+
+				array.capacity = array.capacity * 2;
+
+				array.items = c::realloc(array.items, array.capacity * run size_of(T));
 			};
 
-			array.capacity = array.capacity * 2;
-
-			array.items = c::realloc(array.items, array.capacity * run size_of(T));
+			array.items[array.length] = element;
+			array.length = array.length + 1;
 		};
 
-		array.items[array.length] = element;
-		array.length = array.length + 1;
-	};
+		op get = fn (array: ^self, index: uint): T {
+			array.items[index]
+		};
 
-	op get = fn (array: ^self, index: uint): T {
-		yield array.items[index];
-	};
-
-	op [] = fn (array: ^self, index: uint): ^T {
-		yield &array.items[index];
+		op [] = fn (array: ^self, index: uint): ^T {
+			&array.items[index]
+		};
 	};
 };
 
 def new = fn (static T: type): List(T) {
-	yield .{ null, 0, 0 };
+	.{ null, 0, 0 }
 };

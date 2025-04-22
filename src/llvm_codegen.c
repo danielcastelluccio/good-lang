@@ -165,27 +165,27 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 	assert(node->kind == BLOCK_NODE);
 	Block_Node block = node->block;
 	Node_Data *data = get_data(&state->context, node);
-	Block_Data block_data = data->block;
 
 	LLVMBasicBlockRef llvm_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMValueRef value = NULL;
-	if (block_data.type.value != NULL) {
-		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(block_data.type.value, state), "");
-	}
 
 	Block_Codegen_Data block_codegen_data = {
 		.block = llvm_block,
 		.value = value
 	};
 	hmput(state->blocks, data, block_codegen_data);
+	LLVMValueRef result = NULL;
 	for (long int i = 0; i < arrlen(block.statements); i++) {
-		generate_node(block.statements[i], state);
+		LLVMValueRef value = generate_node(block.statements[i], state);
+		if (block.has_result && i == arrlen(block.statements) - 1) {
+			result = value;
+		}
 	}
 	LLVMBuildBr(state->llvm_builder, llvm_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, llvm_block);
 
-	if (block_data.type.value != NULL) {
-		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(block_data.type.value, state), value, "");
+	if (block.has_result) {
+		return result;
 	}
 	return NULL;
 }
@@ -575,17 +575,17 @@ static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 	}
 }
 
-// static LLVMValueRef generate_return(Node *node, State *state) {
-// 	assert(node->kind == RETURN_NODE);
-// 	Return_Node return_ = node->return_;
-//
-// 	if (return_.value != NULL) {
-// 		LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
-// 	} else {
-// 		LLVMBuildRetVoid(state->llvm_builder);
-// 	}
-// 	return NULL;
-// }
+static LLVMValueRef generate_return(Node *node, State *state) {
+	assert(node->kind == RETURN_NODE);
+	Return_Node return_ = node->return_;
+
+	if (return_.value != NULL) {
+		LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
+	} else {
+		LLVMBuildRetVoid(state->llvm_builder);
+	}
+	return NULL;
+}
 
 static LLVMValueRef generate_assign(Node *node, State *state) {
 	assert(node->kind == ASSIGN_NODE);
@@ -607,20 +607,6 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 	Node_Data *node_data = get_data(&state->context, node);
 
 	hmput(state->variables, node_data, allocated_variable_llvm);
-
-	return NULL;
-}
-
-static LLVMValueRef generate_yield(Node *node, State *state) {
-	assert(node->kind == YIELD_NODE);
-	Yield_Node yield = node->yield;
-	Yield_Data yield_data = get_data(&state->context, node)->yield;
-	Node_Data *block_data = get_data(&state->context, yield_data.block);
-	Block_Codegen_Data block_codegen_data = hmget(state->blocks, block_data);
-	LLVMBuildStore(state->llvm_builder, generate_node(yield.value, state), block_codegen_data.value);
-	LLVMBuildBr(state->llvm_builder, block_codegen_data.block);
-	LLVMBasicBlockRef block = LLVMAppendBasicBlock(state->current_function, "");
-	LLVMPositionBuilderAtEnd(state->llvm_builder, block);
 
 	return NULL;
 }
@@ -822,14 +808,12 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_array_access(node, state);
 		case BINARY_OPERATOR_NODE:
 			return generate_binary_operator(node, state);
-		// case RETURN_NODE:
-		// 	return generate_return(node, state);
+		case RETURN_NODE:
+			return generate_return(node, state);
 		case ASSIGN_NODE:
 			return generate_assign(node, state);
 		case VARIABLE_NODE:
 			return generate_variable(node, state);
-		case YIELD_NODE:
-			return generate_yield(node, state);
 		case BREAK_NODE:
 			return generate_break(node, state);
 		case IF_NODE:

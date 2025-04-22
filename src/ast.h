@@ -124,9 +124,9 @@ typedef struct {
 	Node *index;
 } Array_Access_Node;
 
-// typedef struct {
-// 	Node *value;
-// } Return_Node;
+typedef struct {
+	Node *value;
+} Return_Node;
 
 typedef struct {
 	Node *container;
@@ -138,11 +138,6 @@ typedef struct {
 	Node *type;
 	Node *value;
 } Variable_Node;
-
-typedef struct {
-	Node *value;
-	size_t levels;
-} Yield_Node;
 
 typedef struct {
 	Node *value;
@@ -201,6 +196,7 @@ typedef struct {
 
 typedef struct {
 	Node **statements; // stb_ds
+	bool has_result;
 } Block_Node;
 
 typedef struct {
@@ -229,10 +225,9 @@ typedef enum {
 	DEREFERENCE_NODE,
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
-	// RETURN_NODE,
+	RETURN_NODE,
 	ASSIGN_NODE,
 	VARIABLE_NODE,
-	YIELD_NODE,
 	BREAK_NODE,
 	IF_NODE,
 	WHILE_NODE,
@@ -267,10 +262,9 @@ struct Node {
 		Deoption_Present_Node deoption_present;
 		Structure_Access_Node structure_access;
 		Array_Access_Node array_access;
-		// Return_Node return_;
+		Return_Node return_;
 		Assign_Node assign;
 		Variable_Node variable;
-		Yield_Node yield;
 		Break_Node break_;
 		If_Node if_;
 		While_Node while_;

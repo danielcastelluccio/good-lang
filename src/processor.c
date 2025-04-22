@@ -244,33 +244,19 @@ static void handle_type_error(Node *node, Value wanted, Value given) {
 static void process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
 
-	Node_Data *data = node_data_new(BLOCK_NODE);
-	data->block.wanted_type = context->temporary_context.wanted_type;
-	data->block.type = (Value) {};
-	set_data(context, node, data);
-
 	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(block.statements); i++) {
 		Node *statement = block.statements[i];
-		process_node(context, statement);
+
+		if (block.has_result && i == arrlen(block.statements) - 1) {
+			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+			process_node_context(context, temporary_context, statement);
+			set_type(context, node, get_type(context, statement));
+		} else {
+			process_node(context, statement);
+		}
 	}
 	(void) arrpop(context->scopes);
-
-	if (data->block.has_type) {
-		bool left = false;
-		for (long int i = 0; i < arrlen(context->left_blocks); i++) {
-			if (context->left_blocks[i] == node) {
-				left = true;
-				break;
-			}
-		}
-
-		if (!left) {
-			handle_semantic_error(node->location, "Expected value from block");
-		}
-
-		set_type(context, node, data->block.type);
-	}
 }
 
 typedef struct {
@@ -405,6 +391,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	Function_Node function = node->function;
 
 	bool compile_only_parent = context->compile_only;
+	bool returned_parent = context->returned;
 
 	context->compile_only = false;
 
@@ -442,7 +429,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 			if (function_type_value.value->function_type.return_type.value != NULL) {
 				Value returned_type = get_type(context, function.body);
 
-				if (!value_equal(function_type_value.value->function_type.return_type.value, returned_type.value)) {
+				if (!value_equal(function_type_value.value->function_type.return_type.value, returned_type.value) && !context->returned) {
 					handle_type_error(node, function_type_value.value->function_type.return_type, returned_type);
 				}
 			}
@@ -457,6 +444,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	set_data(context, node, data);
 
 	context->compile_only = compile_only_parent;
+	context->returned = returned_parent;
 }
 
 static Value process_call_generic(Context *context, Node *node, Node *function, Value function_value_in, Node **arguments, Value *argument_types, Value *function_type) {
@@ -1297,60 +1285,6 @@ static void process_variable(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
-static void process_yield(Context *context, Node *node) {
-	Yield_Node yield = node->yield;
-
-	size_t levels = yield.levels;
-	Node *block = NULL;
-	for (long int i = 0; i < arrlen(context->scopes); i++) {
-		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
-
-		if (scope_node != NULL && scope_node->kind == BLOCK_NODE) {
-			arrpush(context->left_blocks, scope_node);
-			if (levels == 0) {
-				block = scope_node;
-				break;
-			} else {
-				levels--;
-			}
-		}
-	}
-
-	Node_Data *block_data = get_data(context, block);
-
-	if (yield.value != NULL) {
-		Temporary_Context temporary_context = { .wanted_type = block_data->block.wanted_type };
-		process_node_context(context, temporary_context, yield.value);
-	}
-
-	Value type = get_type(context, yield.value);
-	if (block_data->block.has_type) {
-		if (type.value != NULL) {
-			if (block_data->block.type.value == NULL) {
-				handle_semantic_error(node->location, "Expected no value");
-			} else if (!value_equal(type.value, block_data->block.type.value)) {
-				char previous_string[64] = {};
-				print_type_outer(type, previous_string);
-				char current_string[64] = {};
-				print_type_outer(block_data->block.type, current_string);
-				handle_semantic_error(node->location, "Mismatched types %s and %s", previous_string, current_string);
-			}
-		}
-
-		if (block_data->block.type.value != NULL) {
-			if (type.value == NULL) {
-				handle_semantic_error(node->location, "Expected value");
-			}
-		}
-	}
-	block_data->block.type = type;
-	block_data->block.has_type = true;
-
-	Node_Data *data = node_data_new(YIELD_NODE);
-	data->yield.block = block;
-	set_data(context, node, data);
-}
-
 static void process_break(Context *context, Node *node) {
 	Break_Node break_ = node->break_;
 
@@ -1411,40 +1345,30 @@ static void process_assign(Context *context, Node *node) {
 	process_node_context(context, temporary_context, assign.container);
 }
 
-// static void process_return(Context *context, Node *node) {
-// 	Return_Node return_ = node->return_;
-//
-// 	for (long int i = 0; i < arrlen(context->scopes); i++) {
-// 		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
-//
-// 		if (scope_node != NULL) {
-// 			if (scope_node->kind == FUNCTION_NODE) {
-// 				break;
-// 			} else if (scope_node->kind == BLOCK_NODE) {
-// 				arrpush(context->left_blocks, scope_node);
-// 			}
-// 		}
-// 	}
-//
-// 	if (return_.value != NULL) {
-// 		Node *current_function = NULL;
-// 		for (long int i = 0; i < arrlen(context->scopes); i++) {
-// 			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
-// 			if (scope_node->kind == FUNCTION_NODE) {
-// 				current_function = scope_node;
-// 			}
-// 		}
-//
-// 		Value *return_type = get_data(context, current_function->function.function_type)->function_type.value->function_type.return_type;
-// 		Temporary_Context temporary_context = { .wanted_type = return_type };
-// 		process_node_context(context, temporary_context, return_.value);
-//
-// 		Value *type = get_type(context, return_.value);
-// 		if (!type_assignable(return_type, type)) {
-// 			handle_type_error(node, return_type, type);
-// 		}
-// 	}
-// }
+static void process_return(Context *context, Node *node) {
+	Return_Node return_ = node->return_;
+	
+	context->returned = true;
+
+	if (return_.value != NULL) {
+		Node *current_function = NULL;
+		for (long int i = 0; i < arrlen(context->scopes); i++) {
+			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+			if (scope_node->kind == FUNCTION_NODE) {
+				current_function = scope_node;
+			}
+		}
+
+		Value return_type = get_data(context, current_function->function.function_type)->function_type.value.value->function_type.return_type;
+		Temporary_Context temporary_context = { .wanted_type = return_type };
+		process_node_context(context, temporary_context, return_.value);
+
+		Value type = get_type(context, return_.value);
+		if (!type_assignable(return_type.value, type.value)) {
+			handle_type_error(node, return_type, type);
+		}
+	}
+}
 
 static void process_if(Context *context, Node *node) {
 	If_Node if_ = node->if_;
@@ -1458,26 +1382,22 @@ static void process_if(Context *context, Node *node) {
 		data->if_.static_condition = evaluated.value->boolean.value;
 	}
 
-	Node **saved_left_blocks = context->left_blocks;
-	context->left_blocks = NULL;
+	bool saved_returned = context->returned;
+	context->returned = false;
 	process_node(context, if_.if_body);
 
 	Value if_type = get_type(context, if_.if_body);
 	if (if_.else_body != NULL) {
-		Node **saved_if_left_blocks = context->left_blocks;
-		context->left_blocks = NULL;
+		bool saved_if_returned = context->returned;
+		context->returned = false;
 		process_node(context, if_.else_body);
 
-		Node **saved_else_left_blocks = context->left_blocks;
+		bool saved_else_returned = context->returned;
 
-		context->left_blocks = saved_left_blocks;
+		context->returned = saved_returned;
 
-		for (long int i = 0; i < arrlen(saved_if_left_blocks); i++) {
-			for (long int j = 0; j < arrlen(saved_else_left_blocks); j++) {
-				if (saved_if_left_blocks[i] == saved_else_left_blocks[j]) {
-					arrpush(context->left_blocks, saved_if_left_blocks[i]);
-				}
-			}
+		if (saved_if_returned && saved_else_returned) {
+			context->returned = true;
 		}
 
 		Value else_type = get_type(context, if_.else_body);
@@ -1504,7 +1424,7 @@ static void process_if(Context *context, Node *node) {
 			set_type(context, node, if_type);
 		}
 	} else {
-		context->left_blocks = saved_left_blocks;
+		context->returned = saved_returned;
 		if (if_type.value != NULL) {
 			handle_semantic_error(node->location, "Expected else");
 		}
@@ -1520,7 +1440,7 @@ static void process_switch(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(SWITCH_NODE);
 
-	Node **saved_left_blocks = context->left_blocks;
+	bool saved_returned = context->returned;
 
 	Value type = get_type(context, switch_.value);
 	if (type.value->tag != ENUM_TYPE_VALUE) {
@@ -1544,20 +1464,16 @@ static void process_switch(Context *context, Node *node) {
 			else_case = true;
 		}
 
-		Node **saved_previous_left_blocks = context->left_blocks;
-		context->left_blocks = NULL;
+		bool saved_previous_returned = context->returned;
+		context->returned = NULL;
 		process_node(context, switch_case.body);
 
-		Node **saved_case_left_blocks = context->left_blocks;
+		bool saved_case_returned = context->returned;
 
-		context->left_blocks = saved_left_blocks;
+		context->returned = saved_returned;
 
-		for (long int i = 0; i < arrlen(saved_previous_left_blocks); i++) {
-			for (long int j = 0; j < arrlen(saved_case_left_blocks); j++) {
-				if (saved_previous_left_blocks[i] == saved_case_left_blocks[j]) {
-					arrpush(context->left_blocks, saved_previous_left_blocks[i]);
-				}
-			}
+		if (saved_previous_returned && saved_case_returned) {
+			context->returned = true;
 		}
 
 		Value case_type = get_type(context, switch_case.body);
@@ -1592,7 +1508,7 @@ static void process_switch(Context *context, Node *node) {
 	}
 
 	if (case_count < arrlen(type.value->enum_type.items) && !else_case) {
-		context->left_blocks = saved_left_blocks;
+		context->returned = saved_returned;
 		if (switch_type.value != NULL) {
 			handle_semantic_error(node->location, "Expected else case");
 		}
@@ -1841,10 +1757,6 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_variable(context, node);
 			break;
 		}
-		case YIELD_NODE: {
-			process_yield(context, node);
-			break;
-		}
 		case BREAK_NODE: {
 			process_break(context, node);
 			break;
@@ -1853,10 +1765,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_assign(context, node);
 			break;
 		}
-		// case RETURN_NODE: {
-		// 	process_return(context, node);
-		// 	break;
-		// }
+		case RETURN_NODE: {
+			process_return(context, node);
+			break;
+		}
 		case IF_NODE: {
 			process_if(context, node);
 			break;

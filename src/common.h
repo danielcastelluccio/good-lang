@@ -325,16 +325,6 @@ typedef struct {
 	Value wanted_type;
 	Value type;
 	bool has_type;
-} Block_Data;
-
-typedef struct {
-	Node *block;
-} Yield_Data;
-
-typedef struct {
-	Value wanted_type;
-	Value type;
-	bool has_type;
 } While_Data;
 
 typedef struct {
@@ -365,8 +355,6 @@ typedef struct {
 		Deoption_Present_Data deoption_present;
 		Array_Access_Data array_access;
 		Binary_Operator_Data binary_operator;
-		Block_Data block;
-		Yield_Data yield;
 		Break_Data break_;
 		While_Data while_;
 	};
@@ -407,7 +395,7 @@ struct Context {
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
-	Node **left_blocks; // stb_ds
+	bool returned;
 	Scope *scopes; // stb_ds
 	bool compile_only;
 	size_t static_argument_id;

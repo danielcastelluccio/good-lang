@@ -465,7 +465,18 @@ Value evaluate(Context *context, Node *node) {
 
 					Value *saved_function_arguments = function_arguments;
 					function_arguments = arguments;
-					Value result = evaluate(context, function.value->function.body);
+					// Value result = evaluate(context, function.value->function.body);
+
+					jmp_buf prev_jmp;
+					memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+					Value result;
+					if (!setjmp(jmp)) {
+						result = evaluate(context, function.value->function.body);
+					} else {
+						result = jmp_result;
+					}
+					memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+
 					function_arguments = saved_function_arguments;
 
 					context->static_argument_id = saved_static_argument_id;
@@ -497,27 +508,22 @@ Value evaluate(Context *context, Node *node) {
 		case BLOCK_NODE: {
 			Block_Node block = node->block;
 
-			jmp_buf prev_jmp;
-			memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-			Value result;
-			if (!setjmp(jmp)) {
-				for (long int i = 0; i < arrlen(block.statements); i++) {
-					evaluate(context, block.statements[i]);
+			Value result = create_value_data(value_new(NONE_VALUE), node);
+			for (long int i = 0; i < arrlen(block.statements); i++) {
+				Value value = evaluate(context, block.statements[i]);
+				if (block.has_result && i == arrlen(block.statements) - 1) {
+					result = value;
 				}
-				result = create_value_data(value_new(NONE_VALUE), node);
-			} else {
-				result = jmp_result;
 			}
-			memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
 
 			return result;
 		}
-		case YIELD_NODE: {
-			Yield_Node yield = node->yield;
+		case RETURN_NODE: {
+			Return_Node return_ = node->return_;
 
 			Value result;
-			if (yield.value != NULL) {
-				result = evaluate(context, yield.value);
+			if (return_.value != NULL) {
+				result = evaluate(context, return_.value);
 			} else {
 				result = create_value_data(value_new(NONE_VALUE), node);
 			}
