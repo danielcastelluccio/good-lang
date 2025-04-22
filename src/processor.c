@@ -722,6 +722,10 @@ static void process_call_method(Context *context, Node *node) {
 		}
 	}
 
+	if (custom_operator_function.function == NULL) {
+		handle_semantic_error(node->location, "Method '%s' not found", call_method.method);
+	}
+
 	Value *argument_types = get_initial_argument_types(context, arguments);
 	custom_operator_function.function = process_call_generic(context, node, NULL, (Value) { .value = custom_operator_function.function }, arguments, argument_types, &custom_operator_function.function_type).value;
 
