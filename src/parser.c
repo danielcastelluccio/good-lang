@@ -39,13 +39,12 @@ static Node *parse_expression_or_nothing(Lexer *lexer) {
 	return parse_expression(lexer);
 }
 
-static Node *parse_block(Lexer *lexer);
-static Node *parse_block_or_nothing(Lexer *lexer) {
-	if (lexer_next(lexer, false).kind == SEMICOLON || lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE) {
-		return NULL;
+static Node *parse_separated_expression(Lexer *lexer) {
+	if (lexer_next(lexer, false).kind != OPEN_CURLY_BRACE) {
+		consume_check(lexer, EQUALS_GREATER);
 	}
 
-	return parse_block(lexer);
+	return parse_expression(lexer);
 }
 
 static Node *parse_string(Lexer *lexer) {
@@ -513,7 +512,7 @@ static Node *parse_if(Lexer *lexer) {
 	}
 
 	if_->if_.condition = parse_expression(lexer);
-	if_->if_.if_body = parse_expression(lexer);
+	if_->if_.if_body = parse_separated_expression(lexer);
 
 	Token_Data next = lexer_next(lexer, false);
 	if (next.kind == KEYWORD && strcmp(next.string, "else") == 0) {
@@ -528,7 +527,7 @@ static Node *parse_while(Lexer *lexer) {
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
 
 	while_->while_.condition = parse_expression(lexer);
-	while_->while_.body = parse_expression(lexer);
+	while_->while_.body = parse_separated_expression(lexer);
 
 	Token_Data next = lexer_next(lexer, false);
 	if (next.kind == KEYWORD && strcmp(next.string, "else") == 0) {
@@ -719,7 +718,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 
 	Node *body = NULL;
 	if (!extern_) {
-		body = parse_block_or_nothing(lexer);
+		body = parse_separated_expression(lexer);
 	}
 
 	if (body != NULL || extern_) {
