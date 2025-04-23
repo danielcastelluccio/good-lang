@@ -24,6 +24,10 @@ typedef struct {
 } While_Codegen_Data;
 
 typedef struct {
+	LLVMValueRef *bindings; // stb_ds
+} For_Codegen_Data;
+
+typedef struct {
 	LLVMModuleRef llvm_module;
 	LLVMBuilderRef llvm_builder;
 	LLVMTargetMachineRef llvm_target;
@@ -32,6 +36,7 @@ typedef struct {
 	struct { Node_Data *key; LLVMValueRef value; } *variables; // stb_ds
 	struct { Node_Data *key; Block_Codegen_Data value; } *blocks; // stb_ds
 	struct { Node_Data *key; While_Codegen_Data value; } *whiles; // stb_ds
+	struct { Node_Data *key; For_Codegen_Data value; } *fors; // stb_ds
 	LLVMValueRef *function_arguments; // stb_ds
 	LLVMValueRef current_function;
 	LLVMValueRef main_function;
@@ -251,7 +256,12 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 				return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type.value, state), value_pointer, "");
 			}
 		}
-		
+		case IDENTIFIER_BINDING: {
+			Node *for_ = identifier_data->identifier.binding.for_;
+			Node_Data *for_data = get_data(&state->context, for_);
+			LLVMValueRef binding_llvm_value = hmget(state->fors, for_data).bindings[identifier_data->identifier.binding.index];
+			return binding_llvm_value;
+		}
 		case IDENTIFIER_VALUE: {
 			return generate_value(identifier_data->identifier.value.value, state);
 		}
@@ -785,6 +795,56 @@ static LLVMValueRef generate_while(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_for(Node *node, State *state) {
+	assert(node->kind == FOR_NODE);
+	For_Node for_ = node->for_;
+	Node_Data *for_data = get_data(&state->context, node);
+	LLVMTypeRef item_type = create_llvm_type(for_data->for_.type.value->pointer.value, state);
+
+	LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
+	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+
+	LLVMValueRef i = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
+	LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), i);
+	LLVMValueRef item = generate_node(for_.item, state);
+	LLVMValueRef item_len = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), LLVMBuildStructGEP2(state->llvm_builder, item_type, item, 0, ""), "");
+	LLVMValueRef item_ptr = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMVoidType(), 0), LLVMBuildStructGEP2(state->llvm_builder, item_type, item, 1, ""), "");
+	LLVMBuildBr(state->llvm_builder, check_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
+	LLVMValueRef i_value = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, "");
+	LLVMValueRef condition = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, i_value, item_len, "");
+	LLVMBuildCondBr(state->llvm_builder, condition, body_block, done_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, body_block);
+
+	LLVMValueRef indices[2] = {
+		LLVMConstInt(LLVMInt64Type(), 0, false),
+		i_value
+	};
+	LLVMTypeRef element_type = create_llvm_type(for_data->for_.type.value->pointer.value->array_view_type.inner.value, state);
+	LLVMValueRef element = LLVMBuildLoad2(state->llvm_builder, element_type, LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, ""), "");
+
+	LLVMValueRef *bindings = NULL;
+	arrpush(bindings, element);
+	if (arrlen(for_.bindings) > 1) {
+		arrpush(bindings, i_value);
+	}
+
+	For_Codegen_Data for_codegen_data = {
+		.bindings = bindings
+	};
+	hmput(state->fors, for_data, for_codegen_data);
+
+	generate_node(for_.body, state);
+
+	LLVMBuildStore(state->llvm_builder, LLVMBuildAdd(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, ""), LLVMConstInt(LLVMInt64Type(), 1, false), ""), i);
+
+	LLVMBuildBr(state->llvm_builder, check_block);
+	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
+
+	return NULL;
+}
+
 static LLVMValueRef generate_node(Node *node, State *state) {
 	switch (node->kind) {
 		case DEFINE_NODE:
@@ -834,6 +894,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_switch(node, state);
 		case WHILE_NODE:
 			return generate_while(node, state);
+		case FOR_NODE:
+			return generate_for(node, state);
 		default:
 			assert(false);
 	}

@@ -24,7 +24,13 @@ typedef struct {
 typedef Identifier_Type_Pair Static_Argument_Data;
 
 typedef struct {
+	Value type;
+	size_t index;
+} Binding;
+
+typedef struct {
 	struct { char *key; Node *value; } *variables; // stb_ds
+	struct { char *key; Binding value; } *bindings; // stb_ds
 	struct { char *key; Typed_Value value; } *static_arguments; // stb_ds
 	Node *node;
 	Value current_type;
@@ -206,6 +212,7 @@ typedef struct {
 	enum {
 		IDENTIFIER_VARIABLE,
 		IDENTIFIER_ARGUMENT,
+		IDENTIFIER_BINDING,
 		IDENTIFIER_VALUE,
 		IDENTIFIER_STATIC_ARGUMENT,
 		IDENTIFIER_SELF,
@@ -215,6 +222,10 @@ typedef struct {
 		Node *variable_definition;
 		size_t argument_index;
 		Value value;
+		struct {
+			Node *for_;
+			size_t index;
+		} binding;
 	};
 	Value type;
 	bool want_pointer;
@@ -334,6 +345,10 @@ typedef struct {
 } While_Data;
 
 typedef struct {
+	Value type;
+} For_Data;
+
+typedef struct {
 	Node *while_;
 } Break_Data;
 
@@ -363,6 +378,7 @@ typedef struct {
 		Binary_Operator_Data binary_operator;
 		Break_Data break_;
 		While_Data while_;
+		For_Data for_;
 	};
 } Node_Data;
 

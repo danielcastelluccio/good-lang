@@ -497,6 +497,34 @@ static Node *parse_while(Lexer *lexer) {
 	return while_;
 }
 
+static Node *parse_for(Lexer *lexer) {
+	Token_Data first_token = consume_check(lexer, KEYWORD);
+	Node *for_ = ast_new(FOR_NODE, first_token.location);
+
+	for_->for_.item = parse_expression(lexer);
+	consume_check(lexer, VERTICAL_BAR);
+
+	char **bindings = NULL;
+	while (lexer_next(lexer, false).kind != VERTICAL_BAR) {
+		Token_Data identifier = consume_check(lexer, IDENTIFIER);
+		arrpush(bindings, identifier.string);
+
+		Token_Data token = lexer_next(lexer, false);
+		if (token.kind == COMMA) {
+			lexer_next(lexer, true);
+		} else if (token.kind == VERTICAL_BAR) {
+		} else {
+			handle_token_error_no_expected(token);
+		}
+	}
+	consume_check(lexer, VERTICAL_BAR);
+
+	for_->for_.bindings = bindings;
+	for_->for_.body = parse_separated_statement(lexer);
+
+	return for_;
+}
+
 static Node *parse_switch(Lexer *lexer) {
 	Token_Data first_token = consume_check(lexer, KEYWORD);
 	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
@@ -746,6 +774,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (strcmp(value, "enum") == 0) result = parse_enum_type(lexer);
 			else if (strcmp(value, "if") == 0) result = parse_if(lexer);
 			else if (strcmp(value, "while") == 0) result = parse_while(lexer);
+			else if (strcmp(value, "for") == 0) result = parse_for(lexer);
 			else if (strcmp(value, "switch") == 0) result = parse_switch(lexer);
 			else if (strcmp(value, "mod") == 0) result = parse_module(lexer);
 			else if (strcmp(value, "run") == 0) result = parse_run(lexer);

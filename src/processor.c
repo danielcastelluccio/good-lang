@@ -21,6 +21,10 @@ typedef struct {
 			Scope *scope;
 		} define;
 		Node *variable;
+		struct {
+			Node *node;
+			size_t index;
+		} binding;
 		Value static_argument;
 		size_t argument;
 		size_t enum_variant;
@@ -30,6 +34,7 @@ typedef struct {
 		LOOKUP_RESULT_FAIL,
 		LOOKUP_RESULT_DEFINE,
 		LOOKUP_RESULT_VARIABLE,
+		LOOKUP_RESULT_BINDING,
 		LOOKUP_RESULT_ARGUMENT,
 		LOOKUP_RESULT_STATIC_ARGUMENT
 	} tag;
@@ -48,6 +53,11 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 		Node *variable = shget(scope->variables, identifier);
 		if (variable != NULL) {
 			return (Lookup_Result) { .tag = LOOKUP_RESULT_VARIABLE, .variable = variable, .type = get_data(context, variable)->variable.type };
+		}
+
+		Binding binding = shget(scope->bindings, identifier);
+		if (binding.type.value != NULL) {
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_BINDING, .binding = { .node = scope->node, .index = binding.index }, .type = binding.type };
 		}
 
 		if (!found_function && scope->node->kind == FUNCTION_NODE) {
@@ -875,6 +885,17 @@ static void process_identifier(Context *context, Node *node) {
 			}
 		}
 
+		if (lookup_result.tag == LOOKUP_RESULT_BINDING) {
+			data->identifier.kind = IDENTIFIER_BINDING;
+			data->identifier.binding.for_ = lookup_result.binding.node;
+			data->identifier.binding.index = lookup_result.binding.index;
+
+			type = lookup_result.type;
+			if (data->identifier.want_pointer) {
+				assert(false);
+			}
+		}
+
 		if (lookup_result.tag == LOOKUP_RESULT_STATIC_ARGUMENT) {
 			value = lookup_result.static_argument;
 			type = lookup_result.type;
@@ -1579,6 +1600,46 @@ static void process_while(Context *context, Node *node) {
 	}
 }
 
+static void process_for(Context *context, Node *node) {
+	For_Node for_ = node->for_;
+
+	arrpush(context->scopes, (Scope) { .node = node });
+
+	process_node(context, for_.item);
+	Value item_type = get_type(context, for_.item);
+	if (item_type.value->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, for_.item);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, for_.item);
+
+		item_type = get_type(context, for_.item);
+	}
+
+	Value element_type = item_type.value->pointer.value->array_view_type.inner;
+	Binding binding = {
+		.type = element_type,
+		.index = 0
+	};
+	shput(arrlast(context->scopes).bindings, for_.bindings[0], binding);
+
+	if (arrlen(for_.bindings) > 1) {
+		binding = (Binding) {
+			.type = create_integer_type(false, context->codegen.default_integer_size),
+			.index = 1
+		};
+		shput(arrlast(context->scopes).bindings, for_.bindings[1], binding);
+	}
+
+	process_node(context, for_.body);
+
+	(void) arrpop(context->scopes);
+
+	Node_Data *data = node_data_new(FOR_NODE);
+	data->for_.type = item_type;
+	set_data(context, node, data);
+}
+
 static bool can_compare(Value_Data *type) {
 	if (type->tag == ENUM_TYPE_VALUE) return true;
 	if (type->tag == INTEGER_TYPE_VALUE) return true;
@@ -1798,6 +1859,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case WHILE_NODE: {
 			process_while(context, node);
+			break;
+		}
+		case FOR_NODE: {
+			process_for(context, node);
 			break;
 		}
 		case BINARY_OPERATOR_NODE: {

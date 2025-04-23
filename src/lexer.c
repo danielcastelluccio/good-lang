@@ -72,6 +72,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "var") == 0) return true;
 	else if (strcmp(identifier, "if") == 0) return true;
 	else if (strcmp(identifier, "while") == 0) return true;
+	else if (strcmp(identifier, "for") == 0) return true;
 	else if (strcmp(identifier, "else") == 0) return true;
 	else if (strcmp(identifier, "static") == 0) return true;
 	else if (strcmp(identifier, "mod") == 0) return true;
@@ -174,6 +175,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		case '@':
 			result = create_token(AT, lexer);
+			break;
+		case '|':
+			result = create_token(VERTICAL_BAR, lexer);
 			break;
 		case '(':
 			result = create_token(OPEN_PARENTHESIS, lexer);
@@ -350,6 +354,8 @@ char *token_to_string(Token_Kind kind) {
 			return "&";
 		case AT:
 			return "@";
+		case VERTICAL_BAR:
+			return "|";
 		case LESS:
 			return "<";
 		case LESS_EQUALS:
