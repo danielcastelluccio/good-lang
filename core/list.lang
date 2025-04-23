@@ -1,43 +1,43 @@
-def c = import("c.lang");
+def c = import("c.lang")
 
 def List = fn (static T: type): type {
 	return struct {
 		items: ^[_]T,
 		length: uint,
-		capacity: uint;
+		capacity: uint
 
 		op add = fn (list: ^self, element: T) {
 			if list.length == list.capacity {
 				if list.capacity == 0 {
-					list.capacity = 1;
-				};
+					list.capacity = 1
+				}
 
-				list.capacity = list.capacity * 2;
+				list.capacity = list.capacity * 2
 
-				list.items = c::realloc(list.items, list.capacity * run size_of(T));
-			};
+				list.items = c::realloc(list.items, list.capacity * run size_of(T))
+			}
 
-			list.items[list.length] = element;
-			list.length = list.length + 1;
-		};
+			list.items[list.length] = element
+			list.length = list.length + 1
+		}
 
 		op to_array_view = fn (list: ^self): []T {
-			var result: []T;
-			result.ptr = list.items;
-			result.len = list.length;
-			return result;
-		};
+			var result: []T
+			result.ptr = list.items
+			result.len = list.length
+			return result
+		}
 
 		op get = fn (list: ^self, index: uint): T {
 			list.items[index]
-		};
+		}
 
 		op [] = fn (list: ^self, index: uint): ^T {
 			&list.items[index]
-		};
-	};
-};
+		}
+	}
+}
 
 def new = fn (static T: type): List(T) {
 	.{ null, 0, 0 }
-};
+}
