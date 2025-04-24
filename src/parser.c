@@ -285,7 +285,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 	consume_check(lexer, OPEN_CURLY_BRACE);
 
 	Struct_Item *items = NULL;
-	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE && lexer_next(lexer, false).kind != KEYWORD) {
+	while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE && lexer_next(lexer, false).kind != SEMICOLON) {
 		Token_Data identifier = consume_check(lexer, IDENTIFIER);
 		consume_check(lexer, COLON);
 		Node *type = parse_expression(lexer);
@@ -300,14 +300,15 @@ static Node *parse_struct_type(Lexer *lexer) {
 		if (token.kind == COMMA) {
 			lexer_next(lexer, true);
 		} else if (token.kind == CLOSED_CURLY_BRACE) {
-		} else if (token.kind == KEYWORD) {
+		} else if (token.kind == SEMICOLON) {
 		} else {
 			handle_token_error_no_expected(token);
 		}
 	}
 
 	Operator_Definition *operator_definitions = NULL;
-	if (lexer_next(lexer, false).kind == KEYWORD) {
+	if (lexer_next(lexer, false).kind == SEMICOLON) {
+		lexer_next(lexer, true);
 		while (lexer_next(lexer, false).kind != CLOSED_CURLY_BRACE) {
 			consume_check(lexer, KEYWORD);
 
@@ -333,6 +334,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 	 			.function = function
 	 		};
 	 		arrpush(operator_definitions, operator_definition);
+			consume_check(lexer, SEMICOLON);
 	 	}
 	}
 
@@ -557,6 +559,8 @@ static Node *parse_block(Lexer *lexer) {
 		arrpush(block->block.statements, parse_statement(lexer));
 		if (lexer_next(lexer, false).kind == CLOSED_CURLY_BRACE) {
 			block->block.has_result = true;
+		} else {
+			consume_check(lexer, SEMICOLON);
 		}
 	}
 
@@ -867,6 +871,7 @@ Node *parse_file(char *path) {
 	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
 	while (lexer_next(&lexer, false).kind != END_OF_FILE) {
 		arrpush(block->block.statements, parse_expression(&lexer));
+		consume_check(&lexer, SEMICOLON);
 	}
 	root->module.body = block;
 
