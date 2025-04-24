@@ -260,7 +260,11 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			Node *for_ = identifier_data->identifier.binding.for_;
 			Node_Data *for_data = get_data(&state->context, for_);
 			LLVMValueRef binding_llvm_value = hmget(state->fors, for_data).bindings[identifier_data->identifier.binding.index];
-			return binding_llvm_value;
+			if (identifier_data->identifier.want_pointer || identifier_data->identifier.binding.index > 0) {
+				return binding_llvm_value;
+			} else {
+				return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
+			}
 		}
 		case IDENTIFIER_VALUE: {
 			return generate_value(identifier_data->identifier.value.value, state);
@@ -822,7 +826,7 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 		i_value
 	};
 	LLVMTypeRef element_type = create_llvm_type(for_data->for_.type.value->pointer.value->array_view_type.inner.value, state);
-	LLVMValueRef element = LLVMBuildLoad2(state->llvm_builder, element_type, LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, ""), "");
+	LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, "");
 
 	LLVMValueRef *bindings = NULL;
 	arrpush(bindings, element);

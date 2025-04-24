@@ -892,7 +892,9 @@ static void process_identifier(Context *context, Node *node) {
 
 			type = lookup_result.type;
 			if (data->identifier.want_pointer) {
-				assert(false);
+				Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
+				pointer_type->pointer_type.inner = type;
+				type = (Value) { .value = pointer_type };
 			}
 		}
 
