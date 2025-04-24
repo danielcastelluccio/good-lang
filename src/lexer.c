@@ -150,6 +150,14 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			}
 			result = create_token(EQUALS, lexer);
 			break;
+		case '!':
+			if (lexer->source[lexer->position] == '=') {
+				result = create_token(EXCLAMATION_EQUALS, lexer);
+				increment_position(lexer);
+				break;
+			}
+			assert(false);
+			break;
 		case '*':
 			result = create_token(ASTERISK, lexer);
 			break;
@@ -246,6 +254,25 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			};
 			break;
 		}
+		case '\'': {
+			size_t string_start = lexer->position;
+			size_t string_start_row = lexer->row;
+			size_t string_start_column = lexer->column - 1;
+
+			while (lexer->source[lexer->position] != '\'') {
+				increment_position(lexer);
+			}
+			increment_position(lexer);
+
+			size_t string_end = lexer->position - 1;
+
+			result = (Token_Data) {
+				.kind = CHARACTER,
+				.string = extract_string(lexer->source, string_start, string_end),
+				.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+			};
+			break;
+		}
 		default: {
 			if (is_alphabetical_underscore(character)) {
 				size_t string_start = lexer->position - 1;
@@ -324,6 +351,8 @@ char *token_to_string(Token_Kind kind) {
 			return "Keyword";
 		case STRING:
 			return "String";
+		case CHARACTER:
+			return "Character";
 		case INTEGER:
 			return "Integer";
 		case DECIMAL:
@@ -374,6 +403,8 @@ char *token_to_string(Token_Kind kind) {
 			return "->";
 		case EQUALS_EQUALS:
 			return "==";
+		case EXCLAMATION_EQUALS:
+			return "!=";
 		case EQUALS_GREATER:
 			return "=>";
 		case COLON_COLON:

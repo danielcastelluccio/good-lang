@@ -166,6 +166,8 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "[");
 			if (type.value->array_type.size.value != NULL) {
 				buffer += print_type(type.value->array_type.size, buffer);
+			} else {
+				buffer += sprintf(buffer, "_");
 			}
 			buffer += sprintf(buffer, "]");
 			buffer += print_type(type.value->array_type.inner, buffer);
@@ -213,6 +215,10 @@ static int print_type(Value type, char *buffer) {
 		}
 		case INTEGER_TYPE_VALUE: {
 			buffer += sprintf(buffer, "int(%s,%li)", type.value->integer_type.signed_ ? "true" : "false", type.value->integer_type.size);
+			break;
+		}
+		case BYTE_TYPE_VALUE: {
+			buffer += sprintf(buffer, "byte");
 			break;
 		}
 		case INTEGER_VALUE: {
@@ -943,18 +949,17 @@ static void process_enum_type(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
-static void process_string(Context *context, Node *node) {
-	String_Node string = node->string;
-
-	size_t original_length = strlen(string.value);
+typedef struct { char *string; size_t length; } Expanded_String;
+static Expanded_String expand_escapes(char *string) {
+	size_t original_length = strlen(string);
 	char *new_string = malloc(original_length);
 	memset(new_string, 0, original_length);
 
 	size_t original_index = 0;
 	size_t new_index = 0;
 	while (original_index < original_length) {
-		if (string.value[original_index] == '\\') {
-			switch (string.value[original_index + 1]) {
+		if (string[original_index] == '\\') {
+			switch (string[original_index + 1]) {
 				case 'n':
 					new_string[new_index] = '\n';
 					break;
@@ -967,11 +972,19 @@ static void process_string(Context *context, Node *node) {
 			new_index += 1;
 			original_index += 2;
 		} else {
-			new_string[new_index] = string.value[original_index];
+			new_string[new_index] = string[original_index];
 			original_index += 1;
 			new_index += 1;
 		}
 	}
+
+	return (Expanded_String) { .string = new_string, .length = new_index };
+}
+
+static void process_string(Context *context, Node *node) {
+	String_Node string = node->string;
+
+	Expanded_String new_string = expand_escapes(string.value);
 
 	Value type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
@@ -981,7 +994,7 @@ static void process_string(Context *context, Node *node) {
 		type.value->pointer_type.inner.value = value_new(ARRAY_TYPE_VALUE);
 		type.value->pointer_type.inner.value->array_type.inner = create_value(BYTE_TYPE_VALUE);
 		type.value->pointer_type.inner.value->array_type.size.value = value_new(INTEGER_VALUE);
-		type.value->pointer_type.inner.value->array_type.size.value->integer.value = new_index;
+		type.value->pointer_type.inner.value->array_type.size.value->integer.value = new_string.length;
 	}
 	else if (type.value->tag == ARRAY_VIEW_TYPE_VALUE && type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {}
 	else invalid_type = true;
@@ -992,10 +1005,24 @@ static void process_string(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(STRING_NODE);
 	data->string.type = type;
-	data->string.value = new_string;
-	data->string.length = new_index;
+	data->string.value = new_string.string;
+	data->string.length = new_string.length;
 	set_data(context, node, data);
 	set_type(context, node, type);
+}
+
+static void process_character(Context *context, Node *node) {
+	Character_Node character = node->character;
+
+	Expanded_String new_string = expand_escapes(character.value);
+	if (new_string.length != 1) {
+		handle_semantic_error(node->location, "Expected only one character");
+	}
+
+	Node_Data *data = node_data_new(CHARACTER_NODE);
+	data->character.value = new_string.string[0];
+	set_data(context, node, data);
+	set_type(context, node, create_value(BYTE_TYPE_VALUE));
 }
 
 static void process_number(Context *context, Node *node) {
@@ -1395,6 +1422,7 @@ static void process_return(Context *context, Node *node) {
 			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
 			if (scope_node->kind == FUNCTION_NODE) {
 				current_function = scope_node;
+				break;
 			}
 		}
 
@@ -1647,6 +1675,7 @@ static bool can_compare(Value_Data *type) {
 	if (type->tag == INTEGER_TYPE_VALUE) return true;
 	if (type->tag == BYTE_TYPE_VALUE) return true;
 	if (type->tag == FLOAT_TYPE_VALUE) return true;
+	if (type->tag == BYTE_TYPE_VALUE) return true;
 
 	return false;
 }
@@ -1672,7 +1701,7 @@ static void process_binary_operator(Context *context, Node *node) {
 	if (type.value->tag == INTEGER_TYPE_VALUE) {}
 	else if (type.value->tag == FLOAT_TYPE_VALUE) {}
 	else if (type.value->tag == TYPE_TYPE_VALUE) {}
-	else if (can_compare(type.value) && binary_operator.operator == OPERATOR_EQUALS) {}
+	else if (can_compare(type.value) && (binary_operator.operator == OPERATOR_EQUALS || binary_operator.operator == OPERATOR_NOT_EQUALS)) {}
 	else {
 		char left_string[64] = {};
 		print_type_outer(left_type, left_string);
@@ -1682,6 +1711,7 @@ static void process_binary_operator(Context *context, Node *node) {
 	Value result_type = {};
 	switch (binary_operator.operator) {
 		case OPERATOR_EQUALS:
+		case OPERATOR_NOT_EQUALS:
 		case OPERATOR_LESS:
 		case OPERATOR_LESS_EQUALS:
 		case OPERATOR_GREATER:
@@ -1797,6 +1827,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case STRING_NODE: {
 			process_string(context, node);
+			break;
+		}
+		case CHARACTER_NODE: {
+			process_character(context, node);
 			break;
 		}
 		case NUMBER_NODE: {

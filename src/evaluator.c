@@ -365,9 +365,13 @@ Value evaluate(Context *context, Node *node) {
 					data[i] = string_value[i];
 				}
 
-				Value_Data *string = value_new(STRING_VALUE);
-				string->string.length = string_length;
-				string->string.data = data;
+				Value_Data *string = value_new(ARRAY_VIEW_VALUE);
+				string->array_view.length = string_length;
+				for (size_t i = 0; i < string_length; i++) {
+					Value_Data *byte_value = value_new(BYTE_VALUE);
+					byte_value->byte.value = string_value[i];
+					arrpush(string->array_view.values, byte_value);
+				}
 
 				return create_value_data(string, node);
 			} else {
@@ -419,9 +423,11 @@ Value evaluate(Context *context, Node *node) {
 			switch (function.value->tag) {
 				case IMPORT_FUNCTION_VALUE: {
 					Value string = arguments[0];
-					char *source = malloc(string.value->string.length + 1);
-					source[string.value->string.length] = '\0';
-					memcpy(source, string.value->string.data, string.value->string.length); 
+					char *source = malloc(string.value->array_view.length + 1);
+					source[string.value->array_view.length] = '\0';
+					for (size_t i = 0; i < string.value->array_view.length; i++) {
+						source[i] = string.value->array_view.values[i]->byte.value;
+					}
 
 					if (strcmp(source, "core") == 0) {
 						char *cwd = getcwd(NULL, PATH_MAX);

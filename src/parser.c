@@ -56,6 +56,15 @@ static Node *parse_string(Lexer *lexer) {
 	return string;
 }
 
+static Node *parse_character(Lexer *lexer) {
+	Token_Data token = consume_check(lexer, CHARACTER);
+
+	Node *character = ast_new(CHARACTER_NODE, token.location);
+	character->character.value = token.string;
+
+	return character;
+}
+
 static Node *parse_number(Lexer *lexer) {
 	Token_Data token = lexer_next(lexer, true);
 
@@ -170,6 +179,9 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 	switch (first_token.kind) {
 		case EQUALS_EQUALS:
 			binary_operator->binary_operator.operator = OPERATOR_EQUALS;
+			break;
+		case EXCLAMATION_EQUALS:
+			binary_operator->binary_operator.operator = OPERATOR_NOT_EQUALS;
 			break;
 		case LESS:
 			binary_operator->binary_operator.operator = OPERATOR_LESS;
@@ -753,6 +765,10 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_string(lexer);
 			break;
 		}
+		case CHARACTER: {
+			result = parse_character(lexer);
+			break;
+		}
 		case INTEGER:
 		case DECIMAL: {
 			result = parse_number(lexer);
@@ -816,6 +832,7 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_call(lexer, result);
 				break;
 			case EQUALS_EQUALS:
+			case EXCLAMATION_EQUALS:
 			case LESS:
 			case LESS_EQUALS:
 			case GREATER:

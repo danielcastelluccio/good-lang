@@ -8,6 +8,7 @@
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
 
+#include "ast.h"
 #include "common.h"
 #include "stb/ds.h"
 
@@ -302,6 +303,13 @@ static LLVMValueRef generate_string(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_character(Node *node, State *state) {
+	assert(node->kind == CHARACTER_NODE);
+
+	Character_Data character_data = get_data(&state->context, node)->character;
+	return LLVMConstInt(LLVMInt8Type(), character_data.value, false);
+}
+
 static LLVMValueRef generate_number(Node *node, State *state) {
 	assert(node->kind == NUMBER_NODE);
 	Number_Node number = node->number;
@@ -544,6 +552,8 @@ static LLVMValueRef generate_binary_operator(Node *node, State *state) {
 	switch (binary_operator.operator) {
 		case OPERATOR_EQUALS:
 			return values_equal(binary_operator_data.type.value, left_value, right_value, state);
+		case OPERATOR_NOT_EQUALS:
+			return LLVMBuildNot(state->llvm_builder, values_equal(binary_operator_data.type.value, left_value, right_value, state), "");
 		case OPERATOR_LESS:
 			if (is_type_signed(binary_operator_data.type.value)) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntSLT, left_value, right_value, "");
@@ -864,6 +874,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_identifier(node, state);
 		case STRING_NODE:
 			return generate_string(node, state);
+		case CHARACTER_NODE:
+			return generate_character(node, state);
 		case NUMBER_NODE:
 			return generate_number(node, state);
 		case NULL_NODE:

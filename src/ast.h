@@ -64,6 +64,10 @@ typedef struct {
 } String_Node;
 
 typedef struct {
+	char *value;
+} Character_Node;
+
+typedef struct {
 	enum {
 		INTEGER_NUMBER,
 		DECIMAL_NUMBER
@@ -183,6 +187,7 @@ typedef struct {
 
 typedef enum {
 	OPERATOR_EQUALS,
+	OPERATOR_NOT_EQUALS,
 	OPERATOR_LESS,
 	OPERATOR_LESS_EQUALS,
 	OPERATOR_GREATER,
@@ -224,6 +229,7 @@ typedef enum {
 	UNION_TYPE_NODE,
 	ENUM_TYPE_NODE,
 	STRING_NODE,
+	CHARACTER_NODE,
 	NUMBER_NODE,
 	NULL_NODE,
 	BOOLEAN_NODE,
@@ -262,6 +268,7 @@ struct Node {
 		Union_Type_Node union_type;
 		Enum_Type_Node enum_type;
 		String_Node string;
+		Character_Node character;
 		Number_Node number;
 		Boolean_Node boolean;
 		Structure_Node structure;

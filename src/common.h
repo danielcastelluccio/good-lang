@@ -59,7 +59,7 @@ typedef enum {
 	BYTE_VALUE,
 	INTEGER_VALUE,
 	ENUM_VALUE,
-	STRING_VALUE,
+	ARRAY_VIEW_VALUE,
 	MODULE_TYPE_VALUE,
 	IMPORT_FUNCTION_VALUE,
 	SIZE_OF_FUNCTION_VALUE
@@ -148,8 +148,8 @@ typedef struct {
 
 typedef struct {
 	size_t length;
-	char *data;
-} String_Value;
+	Value_Data **values;
+} Array_View_Value;
 
 typedef struct {
 	Value inner;
@@ -198,10 +198,10 @@ struct Value_Data {
 		Boolean_Value boolean;
 		Pointer_Value pointer;
 		Array_Value array;
+		Array_View_Value array_view;
 		Byte_Value byte;
 		Integer_Value integer;
 		Enum_Value enum_;
-		String_Value string;
 		Internal_Value internal;
 	};
 };
@@ -241,6 +241,10 @@ typedef struct {
 	char *value;
 	size_t length;
 } String_Data;
+
+typedef struct {
+	char value;
+} Character_Data;
 
 typedef struct {
 	Value type;
@@ -358,6 +362,7 @@ typedef struct {
 		Identifier_Data identifier;
 		Variable_Data variable;
 		String_Data string;
+		Character_Data character;
 		Number_Data number;
 		Structure_Data structure;
 		Run_Data run;
