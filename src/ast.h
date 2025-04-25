@@ -149,7 +149,6 @@ typedef struct {
 
 typedef struct {
 	Node *value;
-	size_t levels;
 } Break_Node;
 
 typedef struct {

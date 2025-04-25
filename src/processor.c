@@ -1354,18 +1354,13 @@ static void process_variable(Context *context, Node *node) {
 static void process_break(Context *context, Node *node) {
 	Break_Node break_ = node->break_;
 
-	size_t levels = break_.levels;
 	Node *while_ = NULL;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
 
 		if (scope_node != NULL && scope_node->kind == WHILE_NODE) {
-			if (levels == 0) {
-				while_ = scope_node;
-				break;
-			} else {
-				levels--;
-			}
+			while_ = scope_node;
+			break;
 		}
 	}
 
