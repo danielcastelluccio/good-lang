@@ -157,6 +157,9 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 		case TYPE_TYPE_VALUE: {
 			return true;
 		}
+		case BOOLEAN_TYPE_VALUE: {
+			return true;
+		}
 		case INTEGER_TYPE_VALUE: {
 			return type1->integer_type.signed_ == type2->integer_type.signed_ && type1->integer_type.size == type2->integer_type.size;
 		}

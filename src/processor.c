@@ -778,6 +778,9 @@ static void process_identifier(Context *context, Node *node) {
 		value.value = value_new(FLOAT_TYPE_VALUE);
 		value.value->float_type.size = 64;
 		type = create_value(TYPE_TYPE_VALUE);
+	} else if (identifier.module == NULL && strcmp(identifier.value, "bool") == 0) {
+		value.value = value_new(BOOLEAN_TYPE_VALUE);
+		type = create_value(TYPE_TYPE_VALUE);
 	} else if (strcmp(identifier.value, "import") == 0) {
 		value = create_value(IMPORT_FUNCTION_VALUE);
 
