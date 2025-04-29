@@ -45,7 +45,7 @@ static Node *parse_expression(Lexer *lexer);
 static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
-	if (lexer_peek(lexer).kind == CLOSED_CURLY_BRACE || lexer_peek(lexer).kind == CLOSED_PARENTHESIS) {
+	if (lexer_peek(lexer).kind == CLOSED_CURLY_BRACE || lexer_peek(lexer).kind == CLOSED_PARENTHESIS || lexer_peek(lexer).kind == SEMICOLON) {
 		return NULL;
 	}
 
@@ -145,6 +145,14 @@ static Node *parse_dereference(Lexer *lexer, Node *node) {
 	Node *derefence = ast_new(DEREFERENCE_NODE, token.location);
 	derefence->dereference.node = node;
 	return derefence;
+}
+
+static Node *parse_deoptional(Lexer *lexer, Node *node) {
+	Token_Data token = lexer_consume_check(lexer, QUESTION);
+
+	Node *deoptional = ast_new(DEOPTIONAL_NODE, token.location);
+	deoptional->deoptional.node = node;
+	return deoptional;
 }
 
 static Node *parse_call(Lexer *lexer, Node *function) {
@@ -498,6 +506,26 @@ static Node *parse_if(Lexer *lexer) {
 	}
 
 	if_->if_.condition = parse_expression(lexer);
+
+	if (lexer_peek(lexer).kind == VERTICAL_BAR) {
+		lexer_consume_check(lexer, VERTICAL_BAR);
+		while (true) {
+			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+			arrpush(if_->if_.bindings, identifier.string);
+
+			Token_Data token = lexer_peek(lexer);
+			if (token.kind == COMMA) {
+				lexer_consume(lexer);
+			} else if (token.kind == VERTICAL_BAR) {
+				break;
+			} else {
+				handle_token_error_no_expected(token);
+			}
+		}
+
+		lexer_consume_check(lexer, VERTICAL_BAR);
+	}
+
 	if_->if_.if_body = parse_separated_statement(lexer);
 
 	if (lexer_peek_check_keyword(lexer, "else")) {
@@ -596,6 +624,15 @@ static Node *parse_pointer(Lexer *lexer) {
 	pointer->pointer.inner = parse_expression(lexer);
 
 	return pointer;
+}
+
+static Node *parse_optional(Lexer *lexer) {
+	Token_Data first_token = lexer_consume_check(lexer, QUESTION);
+
+	Node *optional = ast_new(OPTIONAL_NODE, first_token.location);
+	optional->optional.inner = parse_expression(lexer);
+
+	return optional;
 }
 
 static Node *parse_reference(Lexer *lexer) {
@@ -824,6 +861,10 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_pointer(lexer);
 			break;
 		}
+		case QUESTION: {
+			result = parse_optional(lexer);
+			break;
+		}
 		case AMPERSAND: {
 			result = parse_reference(lexer);
 			break;
@@ -870,6 +911,9 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case CARET:
 				result = parse_dereference(lexer, result);
+				break;
+			case QUESTION:
+				result = parse_deoptional(lexer, result);
 				break;
 			default:
 				operating = false;

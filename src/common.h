@@ -44,6 +44,7 @@ typedef enum {
 	UNION_TYPE_VALUE,
 	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
+	OPTIONAL_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	ARRAY_VIEW_TYPE_VALUE,
 	INTEGER_TYPE_VALUE,
@@ -157,6 +158,10 @@ typedef struct {
 
 typedef struct {
 	Value inner;
+} Optional_Type_Value;
+
+typedef struct {
+	Value inner;
 	Value size;
 } Array_Type_Value;
 
@@ -191,6 +196,7 @@ struct Value_Data {
 		Module_Value module;
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
+		Optional_Type_Value optional_type;
 		Array_Type_Value array_type;
 		Array_View_Type_Value array_view_type;
 		Integer_Type_Value integer_type;
@@ -223,7 +229,7 @@ typedef struct {
 		size_t argument_index;
 		Value value;
 		struct {
-			Node *for_;
+			Node *node;
 			size_t index;
 		} binding;
 	};
@@ -280,6 +286,7 @@ typedef struct {
 
 typedef struct {
 	bool static_condition;
+	Value result_type;
 	Value type;
 } If_Data;
 
@@ -322,9 +329,9 @@ typedef struct {
 } Dereference_Data;
 
 typedef struct {
-	Value_Data *type;
+	Value type;
 	Node *assign_value;
-} Deoption_Data;
+} Deoptional_Data;
 
 typedef struct {
 	Value_Data *type;
@@ -377,7 +384,7 @@ typedef struct {
 		Module_Access_Data module_access;
 		Structure_Access_Data structure_access;
 		Dereference_Data dereference;
-		Deoption_Data deoption;
+		Deoptional_Data deoptional;
 		Deoption_Present_Data deoption_present;
 		Array_Access_Data array_access;
 		Binary_Operator_Data binary_operator;
@@ -442,6 +449,7 @@ void reset_node(Context *context, Node *node);
 
 Value create_value(Value_Tag tag);
 Value create_pointer_type(Value value);
+Value create_optional_type(Value value);
 Value create_array_type(Value value);
 Value create_array_view_type(Value value);
 Value create_integer_type(bool signed_, size_t size);

@@ -23,6 +23,10 @@ typedef struct {
 
 typedef struct {
 	Node *inner;
+} Optional_Node;
+
+typedef struct {
+	Node *inner;
 	Node *size;
 } Array_Type_Node;
 
@@ -116,6 +120,10 @@ typedef struct {
 
 typedef struct {
 	Node *node;
+} Deoptional_Node;
+
+typedef struct {
+	Node *node;
 } Deoption_Node;
 
 typedef struct {
@@ -156,6 +164,7 @@ typedef struct {
 	Node *if_body;
 	Node *else_body;
 	bool static_;
+	char **bindings;
 } If_Node;
 
 typedef struct {
@@ -221,6 +230,7 @@ typedef struct {
 
 typedef enum {
 	POINTER_NODE,
+	OPTIONAL_NODE,
 	ARRAY_TYPE_NODE,
 	ARRAY_VIEW_TYPE_NODE,
 	FUNCTION_TYPE_NODE,
@@ -239,6 +249,7 @@ typedef enum {
 	CALL_METHOD_NODE,
 	REFERENCE_NODE,
 	DEREFERENCE_NODE,
+	DEOPTIONAL_NODE,
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
 	RETURN_NODE,
@@ -260,6 +271,7 @@ struct Node {
 	Node_Kind kind;
 	union {
 		Pointer_Node pointer;
+		Optional_Node optional;
 		Array_Type_Node array_type;
 		Array_View_Type_Node array_view_type;
 		Function_Type_Node function_type;
@@ -277,6 +289,7 @@ struct Node {
 		Call_Method_Node call_method;
 		Reference_Node reference;
 		Dereference_Node dereference;
+		Deoptional_Node deoptional;
 		Deoption_Node deoption;
 		Deoption_Present_Node deoption_present;
 		Structure_Access_Node structure_access;

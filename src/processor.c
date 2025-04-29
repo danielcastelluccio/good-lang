@@ -162,6 +162,11 @@ static int print_type(Value type, char *buffer) {
 			buffer += print_type(type.value->pointer_type.inner, buffer);
 			break;
 		}
+		case OPTIONAL_TYPE_VALUE: {
+			buffer += sprintf(buffer, "?");
+			buffer += print_type(type.value->optional_type.inner, buffer);
+			break;
+		}
 		case ARRAY_TYPE_VALUE: {
 			buffer += sprintf(buffer, "[");
 			if (type.value->array_type.size.value != NULL) {
@@ -896,7 +901,7 @@ static void process_identifier(Context *context, Node *node) {
 
 		if (lookup_result.tag == LOOKUP_RESULT_BINDING) {
 			data->identifier.kind = IDENTIFIER_BINDING;
-			data->identifier.binding.for_ = lookup_result.binding.node;
+			data->identifier.binding.node = lookup_result.binding.node;
 			data->identifier.binding.index = lookup_result.binding.index;
 
 			type = lookup_result.type;
@@ -1144,6 +1149,50 @@ static void process_dereference(Context *context, Node *node) {
 			handle_type_error(context->temporary_context.assign_node, inner_type, value_type);
 		}
 		data->dereference.assign_value = context->temporary_context.assign_value;
+	} else {
+		set_type(context, node, inner_type);
+	}
+	set_data(context, node, data);
+}
+
+static void process_enforce_pointer(Context *context, Node *node) {
+	process_node(context, node);
+	Value structure_pointer_type = get_type(context, node);
+	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, node);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, node);
+
+		structure_pointer_type = get_type(context, node);
+	}
+
+}
+
+static void process_deoptional(Context *context, Node *node) {
+	Deoptional_Node deoptional = node->deoptional;
+
+	process_enforce_pointer(context, deoptional.node);
+
+	Value type = get_type(context, deoptional.node);
+	if (type.value->tag != POINTER_TYPE_VALUE || type.value->pointer_type.inner.value->tag != OPTIONAL_TYPE_VALUE) {
+		char given_string[64] = {};
+		print_type_outer(type, given_string);
+		handle_semantic_error(node->location, "Expected optional, but got %s", given_string);
+	}
+
+	Node_Data *data = node_data_new(DEOPTIONAL_NODE);
+	Value inner_type = type.value->pointer_type.inner.value->optional_type.inner;
+	data->deoptional.type = inner_type;
+	if (context->temporary_context.assign_value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = inner_type };
+		process_node_context(context, temporary_context, context->temporary_context.assign_value);
+
+		Value value_type = get_type(context, context->temporary_context.assign_value);
+		if (!type_assignable(inner_type.value, value_type.value)) {
+			handle_type_error(context->temporary_context.assign_node, inner_type, value_type);
+		}
+		data->deoptional.assign_value = context->temporary_context.assign_value;
 	} else {
 		set_type(context, node, inner_type);
 	}
@@ -1439,8 +1488,19 @@ static void process_if(Context *context, Node *node) {
 	If_Node if_ = node->if_;
 
 	process_node(context, if_.condition);
+	Value condition_type = get_type(context, if_.condition);
+	if (condition_type.value->tag != POINTER_TYPE_VALUE && condition_type.value->tag != BOOLEAN_TYPE_VALUE) {
+		reset_node(context, if_.condition);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, if_.condition);
+
+		condition_type = get_type(context, if_.condition);
+	}
 
 	Node_Data *data = node_data_new(IF_NODE);
+	data->if_.type = condition_type;
+
 	if (if_.static_) {
 		Value evaluated = evaluate(context, if_.condition);
 
@@ -1449,7 +1509,18 @@ static void process_if(Context *context, Node *node) {
 
 	bool saved_returned = context->returned;
 	context->returned = false;
+
+	arrpush(context->scopes, (Scope) { .node = node });
+	if (arrlen(if_.bindings) > 0) {
+		Binding binding = {
+			.type = condition_type.value->pointer_type.inner.value->optional_type.inner,
+			.index = 0
+		};
+
+		shput(arrlast(context->scopes).bindings, if_.bindings[0], binding);
+	}
 	process_node(context, if_.if_body);
+	(void) arrpop(context->scopes);
 
 	Value if_type = get_type(context, if_.if_body);
 	if (if_.else_body != NULL) {
@@ -1473,19 +1544,21 @@ static void process_if(Context *context, Node *node) {
 		}
 
 		if (if_type.value != NULL) {
-			if (else_type.value == NULL) {
-				handle_semantic_error(node->location, "Expected value from else");
+			if (!saved_else_returned) {
+				if (else_type.value == NULL) {
+					handle_semantic_error(node->location, "Expected value from else");
+				}
+
+				if (!value_equal(if_type.value, else_type.value)) {
+					char if_string[64] = {};
+					print_type_outer(if_type, if_string);
+					char else_string[64] = {};
+					print_type_outer(else_type, else_string);
+					handle_semantic_error(node->location, "Mismatched types %s and %s", if_string, else_string);
+				}
 			}
 
-			if (!value_equal(if_type.value, else_type.value)) {
-				char if_string[64] = {};
-				print_type_outer(if_type, if_string);
-				char else_string[64] = {};
-				print_type_outer(else_type, else_string);
-				handle_semantic_error(node->location, "Mismatched types %s and %s", if_string, else_string);
-			}
-
-			data->if_.type = if_type;
+			data->if_.result_type = if_type;
 			set_type(context, node, if_type);
 		}
 	} else {
@@ -1780,6 +1853,13 @@ static void process_pointer(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
+static void process_optional(Context *context, Node *node) {
+	Optional_Node optional = node->optional;
+	process_node(context, optional.inner);
+
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
+}
+
 static void process_array_type(Context *context, Node *node) {
 	Array_Type_Node array_type = node->array_type;
 	process_node(context, array_type.inner);
@@ -1859,6 +1939,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_dereference(context, node);
 			break;
 		}
+		case DEOPTIONAL_NODE: {
+			process_deoptional(context, node);
+			break;
+		}
 		case STRUCTURE_ACCESS_NODE: {
 			process_structure_access(context, node);
 			break;
@@ -1913,6 +1997,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case POINTER_NODE: {
 			process_pointer(context, node);
+			break;
+		}
+		case OPTIONAL_NODE: {
+			process_optional(context, node);
 			break;
 		}
 		case ARRAY_TYPE_NODE: {

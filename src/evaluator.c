@@ -100,6 +100,9 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 
 			return type_assignable(type1->pointer_type.inner.value, type2->pointer_type.inner.value);
 		}
+		case OPTIONAL_TYPE_VALUE: {
+			return type_assignable(type1->optional_type.inner.value, type2->optional_type.inner.value);
+		}
 		case ARRAY_TYPE_VALUE: {
 			if ((type1->array_type.size.value == NULL && type2->array_type.size.value != NULL)) return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
 			if (type1->array_type.size.value != NULL && type2->array_type.size.value == NULL) return false;
@@ -315,6 +318,13 @@ Value evaluate(Context *context, Node *node) {
 			Value_Data *pointer_type_value = value_new(POINTER_TYPE_VALUE);
 			pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
 			return create_value_data(pointer_type_value, node);
+		}
+		case OPTIONAL_NODE: {
+			Optional_Node optional = node->optional;
+
+			Value_Data *optional_type_value = value_new(OPTIONAL_TYPE_VALUE);
+			optional_type_value->optional_type.inner = evaluate(context, optional.inner);
+			return create_value_data(optional_type_value, node);
 		}
 		case ARRAY_TYPE_NODE: {
 			Array_Type_Node array_type = node->array_type;

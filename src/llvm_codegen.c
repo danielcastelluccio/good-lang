@@ -29,6 +29,10 @@ typedef struct {
 } For_Codegen_Data;
 
 typedef struct {
+	LLVMValueRef binding;
+} If_Codegen_Data;
+
+typedef struct {
 	LLVMModuleRef llvm_module;
 	LLVMBuilderRef llvm_builder;
 	LLVMTargetMachineRef llvm_target;
@@ -38,6 +42,7 @@ typedef struct {
 	struct { Node_Data *key; Block_Codegen_Data value; } *blocks; // stb_ds
 	struct { Node_Data *key; While_Codegen_Data value; } *whiles; // stb_ds
 	struct { Node_Data *key; For_Codegen_Data value; } *fors; // stb_ds
+	struct { Node_Data *key; If_Codegen_Data value; } *ifs; // stb_ds
 	LLVMValueRef *function_arguments; // stb_ds
 	LLVMValueRef current_function;
 	LLVMValueRef main_function;
@@ -136,6 +141,14 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
 			items[0] = LLVMInt64Type();
 			items[1] = LLVMPointerType(LLVMArrayType2(create_llvm_type(value->array_view_type.inner.value, state), 0), 0);
+			return LLVMStructType(items, 2, false);
+		}
+		case OPTIONAL_TYPE_VALUE: {
+			Optional_Type_Value optional_type = value->optional_type;
+
+			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
+			items[0] = LLVMInt1Type();
+			items[1] = create_llvm_type(optional_type.inner.value, state);
 			return LLVMStructType(items, 2, false);
 		}
 		default:
@@ -258,14 +271,23 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			}
 		}
 		case IDENTIFIER_BINDING: {
-			Node *for_ = identifier_data->identifier.binding.for_;
-			Node_Data *for_data = get_data(&state->context, for_);
-			LLVMValueRef binding_llvm_value = hmget(state->fors, for_data).bindings[identifier_data->identifier.binding.index];
-			if (identifier_data->identifier.want_pointer || identifier_data->identifier.binding.index > 0) {
+			Node *node = identifier_data->identifier.binding.node;
+			Node_Data *node_data = get_data(&state->context, node);
+			size_t index = identifier_data->identifier.binding.index;
+			if (node->kind == FOR_NODE) {
+				LLVMValueRef binding_llvm_value = hmget(state->fors, node_data).bindings[index];
+				if (identifier_data->identifier.want_pointer || identifier_data->identifier.binding.index > 0) {
+					return binding_llvm_value;
+				} else {
+					return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
+				}
+			} else if (node->kind == IF_NODE) {
+				LLVMValueRef binding_llvm_value = hmget(state->ifs, node_data).binding;
 				return binding_llvm_value;
 			} else {
-				return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
+				assert(false);
 			}
+			return NULL;
 		}
 		case IDENTIFIER_VALUE: {
 			return generate_value(identifier_data->identifier.value.value, state);
@@ -327,6 +349,13 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 	switch (type->tag) {
 		case POINTER_TYPE_VALUE:
 			return LLVMConstNull(create_llvm_type(type, state));
+		case OPTIONAL_TYPE_VALUE: {
+			LLVMTypeRef optional_llvm_type = create_llvm_type(type, state);
+			LLVMValueRef value_ptr = LLVMBuildAlloca(state->llvm_builder, optional_llvm_type, "");
+			LLVMValueRef present_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, value_ptr, 0, "");
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 0, false), present_ptr);
+			return LLVMBuildLoad2(state->llvm_builder, optional_llvm_type, value_ptr, "");
+		}
 		default:
 			assert(false);
 	}
@@ -397,6 +426,25 @@ static LLVMValueRef generate_dereference(Node *node, State *state) {
 		return NULL;
 	} else {
 		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(dereference_data.type.value, state), pointer_llvm_value, "");
+	}
+}
+
+static LLVMValueRef generate_deoptional(Node *node, State *state) {
+	assert(node->kind == DEOPTIONAL_NODE);
+	Deoptional_Node deoptional = node->deoptional;
+	LLVMValueRef optional_llvm_value = generate_node(deoptional.node, state);
+
+	Deoptional_Data deoptional_data = get_data(&state->context, node)->deoptional;
+	LLVMTypeRef optional_llvm_type = create_llvm_type(create_optional_type(deoptional_data.type).value, state);
+
+	if (deoptional_data.assign_value != NULL) {
+		LLVMValueRef present_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 0, "");
+		LLVMValueRef value_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
+		LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 1, false), present_ptr);
+		LLVMBuildStore(state->llvm_builder, generate_node(deoptional_data.assign_value, state), value_ptr);
+		return NULL;
+	} else {
+		assert(false);
 	}
 }
 
@@ -666,7 +714,8 @@ static LLVMValueRef generate_break(Node *node, State *state) {
 static LLVMValueRef generate_if(Node *node, State *state) {
 	assert(node->kind == IF_NODE);
 	If_Node if_ = node->if_;
-	If_Data if_data = get_data(&state->context, node)->if_;
+	Node_Data *data = get_data(&state->context, node);
+	If_Data if_data = data->if_;
 
 	if (if_.static_) {
 		if (if_data.static_condition) {
@@ -680,34 +729,47 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 		return NULL;
 	} else {
 		LLVMValueRef value = NULL;
-		if (if_data.type.value != NULL) {
-			value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(if_data.type.value, state), "");
+		if (if_data.result_type.value != NULL) {
+			value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(if_data.result_type.value, state), "");
 		}
 
 		LLVMValueRef condition = generate_node(if_.condition, state);
+		if (if_data.type.value->tag == POINTER_TYPE_VALUE) {
+			LLVMValueRef optional_llvm_value = condition;
+			LLVMTypeRef optional_llvm_type = create_llvm_type(if_data.type.value->pointer_type.inner.value, state);
+			LLVMValueRef present_llvm_value = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 0, "");
+			LLVMValueRef value_llvm_value = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
+			If_Codegen_Data if_codegen_data = {
+				.binding = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.type.value->pointer_type.inner.value->optional_type.inner.value, state), value_llvm_value, "")
+			};
+			hmput(state->ifs, data, if_codegen_data);
+
+			condition = LLVMBuildLoad2(state->llvm_builder, LLVMInt1Type(), present_llvm_value, "");
+		}
 
 		LLVMBasicBlockRef if_block = LLVMAppendBasicBlock(state->current_function, "");
 		LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
 		LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
 		LLVMBuildCondBr(state->llvm_builder, condition, if_block, else_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, if_block);
+
 		LLVMValueRef if_value = generate_node(if_.if_body, state);
-		if (if_data.type.value != NULL) {
+		if (if_data.result_type.value != NULL) {
 			LLVMBuildStore(state->llvm_builder, if_value, value);
 		}
 		LLVMBuildBr(state->llvm_builder, done_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
 		if (if_.else_body != NULL) {
 			LLVMValueRef else_value = generate_node(if_.else_body, state);
-			if (if_data.type.value != NULL) {
+			if (if_data.result_type.value != NULL && else_value != NULL) {
 				LLVMBuildStore(state->llvm_builder, else_value, value);
 			}
 		}
 		LLVMBuildBr(state->llvm_builder, done_block);
 		LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 
-		if (if_data.type.value != NULL) {
-			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.type.value, state), value, "");
+		if (if_data.result_type.value != NULL) {
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.result_type.value, state), value, "");
 		} else {
 			return NULL;
 		}
@@ -890,6 +952,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_reference(node, state);
 		case DEREFERENCE_NODE:
 			return generate_dereference(node, state);
+		case DEOPTIONAL_NODE:
+			return generate_deoptional(node, state);
 		case STRUCTURE_ACCESS_NODE:
 			return generate_structure_access(node, state);
 		case ARRAY_ACCESS_NODE:

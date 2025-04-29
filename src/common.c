@@ -102,6 +102,12 @@ Value create_pointer_type(Value value) {
 	return pointer_type;
 }
 
+Value create_optional_type(Value value) {
+	Value optional_type = create_value(OPTIONAL_TYPE_VALUE);
+	optional_type.value->optional_type.inner = value;
+	return optional_type;
+}
+
 Value create_array_type(Value value) {
 	Value array_type = create_value(ARRAY_TYPE_VALUE);
 	array_type.value->array_type.inner = value;
