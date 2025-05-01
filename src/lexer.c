@@ -78,12 +78,14 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "mod") == 0) return true;
 	else if (strcmp(identifier, "struct") == 0) return true;
 	else if (strcmp(identifier, "union") == 0) return true;
+	else if (strcmp(identifier, "tagged_union") == 0) return true;
 	else if (strcmp(identifier, "enum") == 0) return true;
 	else if (strcmp(identifier, "run") == 0) return true;
 	else if (strcmp(identifier, "break") == 0) return true;
 	else if (strcmp(identifier, "switch") == 0) return true;
 	else if (strcmp(identifier, "case") == 0) return true;
 	else if (strcmp(identifier, "op") == 0) return true;
+	else if (strcmp(identifier, "is") == 0) return true;
 	else return false;
 }
 
@@ -222,6 +224,10 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 
 				increment_position(lexer);
 				result = create_token(PERIOD_PERIOD, lexer);
+				break;
+			} else if (lexer->source[lexer->position] == '{') {
+				increment_position(lexer);
+				result = create_token(PERIOD_OPEN_CURLY_BRACE, lexer);
 				break;
 			}
 			result = create_token(PERIOD, lexer);
@@ -399,6 +405,8 @@ char *token_to_string(Token_Kind kind) {
 			return "..";
 		case PERIOD_PERIOD_PERIOD:
 			return "...";
+		case PERIOD_OPEN_CURLY_BRACE:
+			return ".{";
 		case MINUS_GREATER:
 			return "->";
 		case EQUALS_EQUALS:

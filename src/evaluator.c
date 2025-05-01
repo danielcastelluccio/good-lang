@@ -127,6 +127,17 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 
 			return true;
 		}
+		case TAGGED_UNION_TYPE_VALUE: {
+			if (type1->tagged_union_type.node != type2->tagged_union_type.node) return false;
+			if (arrlen(type1->tagged_union_type.items) != arrlen(type2->tagged_union_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(type1->tagged_union_type.items); i++) {
+				if (strcmp(type1->tagged_union_type.items[i].identifier, type2->tagged_union_type.items[i].identifier) != 0) return false;
+				if (!type_assignable(type1->tagged_union_type.items[i].type.value, type2->tagged_union_type.items[i].type.value)) return false;
+			}
+
+			return true;
+		}
 		case ENUM_TYPE_VALUE: {
 			if (arrlen(type1->enum_type.items) != arrlen(type2->enum_type.items)) return false;
 
@@ -284,6 +295,25 @@ Value evaluate(Context *context, Node *node) {
 			}
 
 			return create_value_data(union_value, node);
+		}
+		case TAGGED_UNION_TYPE_NODE: {
+			Tagged_Union_Type_Node tagged_union_type = node->tagged_union_type;
+
+			Value_Data *tagged_union_value = value_new(TAGGED_UNION_TYPE_VALUE);
+			tagged_union_value->tagged_union_type.node = node;
+			tagged_union_value->tagged_union_type.items = NULL;
+			Value_Data *enum_value = value_new(ENUM_TYPE_VALUE);
+			tagged_union_value->tagged_union_type.enum_ = enum_value;
+			for (long int i = 0; i < arrlen(tagged_union_type.items); i++) {
+				Tagged_Union_Item_Value item = {
+					.identifier = tagged_union_type.items[i].identifier,
+					.type = evaluate(context, tagged_union_type.items[i].type)
+				};
+				arrpush(tagged_union_value->tagged_union_type.items, item);
+				arrpush(enum_value->enum_type.items, tagged_union_type.items[i].identifier);
+			}
+
+			return create_value_data(tagged_union_value, node);
 		}
 		case ENUM_TYPE_NODE: {
 			Enum_Type_Node enum_type = node->enum_type;
@@ -491,7 +521,6 @@ Value evaluate(Context *context, Node *node) {
 
 					Value *saved_function_arguments = function_arguments;
 					function_arguments = arguments;
-					// Value result = evaluate(context, function.value->function.body);
 
 					jmp_buf prev_jmp;
 					memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));

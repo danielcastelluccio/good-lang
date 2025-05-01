@@ -94,13 +94,21 @@ static Node *parse_number(Lexer *lexer) {
 }
 
 static Node *parse_structure(Lexer *lexer) {
-	Token_Data token = lexer_consume_check(lexer, PERIOD);
-	lexer_consume_check(lexer, OPEN_CURLY_BRACE);
+	Token_Data token = lexer_consume_check(lexer, PERIOD_OPEN_CURLY_BRACE);
 
 	Node *structure = ast_new(STRUCT_NODE, token.location);
 
 	while (true) {
-		arrpush(structure->structure.values, parse_expression(lexer));
+		Structure_Item_Value item_value = {};
+
+		if (lexer_peek(lexer).kind == PERIOD) {
+			lexer_consume(lexer);
+			item_value.identifier = lexer_consume_check(lexer, IDENTIFIER).string;
+			lexer_consume_check(lexer, EQUALS);
+		}
+
+		item_value.node = parse_expression(lexer);
+		arrpush(structure->structure.values, item_value);
 
 		Token_Data token = lexer_peek(lexer);
 		if (token.kind == COMMA) {
@@ -153,6 +161,15 @@ static Node *parse_deoptional(Lexer *lexer, Node *node) {
 	Node *deoptional = ast_new(DEOPTIONAL_NODE, token.location);
 	deoptional->deoptional.node = node;
 	return deoptional;
+}
+
+static Node *parse_is(Lexer *lexer, Node *node) {
+	Token_Data token = lexer_consume(lexer);
+
+	Node *is = ast_new(IS_NODE, token.location);
+	is->is.node = node;
+	is->is.check = parse_expression(lexer);
+	return is;
 }
 
 static Node *parse_call(Lexer *lexer, Node *function) {
@@ -394,7 +411,7 @@ static Node *parse_union_type(Lexer *lexer) {
 			lexer_consume_check(lexer, COLON);
 			Node *type = parse_expression(lexer);
 
-			Struct_Item item = {
+			Union_Item item = {
 				.identifier = identifier.string,
 				.type = type
 			};
@@ -413,6 +430,39 @@ static Node *parse_union_type(Lexer *lexer) {
 	lexer_consume_check(lexer, CLOSED_CURLY_BRACE);
 
 	return union_;
+}
+
+static Node *parse_tagged_union_type(Lexer *lexer) {
+	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+
+	Node *tagged_union = ast_new(TAGGED_UNION_TYPE_NODE, first_token.location);
+
+	lexer_consume_check(lexer, OPEN_CURLY_BRACE);
+	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE) {
+		while (true) {
+			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+			lexer_consume_check(lexer, COLON);
+			Node *type = parse_expression(lexer);
+
+			Tagged_Union_Item item = {
+				.identifier = identifier.string,
+				.type = type
+			};
+			arrpush(tagged_union->tagged_union_type.items, item);
+
+			Token_Data token = lexer_peek(lexer);
+			if (token.kind == COMMA) {
+				lexer_consume(lexer);
+			} else if (token.kind == CLOSED_CURLY_BRACE) {
+				break;
+			} else {
+				handle_token_error_no_expected(token);
+			}
+		}
+	}
+	lexer_consume_check(lexer, CLOSED_CURLY_BRACE);
+
+	return tagged_union;
 }
 
 static Node *parse_enum_type(Lexer *lexer) {
@@ -823,7 +873,7 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_number(lexer);
 			break;
 		}
-		case PERIOD: {
+		case PERIOD_OPEN_CURLY_BRACE: {
 			result = parse_structure(lexer);
 			break;
 		}
@@ -840,6 +890,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (streq(value, "fn")) result = parse_function_or_function_type(lexer);
 			else if (streq(value, "struct")) result = parse_struct_type(lexer);
 			else if (streq(value, "union")) result = parse_union_type(lexer);
+			else if (streq(value, "tagged_union")) result = parse_tagged_union_type(lexer);
 			else if (streq(value, "enum")) result = parse_enum_type(lexer);
 			else if (streq(value, "if")) result = parse_if(lexer);
 			else if (streq(value, "while")) result = parse_while(lexer);
@@ -914,6 +965,13 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case QUESTION:
 				result = parse_deoptional(lexer, result);
+				break;
+			case KEYWORD:
+				if (streq(next.string, "is")) {
+					result = parse_is(lexer, result);
+				} else {
+					operating = false;
+				}
 				break;
 			default:
 				operating = false;

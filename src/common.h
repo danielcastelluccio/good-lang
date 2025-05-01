@@ -42,6 +42,7 @@ typedef enum {
 	FUNCTION_TYPE_VALUE,
 	STRUCT_TYPE_VALUE,
 	UNION_TYPE_VALUE,
+	TAGGED_UNION_TYPE_VALUE,
 	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	OPTIONAL_TYPE_VALUE,
@@ -118,6 +119,16 @@ typedef struct {
 } Union_Type_Value;
 
 typedef struct {
+	char *identifier;
+	Value type;
+} Tagged_Union_Item_Value;
+typedef struct {
+	Tagged_Union_Item_Value *items; // stb_ds
+	Node *node;
+	Value_Data *enum_;
+} Tagged_Union_Type_Value;
+
+typedef struct {
 	char **items; // stb_ds
 } Enum_Type_Value;
 
@@ -192,6 +203,7 @@ struct Value_Data {
 		Function_Value function;
 		Struct_Type_Value struct_type;
 		Union_Type_Value union_type;
+		Tagged_Union_Type_Value tagged_union_type;
 		Enum_Type_Value enum_type;
 		Module_Value module;
 		Function_Type_Value function_type;
@@ -334,8 +346,9 @@ typedef struct {
 } Deoptional_Data;
 
 typedef struct {
-	Value_Data *type;
-} Deoption_Present_Data;
+	Value value;
+	Value type;
+} Is_Data;
 
 typedef struct {
 	Value array_type;
@@ -385,7 +398,7 @@ typedef struct {
 		Structure_Access_Data structure_access;
 		Dereference_Data dereference;
 		Deoptional_Data deoptional;
-		Deoption_Present_Data deoption_present;
+		Is_Data is;
 		Array_Access_Data array_access;
 		Binary_Operator_Data binary_operator;
 		Break_Data break_;
@@ -406,6 +419,7 @@ typedef struct Context Context;
 
 typedef struct {
 	size_t (*size_fn)(Value_Data *, void *data);
+	size_t (*alignment_fn)(Value_Data *, void *data);
 	void (*build_fn)(Context context, Node *root, void *data);
 	size_t default_integer_size;
 	void *data;

@@ -11,6 +11,7 @@
 #include "ast.h"
 #include "common.h"
 #include "stb/ds.h"
+#include "util.h"
 
 #include "llvm_codegen.h"
 
@@ -101,11 +102,27 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 
 			size_t max_size = 0;
 			for (long int i = 0; i < arrlen(union_type.items); i++) {
-				size_t size = LLVMStoreSizeOfType(LLVMCreateTargetDataLayout(state->llvm_target), create_llvm_type(union_type.items[i].type.value, state));
+				size_t size = LLVMABISizeOfType(LLVMCreateTargetDataLayout(state->llvm_target), create_llvm_type(union_type.items[i].type.value, state));
 				if (size > max_size) max_size = size;
 			}
 
 			return LLVMArrayType(LLVMInt8Type(), max_size);
+		}
+		case TAGGED_UNION_TYPE_VALUE: {
+			Tagged_Union_Type_Value tagged_union_type = value->tagged_union_type;
+
+			size_t max_size = 0;
+			for (long int i = 0; i < arrlen(tagged_union_type.items); i++) {
+				size_t size = LLVMABISizeOfType(LLVMCreateTargetDataLayout(state->llvm_target), create_llvm_type(tagged_union_type.items[i].type.value, state));
+				if (size > max_size) max_size = size;
+			}
+
+			LLVMTypeRef items[2] = {
+				LLVMInt64Type(),
+				LLVMArrayType(LLVMInt8Type(), max_size)
+			};
+
+			return LLVMStructType(items, 2, false);
 		}
 		case ENUM_TYPE_VALUE: {
 			return LLVMInt64Type();
@@ -368,7 +385,7 @@ static LLVMValueRef generate_boolean(Node *node, State *state) {
 	return LLVMConstInt(LLVMInt1Type(), boolean.value, false);
 }
 
-static LLVMValueRef generate_struct(Node *node, State *state) {
+static LLVMValueRef generate_structure(Node *node, State *state) {
 	assert(node->kind == STRUCT_NODE);
 	Structure_Node structure = node->structure;
 
@@ -376,13 +393,13 @@ static LLVMValueRef generate_struct(Node *node, State *state) {
 
 	switch (type->tag) {
 		case STRUCT_TYPE_VALUE: {
-			LLVMValueRef structure_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
+			LLVMValueRef struct_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
 			for (long int i = 0; i < arrlen(type->struct_type.items); i++) {
-				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), structure_value, i, "");
-				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
+				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), struct_value, i, "");
+				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i].node, state), item_pointer);
 			}
 
-			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), structure_value, "");
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), struct_value, "");
 		}
 		case ARRAY_TYPE_VALUE: {
 			LLVMValueRef array_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
@@ -393,10 +410,29 @@ static LLVMValueRef generate_struct(Node *node, State *state) {
 				};
 
 				LLVMValueRef item_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(type, state), array_value, indices, 2, "");
-				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i], state), item_pointer);
+				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i].node, state), item_pointer);
 			}
 
 			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), array_value, "");
+		}
+		case TAGGED_UNION_TYPE_VALUE: {
+			LLVMValueRef tagged_union_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
+			char *identifier = structure.values[0].identifier;
+			Node *node = structure.values[0].node;
+			for (long int i = 0; i < arrlen(type->tagged_union_type.items); i++) {
+				if (streq(type->tagged_union_type.items[i].identifier, identifier)) {
+					LLVMValueRef tag_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), tagged_union_value, 0, "");
+					LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), i, false), tag_pointer);
+					LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), tagged_union_value, 1, "");
+					data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type->tagged_union_type.items[i].type.value, state), 0), "");
+					LLVMBuildStore(state->llvm_builder, generate_node(node, state), data_pointer);
+
+					return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), tagged_union_value, "");
+				}
+			}
+
+			assert(false);
+			return NULL;
 		}
 		default:
 			assert(false);
@@ -446,6 +482,32 @@ static LLVMValueRef generate_deoptional(Node *node, State *state) {
 	} else {
 		assert(false);
 	}
+}
+
+static LLVMValueRef generate_is(Node *node, State *state) {
+	assert(node->kind == IS_NODE);
+	Is_Node is = node->is;
+	Is_Data is_data = get_data(&state->context, node)->is;
+
+	LLVMValueRef value = generate_node(is.node, state);
+	LLVMValueRef value_tag = LLVMBuildExtractValue(state->llvm_builder, value, 0, "");
+
+	LLVMValueRef value_data = LLVMBuildExtractValue(state->llvm_builder, value, 1, "");
+	LLVMValueRef value_temp_storage = LLVMBuildAlloca(state->llvm_builder, LLVMTypeOf(value_data), "");
+	LLVMBuildStore(state->llvm_builder, value_data, value_temp_storage);
+
+	value_temp_storage = LLVMBuildBitCast(state->llvm_builder, value_temp_storage, create_llvm_type(create_pointer_type(is_data.type.value->optional_type.inner).value, state), "bitcast");
+
+	value_data = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(is_data.type.value->optional_type.inner.value, state), value_temp_storage, "");
+	LLVMValueRef check_value = generate_value(is_data.value.value, state);
+
+	LLVMTypeRef optional_llvm_type = create_llvm_type(is_data.type.value, state);
+	LLVMValueRef optional_ptr = LLVMBuildAlloca(state->llvm_builder, optional_llvm_type, "");
+	LLVMValueRef optional_present_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_ptr, 0, "");
+	LLVMValueRef optional_data_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_ptr, 1, "");
+	LLVMBuildStore(state->llvm_builder, LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value_tag, check_value, ""), optional_present_ptr);
+	LLVMBuildStore(state->llvm_builder, value_data, optional_data_ptr);
+	return LLVMBuildLoad2(state->llvm_builder, optional_llvm_type, optional_ptr, "");
 }
 
 static LLVMValueRef generate_structure_access(Node *node, State *state) {
@@ -734,17 +796,14 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 		}
 
 		LLVMValueRef condition = generate_node(if_.condition, state);
-		if (if_data.type.value->tag == POINTER_TYPE_VALUE) {
+		if (if_data.type.value->tag == OPTIONAL_TYPE_VALUE) {
 			LLVMValueRef optional_llvm_value = condition;
-			LLVMTypeRef optional_llvm_type = create_llvm_type(if_data.type.value->pointer_type.inner.value, state);
-			LLVMValueRef present_llvm_value = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 0, "");
-			LLVMValueRef value_llvm_value = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
 			If_Codegen_Data if_codegen_data = {
-				.binding = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(if_data.type.value->pointer_type.inner.value->optional_type.inner.value, state), value_llvm_value, "")
+				.binding = LLVMBuildExtractValue(state->llvm_builder, optional_llvm_value, 1, "")
 			};
 			hmput(state->ifs, data, if_codegen_data);
 
-			condition = LLVMBuildLoad2(state->llvm_builder, LLVMInt1Type(), present_llvm_value, "");
+			condition = LLVMBuildExtractValue(state->llvm_builder, optional_llvm_value, 0, "");
 		}
 
 		LLVMBasicBlockRef if_block = LLVMAppendBasicBlock(state->current_function, "");
@@ -945,7 +1004,7 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 		case BOOLEAN_NODE:
 			return generate_boolean(node, state);
 		case STRUCT_NODE:
-			return generate_struct(node, state);
+			return generate_structure(node, state);
 		case RUN_NODE:
 			return generate_run(node, state);
 		case REFERENCE_NODE:
@@ -954,6 +1013,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_dereference(node, state);
 		case DEOPTIONAL_NODE:
 			return generate_deoptional(node, state);
+		case IS_NODE:
+			return generate_is(node, state);
 		case STRUCTURE_ACCESS_NODE:
 			return generate_structure_access(node, state);
 		case ARRAY_ACCESS_NODE:
@@ -1090,6 +1151,8 @@ static LLVMValueRef generate_value(Value_Data *value, State *state) {
 			break;
 		case ENUM_TYPE_VALUE:
 			break;
+		case TAGGED_UNION_TYPE_VALUE:
+			break;
 		default:
 			assert(false);
 	}
@@ -1192,7 +1255,13 @@ typedef struct {
 size_t size_llvm(Value_Data *value, void *data) {
 	State state = { .llvm_target = ((LLVM_Data *) data)->target_machine };
 	LLVMTypeRef llvm_type = create_llvm_type(value, &state);
-	return LLVMStoreSizeOfType(LLVMCreateTargetDataLayout(state.llvm_target), llvm_type);
+	return LLVMABISizeOfType(LLVMCreateTargetDataLayout(state.llvm_target), llvm_type);
+}
+
+size_t alignment_llvm(Value_Data *value, void *data) {
+	State state = { .llvm_target = ((LLVM_Data *) data)->target_machine };
+	LLVMTypeRef llvm_type = create_llvm_type(value, &state);
+	return LLVMABIAlignmentOfType(LLVMCreateTargetDataLayout(state.llvm_target), llvm_type);
 }
 
 void build_llvm(Context context, Node *root, void *data) {
@@ -1254,6 +1323,7 @@ Codegen llvm_codegen() {
 
 	return (Codegen) {
 		.size_fn = size_llvm,
+		.alignment_fn = alignment_llvm,
 		.build_fn = build_llvm,
 		.default_integer_size = 64,
 		.data = data

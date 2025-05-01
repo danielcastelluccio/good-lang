@@ -5,6 +5,7 @@
 #include "ast.h"
 #include "common.h"
 #include "stb/ds.h"
+#include "util.h"
 
 #include "evaluator.h"
 
@@ -201,6 +202,18 @@ static int print_type(Value type, char *buffer) {
 				buffer += sprintf(buffer, "%s:", type.value->union_type.items[i].identifier);
 				buffer += print_type(type.value->union_type.items[i].type, buffer);
 				if (i < arrlen(type.value->union_type.items) - 1) {
+					buffer += sprintf(buffer, ",");
+				}
+			}
+			buffer += sprintf(buffer, "}");
+			break;
+		}
+		case TAGGED_UNION_TYPE_VALUE: {
+			buffer += sprintf(buffer, "tagged_union{");
+			for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
+				buffer += sprintf(buffer, "%s:", type.value->tagged_union_type.items[i].identifier);
+				buffer += print_type(type.value->tagged_union_type.items[i].type, buffer);
+				if (i < arrlen(type.value->tagged_union_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -953,6 +966,15 @@ static void process_union_type(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
+static void process_tagged_union_type(Context *context, Node *node) {
+	Tagged_Union_Type_Node tagged_union_type = node->tagged_union_type;
+	for (long int i = 0; i < arrlen(tagged_union_type.items); i++) {
+		process_node(context, tagged_union_type.items[i].type);
+	}
+
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
+}
+
 static void process_enum_type(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
@@ -1081,22 +1103,33 @@ static void process_structure(Context *context, Node *node) {
 		assert(false);
 	}
 
-	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE);
+	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE || wanted_type.value->tag == TAGGED_UNION_TYPE_VALUE);
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {
 		Value item_wanted_type = {};
 		switch (wanted_type.value->tag) {
 			case STRUCT_TYPE_VALUE:
+				// TODO: support specific item initialization
 				item_wanted_type = wanted_type.value->struct_type.items[i].type;
 				break;
 			case ARRAY_TYPE_VALUE:
 				item_wanted_type = wanted_type.value->array_type.inner;
 				break;
+			case TAGGED_UNION_TYPE_VALUE:
+				for (long int j = 0; j < arrlen(wanted_type.value->tagged_union_type.items); j++) {
+					if (streq(wanted_type.value->tagged_union_type.items[j].identifier, structure.values[i].identifier)) {
+						item_wanted_type = wanted_type.value->tagged_union_type.items[j].type;
+						break;
+					}
+				}
+				assert(item_wanted_type.value != NULL);
+				break;
 			default:
 				assert(false);
 		}
+
 		Temporary_Context temporary_context = { .wanted_type = item_wanted_type };
-		process_node_context(context, temporary_context, structure.values[i]);
+		process_node_context(context, temporary_context, structure.values[i].node);
 	}
 
 	Node_Data *data = node_data_new(STRUCT_NODE);
@@ -1196,6 +1229,31 @@ static void process_deoptional(Context *context, Node *node) {
 	} else {
 		set_type(context, node, inner_type);
 	}
+	set_data(context, node, data);
+}
+
+static void process_is(Context *context, Node *node) {
+	Is_Node is = node->is;
+
+	process_node(context, is.node);
+
+	Value type = get_type(context, is.node);
+	if (type.value->tag != TAGGED_UNION_TYPE_VALUE) {
+		char given_string[64] = {};
+		print_type_outer(type, given_string);
+		handle_semantic_error(node->location, "Expected tagged union, but got %s", given_string);
+	}
+
+	Temporary_Context temporary_context = { .wanted_type = (Value) { .value = type.value->tagged_union_type.enum_ } };
+	process_node_context(context, temporary_context, is.check);
+	Value check_value = evaluate(context, is.check);
+
+	Value tagged_type = type.value->tagged_union_type.items[check_value.value->enum_.value].type;
+	set_type(context, node, create_optional_type(tagged_type));
+
+	Node_Data *data = node_data_new(IS_NODE);
+	data->is.value = check_value;
+	data->is.type = create_optional_type(tagged_type);
 	set_data(context, node, data);
 }
 
@@ -1489,14 +1547,14 @@ static void process_if(Context *context, Node *node) {
 
 	process_node(context, if_.condition);
 	Value condition_type = get_type(context, if_.condition);
-	if (condition_type.value->tag != POINTER_TYPE_VALUE && condition_type.value->tag != BOOLEAN_TYPE_VALUE) {
-		reset_node(context, if_.condition);
+	// if (condition_type.value->tag != POINTER_TYPE_VALUE && condition_type.value->tag != BOOLEAN_TYPE_VALUE) {
+	// 	reset_node(context, if_.condition);
 
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, if_.condition);
+	// 	Temporary_Context temporary_context = { .want_pointer = true };
+	// 	process_node_context(context, temporary_context, if_.condition);
 
-		condition_type = get_type(context, if_.condition);
-	}
+	// 	condition_type = get_type(context, if_.condition);
+	// }
 
 	Node_Data *data = node_data_new(IF_NODE);
 	data->if_.type = condition_type;
@@ -1513,7 +1571,7 @@ static void process_if(Context *context, Node *node) {
 	arrpush(context->scopes, (Scope) { .node = node });
 	if (arrlen(if_.bindings) > 0) {
 		Binding binding = {
-			.type = condition_type.value->pointer_type.inner.value->optional_type.inner,
+			.type = condition_type.value->optional_type.inner,
 			.index = 0
 		};
 
@@ -1943,6 +2001,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_deoptional(context, node);
 			break;
 		}
+		case IS_NODE: {
+			process_is(context, node);
+			break;
+		}
 		case STRUCTURE_ACCESS_NODE: {
 			process_structure_access(context, node);
 			break;
@@ -2017,6 +2079,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case UNION_TYPE_NODE: {
 			process_union_type(context, node);
+			break;
+		}
+		case TAGGED_UNION_TYPE_NODE: {
+			process_tagged_union_type(context, node);
 			break;
 		}
 		case ENUM_TYPE_NODE: {

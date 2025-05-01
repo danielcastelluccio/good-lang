@@ -59,6 +59,11 @@ typedef struct {
 	Union_Item *items; // stb_ds
 } Union_Type_Node;
 
+typedef Identifier_Type_Pair Tagged_Union_Item;
+typedef struct {
+	Tagged_Union_Item *items; // stb_ds
+} Tagged_Union_Type_Node;
+
 typedef struct {
 	char **items; // stb_ds
 } Enum_Type_Node;
@@ -87,7 +92,11 @@ typedef struct {
 } Boolean_Node;
 
 typedef struct {
-	Node **values; // stb_ds
+	char *identifier;
+	Node *node;
+} Structure_Item_Value;
+typedef struct {
+	Structure_Item_Value *values; // stb_ds
 } Structure_Node;
 
 typedef struct {
@@ -124,11 +133,8 @@ typedef struct {
 
 typedef struct {
 	Node *node;
-} Deoption_Node;
-
-typedef struct {
-	Node *node;
-} Deoption_Present_Node;
+	Node *check;
+} Is_Node;
 
 typedef struct {
 	Node *structure;
@@ -236,6 +242,7 @@ typedef enum {
 	FUNCTION_TYPE_NODE,
 	STRUCT_TYPE_NODE,
 	UNION_TYPE_NODE,
+	TAGGED_UNION_TYPE_NODE,
 	ENUM_TYPE_NODE,
 	STRING_NODE,
 	CHARACTER_NODE,
@@ -250,6 +257,7 @@ typedef enum {
 	REFERENCE_NODE,
 	DEREFERENCE_NODE,
 	DEOPTIONAL_NODE,
+	IS_NODE,
 	STRUCTURE_ACCESS_NODE,
 	ARRAY_ACCESS_NODE,
 	RETURN_NODE,
@@ -277,6 +285,7 @@ struct Node {
 		Function_Type_Node function_type;
 		Struct_Type_Node struct_type;
 		Union_Type_Node union_type;
+		Tagged_Union_Type_Node tagged_union_type;
 		Enum_Type_Node enum_type;
 		String_Node string;
 		Character_Node character;
@@ -290,8 +299,7 @@ struct Node {
 		Reference_Node reference;
 		Dereference_Node dereference;
 		Deoptional_Node deoptional;
-		Deoption_Node deoption;
-		Deoption_Present_Node deoption_present;
+		Is_Node is;
 		Structure_Access_Node structure_access;
 		Array_Access_Node array_access;
 		Return_Node return_;
