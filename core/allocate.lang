@@ -1,0 +1,39 @@
+def c = import("c.lang");
+
+def Allocate_Mode = enum {
+	ALLOC,
+	REALLOC,
+	FREE
+};
+def Allocate_Fn = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void;
+
+def Allocator = struct {
+	allocate_fn: Allocate_Fn;
+
+	op new = fn (allocator: ^self, static T: type): ^T {
+		allocator.allocate_fn(ALLOC, null, run size_of(T))
+	};
+
+	op realloc = fn (allocator: ^self, ptr: ^void, size: uint): ^void {
+		allocator.allocate_fn(REALLOC, ptr, size)
+	};
+};
+
+def C_Allocator = struct {
+	;
+	op allocator = fn (_: ^self): Allocator {
+		return .{ c_allocator_allocate };
+	};
+};
+
+def c_allocator = fn (): C_Allocator {
+	return .{};
+};
+
+def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void {
+	switch mode {
+		case ALLOC => c::malloc(size)
+		case REALLOC => c::realloc(ptr, size)
+		case FREE => { c::free(ptr); null }
+	}
+};

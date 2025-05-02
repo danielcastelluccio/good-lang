@@ -80,6 +80,9 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case TYPE_TYPE_VALUE: {
 			return true;
 		}
+		case VOID_TYPE_VALUE: {
+			return true;
+		}
 		case INTEGER_VALUE: {
 			return value1->integer.value == value2->integer.value;
 		}
@@ -485,7 +488,7 @@ Value evaluate(Context *context, Node *node) {
 						char *cwd = getcwd(NULL, PATH_MAX);
 						source = malloc(strlen(cwd) + 15);
 						strcpy(source, cwd);
-						strcat(source, "/core/std.lang");
+						strcat(source, "/core/core.lang");
 					} else {
 						size_t slash_index = 0;
 						for (size_t i = 0; i < strlen(node->location.path); i++) {
@@ -494,11 +497,10 @@ Value evaluate(Context *context, Node *node) {
 							}
 						}
 
-						node->location.path[slash_index + 1] = '\0';
-
 						char *old_source = source;
 						source = malloc(slash_index + strlen(source) + 2);
-						strcpy(source, node->location.path);
+						strncpy(source, node->location.path, slash_index + 1);
+						source[slash_index + 1] = '\0';
 						strcat(source, old_source);
 					}
 

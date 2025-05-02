@@ -251,6 +251,7 @@ static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Valu
 		if (j >= arrlen(function_type->function_type.arguments) || !function_type->function_type.arguments[j].static_) {
 			arrpush(llvm_arguments, generate_node(arguments[i], state));
 		}
+		j++;
 	}
 
 	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
@@ -1041,7 +1042,6 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	assert(node->kind == FOR_NODE);
 	For_Node for_ = node->for_;
 	Node_Data *for_data = get_data(&state->context, node);
-	LLVMTypeRef item_type = create_llvm_type(for_data->for_.type.value->pointer.value, state);
 
 	LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
@@ -1050,8 +1050,8 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	LLVMValueRef i = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
 	LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), i);
 	LLVMValueRef item = generate_node(for_.item, state);
-	LLVMValueRef item_len = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), LLVMBuildStructGEP2(state->llvm_builder, item_type, item, 0, ""), "");
-	LLVMValueRef item_ptr = LLVMBuildLoad2(state->llvm_builder, LLVMPointerType(LLVMVoidType(), 0), LLVMBuildStructGEP2(state->llvm_builder, item_type, item, 1, ""), "");
+	LLVMValueRef item_len = LLVMBuildExtractValue(state->llvm_builder, item, 0, "");
+	LLVMValueRef item_ptr = LLVMBuildExtractValue(state->llvm_builder, item, 1, "");
 	LLVMBuildBr(state->llvm_builder, check_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
 	LLVMValueRef i_value = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, "");
@@ -1063,7 +1063,7 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 		LLVMConstInt(LLVMInt64Type(), 0, false),
 		i_value
 	};
-	LLVMTypeRef element_type = create_llvm_type(for_data->for_.type.value->pointer.value->array_view_type.inner.value, state);
+	LLVMTypeRef element_type = create_llvm_type(for_data->for_.type.value->array_view_type.inner.value, state);
 	LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, "");
 
 	LLVMValueRef *bindings = NULL;
@@ -1256,16 +1256,8 @@ static LLVMValueRef generate_value(Value_Data *value, State *state) {
 		case ENUM_VALUE:
 			result = generate_enum(value, state);
 			break;
-		case STRUCT_TYPE_VALUE:
-			break;
-		case UNION_TYPE_VALUE:
-			break;
-		case ENUM_TYPE_VALUE:
-			break;
-		case TAGGED_UNION_TYPE_VALUE:
-			break;
 		default:
-			assert(false);
+			break;
 	}
 
 	hmput(state->generated_cache, value, result);

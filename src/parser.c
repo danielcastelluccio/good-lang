@@ -60,6 +60,18 @@ static Node *parse_separated_statement(Lexer *lexer) {
 	return parse_statement(lexer);
 }
 
+static Node *parse_separated_statement_or_nothing(Lexer *lexer) {
+	if (lexer_peek(lexer).kind == CLOSED_CURLY_BRACE || lexer_peek(lexer).kind == CLOSED_PARENTHESIS || lexer_peek(lexer).kind == SEMICOLON) {
+		return NULL;
+	}
+
+	if (lexer_peek(lexer).kind != OPEN_CURLY_BRACE) {
+		lexer_consume_check(lexer, EQUALS_GREATER);
+	}
+
+	return parse_statement(lexer);
+}
+
 static Node *parse_string(Lexer *lexer) {
 	Token_Data token = lexer_consume_check(lexer, STRING);
 
@@ -98,25 +110,27 @@ static Node *parse_structure(Lexer *lexer) {
 
 	Node *structure = ast_new(STRUCT_NODE, token.location);
 
-	while (true) {
-		Structure_Item_Value item_value = {};
+	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE) {
+		while (true) {
+			Structure_Item_Value item_value = {};
 
-		if (lexer_peek(lexer).kind == PERIOD) {
-			lexer_consume(lexer);
-			item_value.identifier = lexer_consume_check(lexer, IDENTIFIER).string;
-			lexer_consume_check(lexer, EQUALS);
-		}
+			if (lexer_peek(lexer).kind == PERIOD) {
+				lexer_consume(lexer);
+				item_value.identifier = lexer_consume_check(lexer, IDENTIFIER).string;
+				lexer_consume_check(lexer, EQUALS);
+			}
 
-		item_value.node = parse_expression(lexer);
-		arrpush(structure->structure.values, item_value);
+			item_value.node = parse_expression(lexer);
+			arrpush(structure->structure.values, item_value);
 
-		Token_Data token = lexer_peek(lexer);
-		if (token.kind == COMMA) {
-			lexer_consume(lexer);
-		} else if (token.kind == CLOSED_CURLY_BRACE) {
-			break;
-		} else {
-			handle_token_error_no_expected(token);
+			Token_Data token = lexer_peek(lexer);
+			if (token.kind == COMMA) {
+				lexer_consume(lexer);
+			} else if (token.kind == CLOSED_CURLY_BRACE) {
+				break;
+			} else {
+				handle_token_error_no_expected(token);
+			}
 		}
 	}
 
@@ -376,7 +390,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 
 	lexer_consume_check(lexer, OPEN_CURLY_BRACE);
-	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE) {
+	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE && lexer_peek(lexer).kind != SEMICOLON) {
 		while (true) {
 			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 			lexer_consume_check(lexer, COLON);
@@ -664,16 +678,20 @@ static Node *parse_switch(Lexer *lexer) {
 
 	switch_->switch_.value = parse_expression(lexer);
 
+	lexer_consume_check(lexer, OPEN_CURLY_BRACE);
+
 	while (lexer_peek_check_keyword(lexer, "case")) {
 		lexer_consume_check(lexer, KEYWORD);
 		Node *check = parse_expression(lexer);
 
 		Switch_Case switch_case = {
 			.check = check,
-			.body = parse_expression(lexer)
+			.body = parse_separated_statement(lexer)
 		};
 		arrpush(switch_->switch_.cases, switch_case);
 	}
+
+	lexer_consume_check(lexer, CLOSED_CURLY_BRACE);
 
 	return switch_;
 }
@@ -853,7 +871,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		lexer_consume(lexer);
 		extern_name = lexer_consume_check(lexer, STRING).string;
 	} else {
-		body = parse_separated_statement(lexer);
+		body = parse_separated_statement_or_nothing(lexer);
 	}
 
 	if (body != NULL || extern_) {

@@ -1,2 +1,3 @@
+def allocate = import("allocate.lang");
 def c = import("c.lang");
 def list = import("list.lang");

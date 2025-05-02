@@ -1,10 +1,12 @@
+def allocate = import("allocate.lang");
 def c = import("c.lang");
 
 def List = fn (static T: type): type {
 	return struct {
 		items: ^[_]T,
 		length: uint,
-		capacity: uint;
+		capacity: uint,
+		allocator: allocate::Allocator;
 
 		op add = fn (list: ^self, element: T) {
 			if list.length == list.capacity {
@@ -14,7 +16,7 @@ def List = fn (static T: type): type {
 
 				list.capacity = list.capacity * 2;
 
-				list.items = c::realloc(list.items, list.capacity * run size_of(T));
+				list.items = list.allocator:realloc(list.items, list.capacity * run size_of(T));
 			};
 
 			list.items[list.length] = element;
@@ -23,8 +25,8 @@ def List = fn (static T: type): type {
 
 		op to_array_view = fn (list: ^self): []T {
 			var result: []T;
-			result.ptr = list.items;
 			result.len = list.length;
+			result.ptr = list.items;
 			return result;
 		};
 
@@ -38,6 +40,6 @@ def List = fn (static T: type): type {
 	}
 };
 
-def new = fn (static T: type): List(T) {
-	.{ null, 0, 0 }
+def new = fn (static T: type, allocator: allocate::Allocator): List(T) {
+	.{ null, 0, 0, allocator }
 };

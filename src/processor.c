@@ -338,7 +338,6 @@ static bool pattern_match(Node *node, Value value, Context *context, char **infe
 					Typed_Value previous_value = shget(*match_result, inferred_arguments[i]);
 					if (previous_value.value.value != NULL) {
 						if (!value_equal(previous_value.value.value, value.value)) {
-							__builtin_trap();
 							return false;
 						}
 					}
@@ -410,16 +409,60 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	};
 }
 
-static Value *get_initial_argument_types(Context *context, Node **arguments) {
+static bool uses_inferred_arguments(Node *node, char **inferred_arguments) {
+	switch (node->kind) {
+		case POINTER_NODE: {
+			return uses_inferred_arguments(node->pointer.inner, inferred_arguments);
+		}
+		case ARRAY_TYPE_NODE: {
+			return uses_inferred_arguments(node->array_type.inner, inferred_arguments) || uses_inferred_arguments(node->array_type.size, inferred_arguments);
+		}
+		case CALL_NODE: {
+			for (long int i = 0; i < arrlen(node->call.arguments); i++) {
+				if (uses_inferred_arguments(node->call.arguments[i], inferred_arguments)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		case IDENTIFIER_NODE: {
+			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
+				if (strcmp(inferred_arguments[i], node->identifier.value) == 0) {
+					return true;
+				}
+			}
+			return false;
+		}
+		default:
+			return false;
+	}
+}
+
+static Value *get_initial_argument_types(Context *context, Value function_type, Node **arguments) {
+	char **inferred_arguments = NULL;
+	Node *function_type_node = function_type.value->function_type.node;
+	if (function_type_node != NULL) {
+		Function_Argument *function_node_arguments = function_type_node->function_type.arguments;
+
+		for (long int k = 0; k < arrlen(function_node_arguments); k++) {
+			if (function_node_arguments[k].inferred) {
+				arrpush(inferred_arguments, function_node_arguments[k].identifier);
+			}
+		}
+	}
+
 	Value *argument_types = NULL;
 	for (long int i = 0; i < arrlen(arguments); i++) {
 		Value type = get_type(context, arguments[i]);
 		if (type.value == NULL) {
 			Temporary_Context temporary_context = { .wanted_type = NULL };
-			process_node_context(context, temporary_context, arguments[i]);
 
-			type = get_type(context, arguments[i]);
-			reset_node(context, arguments[i]);
+			if (uses_inferred_arguments(arguments[i], inferred_arguments)) {
+				process_node_context(context, temporary_context, arguments[i]);
+
+				type = get_type(context, arguments[i]);
+				reset_node(context, arguments[i]);
+			}
 		}
 
 		arrpush(argument_types, type);
@@ -435,6 +478,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	bool returned_parent = context->returned;
 
 	context->compile_only = false;
+	context->returned = false;
 
 	bool static_argument = false;
 	for (long int i = 0; i < arrlen(function.function_type->function_type.arguments); i++) {
@@ -470,7 +514,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 			if (function_type_value.value->function_type.return_type.value != NULL) {
 				Value returned_type = get_type(context, function.body);
 
-				if (!value_equal(function_type_value.value->function_type.return_type.value, returned_type.value) && !context->returned) {
+				if (!type_assignable(function_type_value.value->function_type.return_type.value, returned_type.value) && !context->returned) {
 					handle_type_error(node, function_type_value.value->function_type.return_type, returned_type);
 				}
 			}
@@ -543,9 +587,11 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 
 					Node *argument = function_node_arguments[k].type;
 					Value argument_value = argument_types[k - arrlen(inferred_arguments)];
-					if (!pattern_match(argument, argument_value, context, inferred_arguments, &result)) {
-						pattern_match_fail = true;
-					};
+					if (argument_value.value != NULL) {
+						if (!pattern_match(argument, argument_value, context, inferred_arguments, &result)) {
+							pattern_match_fail = true;
+						}
+					}
 				}
 
 				for (long int k = 0; k < arrlen(function_node_arguments); k++) {
@@ -706,7 +752,7 @@ static void process_call(Context *context, Node *node) {
 	process_node(context, call.function);
 	Value function_type = get_type(context, call.function);
 
-	Value *argument_types = get_initial_argument_types(context, call.arguments);
+	Value *argument_types = get_initial_argument_types(context, function_type, call.arguments);
 
 	Node_Data *data = get_data(context, node);
 	if (data == NULL) {
@@ -769,7 +815,7 @@ static void process_call_method(Context *context, Node *node) {
 		handle_semantic_error(node->location, "Method '%s' not found", call_method.method);
 	}
 
-	Value *argument_types = get_initial_argument_types(context, arguments);
+	Value *argument_types = get_initial_argument_types(context, custom_operator_function.function_type, arguments);
 	custom_operator_function.function = process_call_generic(context, node, NULL, (Value) { .value = custom_operator_function.function }, arguments, argument_types, &custom_operator_function.function_type).value;
 
 	Node_Data *data = node_data_new(CALL_METHOD_NODE);
@@ -1432,7 +1478,7 @@ static void process_array_access(Context *context, Node *node) {
 		arrpush(arguments, array_access.array);
 		arrpush(arguments, array_access.index);
 
-		Value *argument_types = get_initial_argument_types(context, arguments);
+		Value *argument_types = get_initial_argument_types(context, custom_operator_function.function_type, arguments);
 		custom_operator_function.function = process_call_generic(context, node, NULL, (Value) { .value = custom_operator_function.function }, arguments, argument_types, &custom_operator_function.function_type).value;
 
 		item_type = custom_operator_function.function_type.value->function_type.return_type.value->pointer_type.inner;
@@ -1707,7 +1753,8 @@ static void process_switch(Context *context, Node *node) {
 
 		bool saved_previous_returned = context->returned;
 		context->returned = NULL;
-		process_node(context, switch_case.body);
+		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+		process_node_context(context, temporary_context, switch_case.body);
 
 		bool saved_case_returned = context->returned;
 
@@ -1811,16 +1858,8 @@ static void process_for(Context *context, Node *node) {
 
 	process_node(context, for_.item);
 	Value item_type = get_type(context, for_.item);
-	if (item_type.value->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, for_.item);
 
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, for_.item);
-
-		item_type = get_type(context, for_.item);
-	}
-
-	Value element_type = item_type.value->pointer.value->array_view_type.inner;
+	Value element_type = item_type.value->array_view_type.inner;
 	Binding binding = {
 		.type = element_type,
 		.index = 0
@@ -1947,6 +1986,8 @@ static void process_function_type(Context *context, Node *node) {
 	Node_Data *data = node_data_new(FUNCTION_TYPE_NODE);
 	data->function_type.value.value = function_type_value;
 	set_data(context, node, data);
+
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
 static void process_pointer(Context *context, Node *node) {
