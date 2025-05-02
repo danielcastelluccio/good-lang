@@ -8,7 +8,7 @@ def List = fn (static T: type): type {
 		capacity: uint,
 		allocator: allocate::Allocator;
 
-		op add = fn (list: ^self, element: T) {
+		op add = fn (list: ^self, element: T): void!allocate::Allocate_Error {
 			if list.length == list.capacity {
 				if list.capacity == 0 {
 					list.capacity = 1;
@@ -16,11 +16,15 @@ def List = fn (static T: type): type {
 
 				list.capacity = list.capacity * 2;
 
-				list.items = list.allocator:realloc(list.items, list.capacity * run size_of(T));
+				list.items = list.allocator:realloc(list.items, list.capacity * run size_of(T)) catch |err| {
+					return_error err;
+				};
 			};
 
 			list.items[list.length] = element;
 			list.length = list.length + 1;
+
+			return_success .{};
 		};
 
 		op to_array_view = fn (list: ^self): []T {

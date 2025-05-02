@@ -116,6 +116,9 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 
 			return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
 		}
+		case RESULT_TYPE_VALUE: {
+			return type_assignable(type1->result_type.value.value, type2->result_type.value.value) && type_assignable(type1->result_type.error.value, type2->result_type.error.value);
+		}
 		case ARRAY_VIEW_TYPE_VALUE: {
 			return type_assignable(type1->array_view_type.inner.value, type2->array_view_type.inner.value);
 		}
@@ -175,6 +178,9 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 			return true;
 		}
 		case BOOLEAN_TYPE_VALUE: {
+			return true;
+		}
+		case VOID_TYPE_VALUE: {
 			return true;
 		}
 		case INTEGER_TYPE_VALUE: {

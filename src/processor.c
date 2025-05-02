@@ -522,8 +522,9 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 			if (function_type_value.value->function_type.return_type.value != NULL) {
 				Value returned_type = get_type(context, function.body);
 
-				if (!type_assignable(function_type_value.value->function_type.return_type.value, returned_type.value) && !context->returned) {
-					handle_type_error(node, function_type_value.value->function_type.return_type, returned_type);
+				Value wanted_return_type = function_type_value.value->function_type.return_type;
+				if (!type_assignable(wanted_return_type.value, returned_type.value) && !context->returned) {
+					handle_type_error(node, wanted_return_type, returned_type);
 				}
 			}
 			(void) arrpop(context->scopes);
@@ -942,14 +943,18 @@ static void process_identifier(Context *context, Node *node) {
 						type = context->temporary_context.wanted_type;
 					}
 				}
-			} else if (strcmp(identifier.value, "self") == 0) {
-				data->identifier.kind = IDENTIFIER_SELF;
-				type = create_value(TYPE_TYPE_VALUE);
-			} else if (strcmp(identifier.value, "_") == 0) {
-				data->identifier.kind = IDENTIFIER_UNDERSCORE;
-				type = create_value(NONE_VALUE);
-			} else {
-				lookup_result = lookup(context, identifier.value);
+			}
+
+			if (type.value == NULL) {
+				if (strcmp(identifier.value, "self") == 0) {
+					data->identifier.kind = IDENTIFIER_SELF;
+					type = create_value(TYPE_TYPE_VALUE);
+				} else if (strcmp(identifier.value, "_") == 0) {
+					data->identifier.kind = IDENTIFIER_UNDERSCORE;
+					type = create_value(NONE_VALUE);
+				} else {
+					lookup_result = lookup(context, identifier.value);
+				}
 			}
 		}
 
@@ -1196,7 +1201,7 @@ static void process_structure(Context *context, Node *node) {
 		assert(false);
 	}
 
-	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE || wanted_type.value->tag == TAGGED_UNION_TYPE_VALUE);
+	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE || wanted_type.value->tag == TAGGED_UNION_TYPE_VALUE || wanted_type.value->tag == VOID_TYPE_VALUE);
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {
 		Value item_wanted_type = {};
@@ -1655,7 +1660,16 @@ static void process_return(Context *context, Node *node) {
 		Value return_type = get_data(context, current_function->function.function_type)->function_type.value.value->function_type.return_type;
 		Value wanted_type = return_type;
 		if (wanted_type.value->tag == RESULT_TYPE_VALUE) {
-			wanted_type = return_.error ? wanted_type.value->result_type.error : wanted_type.value->result_type.value;
+			switch (return_.type) {
+				case RETURN_SUCCESS:
+					wanted_type = wanted_type.value->result_type.value;
+					break;
+				case RETURN_ERROR:
+					wanted_type = wanted_type.value->result_type.error;
+					break;
+				default:
+					break;
+			}
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = wanted_type };

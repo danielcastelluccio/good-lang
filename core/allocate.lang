@@ -1,11 +1,15 @@
 def c = import("c.lang");
 
+def Allocate_Error = enum {
+	OUT_OF_MEMORY
+};
+
 def Allocate_Mode = enum {
 	ALLOC,
 	REALLOC,
 	FREE
 };
-def Allocate_Fn = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void;
+def Allocate_Fn = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void!Allocate_Error;
 
 def Allocator = struct {
 	allocate_fn: Allocate_Fn;
@@ -14,7 +18,7 @@ def Allocator = struct {
 		allocator.allocate_fn(ALLOC, null, run size_of(T))
 	};
 
-	op realloc = fn (allocator: ^self, ptr: ^void, size: uint): ^void {
+	op realloc = fn (allocator: ^self, ptr: ^void, size: uint): ^void!Allocate_Error {
 		allocator.allocate_fn(REALLOC, ptr, size)
 	};
 };
@@ -30,10 +34,10 @@ def c_allocator = fn (): C_Allocator {
 	return .{};
 };
 
-def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void {
-	switch mode {
+def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void!Allocate_Error {
+	return_success switch mode {
 		case ALLOC => c::malloc(size)
 		case REALLOC => c::realloc(ptr, size)
 		case FREE => { c::free(ptr); null }
-	}
+	};
 };

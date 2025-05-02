@@ -68,6 +68,8 @@ static bool is_keyword(char *identifier) {
 	if (strcmp(identifier, "fn") == 0) return true;
 	else if (strcmp(identifier, "def") == 0) return true;
 	else if (strcmp(identifier, "return") == 0) return true;
+	else if (strcmp(identifier, "return_success") == 0) return true;
+	else if (strcmp(identifier, "return_error") == 0) return true;
 	else if (strcmp(identifier, "extern") == 0) return true;
 	else if (strcmp(identifier, "var") == 0) return true;
 	else if (strcmp(identifier, "if") == 0) return true;
@@ -86,7 +88,6 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "case") == 0) return true;
 	else if (strcmp(identifier, "op") == 0) return true;
 	else if (strcmp(identifier, "is") == 0) return true;
-	else if (strcmp(identifier, "error") == 0) return true;
 	else if (strcmp(identifier, "catch") == 0) return true;
 	else return false;
 }

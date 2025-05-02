@@ -186,6 +186,7 @@ static Node *parse_result(Lexer *lexer, Node *node) {
 	return result;
 }
 
+
 static Node *parse_is(Lexer *lexer, Node *node) {
 	Token_Data token = lexer_consume(lexer);
 
@@ -548,14 +549,11 @@ static Node *parse_define(Lexer *lexer) {
 	return define;
 }
 
-static Node *parse_return(Lexer *lexer) {
+static Node *parse_return(Lexer *lexer, Return_Type return_type) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 
 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
-	if (lexer_peek_check_keyword(lexer, "error")) {
-		return_->return_.error = true;
-		lexer_consume(lexer);
-	}
+	return_->return_.type = return_type;
 	return_->return_.value = parse_expression_or_nothing(lexer);
 
 	return return_;
@@ -719,9 +717,19 @@ static Node *parse_pointer(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, CARET);
 
 	Node *pointer = ast_new(POINTER_NODE, first_token.location);
-	pointer->pointer.inner = parse_expression(lexer);
+	Node *inner = parse_expression(lexer);
 
-	return pointer;
+	Node *result;
+	if (inner->kind == RESULT_NODE) {
+		pointer->pointer.inner = inner->result.value;
+		inner->result.value = pointer;
+		result = inner;
+	} else {
+		pointer->pointer.inner = inner;
+		result = pointer;
+	}
+
+	return result;
 }
 
 static Node *parse_optional(Lexer *lexer) {
@@ -932,7 +940,9 @@ static Node *parse_expression(Lexer *lexer) {
 		case KEYWORD: {
 			char *value = token.string;
 			if      (streq(value, "def")) result = parse_define(lexer);
-			else if (streq(value, "return")) result = parse_return(lexer);
+			else if (streq(value, "return")) result = parse_return(lexer, RETURN_STANDARD);
+			else if (streq(value, "return_success")) result = parse_return(lexer, RETURN_SUCCESS);
+			else if (streq(value, "return_error")) result = parse_return(lexer, RETURN_ERROR);
 			else if (streq(value, "var")) result = parse_variable(lexer);
 			else if (streq(value, "break")) result = parse_break(lexer);
 			else if (streq(value, "fn")) result = parse_function_or_function_type(lexer);

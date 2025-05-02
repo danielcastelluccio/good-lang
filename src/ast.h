@@ -157,9 +157,15 @@ typedef struct {
 	Node *index;
 } Array_Access_Node;
 
+typedef enum {
+	RETURN_STANDARD,
+	RETURN_SUCCESS,
+	RETURN_ERROR
+} Return_Type;
+
 typedef struct {
 	Node *value;
-	bool error;
+	Return_Type type;
 } Return_Node;
 
 typedef struct {

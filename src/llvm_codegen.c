@@ -459,6 +459,10 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 			assert(false);
 			return NULL;
 		}
+		case VOID_TYPE_VALUE: {
+			LLVMValueRef void_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), void_value, "");
+		}
 		default:
 			assert(false);
 	}
@@ -800,21 +804,23 @@ static LLVMValueRef generate_return(Node *node, State *state) {
 	Return_Data return_data = get_data(&state->context, node)->return_;
 
 	if (return_data.type.value != NULL) {
-		if (return_data.type.value->tag == RESULT_TYPE_VALUE) {
+		if (return_data.type.value->tag == RESULT_TYPE_VALUE && return_.type != RETURN_STANDARD) {
 			LLVMTypeRef return_type = create_llvm_type(return_data.type.value, state);
 			LLVMValueRef result_value = LLVMBuildAlloca(state->llvm_builder, return_type, "");
 
 			LLVMValueRef tag_pointer = LLVMBuildStructGEP2(state->llvm_builder, return_type, result_value, 0, "");
 			LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, return_type, result_value, 1, "");
 
-			if (return_.error) {
-				LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 1, false), tag_pointer);
+			if (return_.type == RETURN_SUCCESS) {
+				LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), tag_pointer);
 				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.error.value, state), 0), "");
 				LLVMBuildStore(state->llvm_builder, generate_node(return_.value, state), data_pointer);
-			} else {
-				LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), tag_pointer);
+			} else if (return_.type == RETURN_ERROR) {
+				LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 1, false), tag_pointer);
 				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.value.value, state), 0), "");
 				LLVMBuildStore(state->llvm_builder, generate_node(return_.value, state), data_pointer);
+			} else {
+				assert(false);
 			}
 
 			LLVMBuildRet(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, return_type, result_value, ""));
