@@ -17,14 +17,14 @@ def List = fn (static T: type): type {
 				list.capacity = list.capacity * 2;
 
 				list.items = list.allocator:realloc(list.items, list.capacity * run size_of(T)) catch |err| {
-					return_error err;
+					return!! err;
 				};
 			};
 
 			list.items[list.length] = element;
 			list.length = list.length + 1;
 
-			return_success .{};
+			return! .{};
 		};
 
 		op to_array_view = fn (list: ^self): []T {

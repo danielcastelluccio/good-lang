@@ -35,7 +35,7 @@ def c_allocator = fn (): C_Allocator {
 };
 
 def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void!Allocate_Error {
-	return_success switch mode {
+	return! switch mode {
 		case ALLOC => c::malloc(size)
 		case REALLOC => c::realloc(ptr, size)
 		case FREE => { c::free(ptr); null }

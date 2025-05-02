@@ -813,11 +813,11 @@ static LLVMValueRef generate_return(Node *node, State *state) {
 
 			if (return_.type == RETURN_SUCCESS) {
 				LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), tag_pointer);
-				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.error.value, state), 0), "");
+				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.value.value, state), 0), "");
 				LLVMBuildStore(state->llvm_builder, generate_node(return_.value, state), data_pointer);
 			} else if (return_.type == RETURN_ERROR) {
 				LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 1, false), tag_pointer);
-				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.value.value, state), 0), "");
+				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.error.value, state), 0), "");
 				LLVMBuildStore(state->llvm_builder, generate_node(return_.value, state), data_pointer);
 			} else {
 				assert(false);

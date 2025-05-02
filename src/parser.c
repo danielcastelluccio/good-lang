@@ -549,11 +549,23 @@ static Node *parse_define(Lexer *lexer) {
 	return define;
 }
 
-static Node *parse_return(Lexer *lexer, Return_Type return_type) {
+static Node *parse_return(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 
 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
-	return_->return_.type = return_type;
+	return_->return_.type = RETURN_STANDARD;
+	if (lexer_peek(lexer).kind == EXCLAMATION) {
+		return_->return_.type = RETURN_SUCCESS;
+
+		lexer_consume(lexer);
+
+		if (lexer_peek(lexer).kind == EXCLAMATION) {
+			return_->return_.type = RETURN_ERROR;
+
+			lexer_consume(lexer);
+		}
+	}
+
 	return_->return_.value = parse_expression_or_nothing(lexer);
 
 	return return_;
@@ -940,9 +952,7 @@ static Node *parse_expression(Lexer *lexer) {
 		case KEYWORD: {
 			char *value = token.string;
 			if      (streq(value, "def")) result = parse_define(lexer);
-			else if (streq(value, "return")) result = parse_return(lexer, RETURN_STANDARD);
-			else if (streq(value, "return_success")) result = parse_return(lexer, RETURN_SUCCESS);
-			else if (streq(value, "return_error")) result = parse_return(lexer, RETURN_ERROR);
+			else if (streq(value, "return")) result = parse_return(lexer);
 			else if (streq(value, "var")) result = parse_variable(lexer);
 			else if (streq(value, "break")) result = parse_break(lexer);
 			else if (streq(value, "fn")) result = parse_function_or_function_type(lexer);

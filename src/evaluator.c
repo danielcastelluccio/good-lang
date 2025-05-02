@@ -580,14 +580,21 @@ Value evaluate(Context *context, Node *node) {
 			Value left_value = evaluate(context, binary_operator.left);
 			Value right_value = evaluate(context, binary_operator.right);
 
-			if (value_equal(left_value.value, right_value.value)) {
-				Value_Data *true_value = value_new(BOOLEAN_VALUE);
-				true_value->boolean.value = true;
-				return create_value_data(true_value, node);
-			} else {
-				Value_Data *false_value = value_new(BOOLEAN_VALUE);
-				false_value->boolean.value = false;
-				return create_value_data(false_value, node);
+			switch (binary_operator.operator) {
+				case OPERATOR_EQUALS: {
+					if (value_equal(left_value.value, right_value.value)) {
+						Value_Data *true_value = value_new(BOOLEAN_VALUE);
+						true_value->boolean.value = true;
+						return create_value_data(true_value, node);
+					} else {
+						Value_Data *false_value = value_new(BOOLEAN_VALUE);
+						false_value->boolean.value = false;
+						return create_value_data(false_value, node);
+					}
+				}
+				default:
+					assert(false);
+					return (Value) {};
 			}
 		}
 		case BLOCK_NODE: {
