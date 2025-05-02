@@ -897,6 +897,20 @@ static LLVMValueRef generate_if(Node *node, State *state) {
 			hmput(state->ifs, data, if_codegen_data);
 
 			condition = LLVMBuildExtractValue(state->llvm_builder, optional_llvm_value, 0, "");
+		} else if (if_data.type.value->tag == RESULT_TYPE_VALUE) {
+			LLVMValueRef result_llvm_value = condition;
+
+			LLVMValueRef value_data = LLVMBuildExtractValue(state->llvm_builder, result_llvm_value, 1, "");
+			LLVMValueRef value_data_ptr = LLVMBuildAlloca(state->llvm_builder, LLVMPointerType(LLVMTypeOf(value_data), 0), "");
+			LLVMBuildStore(state->llvm_builder, value_data, value_data_ptr);
+
+			LLVMTypeRef result_value_type = create_llvm_type(if_data.type.value->result_type.value.value, state);
+			If_Codegen_Data if_codegen_data = {
+				.binding = LLVMBuildLoad2(state->llvm_builder, result_value_type, LLVMBuildBitCast(state->llvm_builder, value_data_ptr, LLVMPointerType(result_value_type, 0), ""), "")
+			};
+			hmput(state->ifs, data, if_codegen_data);
+
+			condition = LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, LLVMBuildExtractValue(state->llvm_builder, result_llvm_value, 0, ""), LLVMConstInt(LLVMInt64Type(), 0, false), "");
 		}
 
 		LLVMBasicBlockRef if_block = LLVMAppendBasicBlock(state->current_function, "");

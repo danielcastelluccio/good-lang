@@ -1616,7 +1616,7 @@ static void process_if(Context *context, Node *node) {
 	arrpush(context->scopes, (Scope) { .node = node });
 	if (arrlen(if_.bindings) > 0) {
 		Binding binding = {
-			.type = condition_type.value->optional_type.inner,
+			.type = condition_type.value->tag == RESULT_TYPE_VALUE ? condition_type.value->result_type.value : condition_type.value->optional_type.inner,
 			.index = 0
 		};
 
