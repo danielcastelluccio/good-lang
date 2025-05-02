@@ -46,6 +46,7 @@ typedef enum {
 	ENUM_TYPE_VALUE,
 	POINTER_TYPE_VALUE,
 	OPTIONAL_TYPE_VALUE,
+	RESULT_TYPE_VALUE,
 	ARRAY_TYPE_VALUE,
 	ARRAY_VIEW_TYPE_VALUE,
 	INTEGER_TYPE_VALUE,
@@ -78,6 +79,7 @@ typedef struct {
 	Scope *scopes;
 	size_t static_argument_id;
 	bool compile_only;
+	bool returned;
 	char *extern_name;
 	Node *node;
 } Function_Value;
@@ -172,6 +174,11 @@ typedef struct {
 } Optional_Type_Value;
 
 typedef struct {
+	Value value;
+	Value error;
+} Result_Type_Value;
+
+typedef struct {
 	Value inner;
 	Value size;
 } Array_Type_Value;
@@ -209,6 +216,7 @@ struct Value_Data {
 		Function_Type_Value function_type;
 		Pointer_Type_Value pointer_type;
 		Optional_Type_Value optional_type;
+		Result_Type_Value result_type;
 		Array_Type_Value array_type;
 		Array_View_Type_Value array_view_type;
 		Integer_Type_Value integer_type;
@@ -312,6 +320,7 @@ typedef struct {
 
 typedef struct {
 	bool compile_only;
+	bool returned;
 } Function_Data;
 
 typedef struct {
@@ -351,6 +360,10 @@ typedef struct {
 } Is_Data;
 
 typedef struct {
+	Value type;
+} Catch_Data;
+
+typedef struct {
 	Value array_type;
 	Value item_type;
 	Custom_Operator_Function custom_operator_function;
@@ -367,6 +380,10 @@ typedef struct {
 	Value type;
 	bool has_type;
 } While_Data;
+
+typedef struct {
+	Value type;
+} Return_Data;
 
 typedef struct {
 	Value type;
@@ -399,8 +416,10 @@ typedef struct {
 		Dereference_Data dereference;
 		Deoptional_Data deoptional;
 		Is_Data is;
+		Catch_Data catch;
 		Array_Access_Data array_access;
 		Binary_Operator_Data binary_operator;
+		Return_Data return_;
 		Break_Data break_;
 		While_Data while_;
 		For_Data for_;

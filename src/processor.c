@@ -168,6 +168,12 @@ static int print_type(Value type, char *buffer) {
 			buffer += print_type(type.value->optional_type.inner, buffer);
 			break;
 		}
+		case RESULT_TYPE_VALUE: {
+			buffer += print_type(type.value->result_type.value, buffer);
+			buffer += sprintf(buffer, "!");
+			buffer += print_type(type.value->result_type.error, buffer);
+			break;
+		}
 		case ARRAY_TYPE_VALUE: {
 			buffer += sprintf(buffer, "[");
 			if (type.value->array_type.size.value != NULL) {
@@ -475,6 +481,9 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	Node_Data *data = node_data_new(FUNCTION_NODE);
 	if (context->compile_only) {
 		data->function.compile_only = true;
+	}
+	if (context->returned) {
+		data->function.returned = true;
 	}
 	set_data(context, node, data);
 
@@ -1257,6 +1266,33 @@ static void process_is(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_catch(Context *context, Node *node) {
+	Catch_Node catch = node->catch;
+
+	process_node(context, catch.value);
+
+	Value result_type = get_type(context, catch.value);
+
+	bool saved_returned = context->returned;
+	arrpush(context->scopes, (Scope) { .node = node });
+	if (catch.binding != NULL) {
+		Binding binding = {
+			.type = result_type.value->result_type.error,
+			.index = 0
+		};
+
+		shput(arrlast(context->scopes).bindings, catch.binding, binding);
+	}
+	process_node(context, catch.error);
+	(void) arrpop(context->scopes);
+	context->returned = saved_returned;
+
+	set_type(context, node, result_type.value->result_type.value);
+	Node_Data *data = node_data_new(CATCH_NODE);
+	data->catch.type = result_type;
+	set_data(context, node, data);
+}
+
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
@@ -1521,6 +1557,7 @@ static void process_return(Context *context, Node *node) {
 	
 	context->returned = true;
 
+	Node_Data *data = node_data_new(RETURN_NODE);
 	if (return_.value != NULL) {
 		Node *current_function = NULL;
 		for (long int i = 0; i < arrlen(context->scopes); i++) {
@@ -1532,14 +1569,22 @@ static void process_return(Context *context, Node *node) {
 		}
 
 		Value return_type = get_data(context, current_function->function.function_type)->function_type.value.value->function_type.return_type;
-		Temporary_Context temporary_context = { .wanted_type = return_type };
+		Value wanted_type = return_type;
+		if (wanted_type.value->tag == RESULT_TYPE_VALUE) {
+			wanted_type = return_.error ? wanted_type.value->result_type.error : wanted_type.value->result_type.value;
+		}
+
+		Temporary_Context temporary_context = { .wanted_type = wanted_type };
 		process_node_context(context, temporary_context, return_.value);
 
 		Value type = get_type(context, return_.value);
-		if (!type_assignable(return_type.value, type.value)) {
-			handle_type_error(node, return_type, type);
+		if (!type_assignable(wanted_type.value, type.value)) {
+			handle_type_error(node, wanted_type, type);
 		}
+
+		data->return_.type = return_type;
 	}
+	set_data(context, node, data);
 }
 
 static void process_if(Context *context, Node *node) {
@@ -1918,6 +1963,14 @@ static void process_optional(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
+static void process_result(Context *context, Node *node) {
+	Result_Node result = node->result;
+	process_node(context, result.value);
+	process_node(context, result.error);
+
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
+}
+
 static void process_array_type(Context *context, Node *node) {
 	Array_Type_Node array_type = node->array_type;
 	process_node(context, array_type.inner);
@@ -2005,6 +2058,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_is(context, node);
 			break;
 		}
+		case CATCH_NODE: {
+			process_catch(context, node);
+			break;
+		}
 		case STRUCTURE_ACCESS_NODE: {
 			process_structure_access(context, node);
 			break;
@@ -2063,6 +2120,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case OPTIONAL_NODE: {
 			process_optional(context, node);
+			break;
+		}
+		case RESULT_NODE: {
+			process_result(context, node);
 			break;
 		}
 		case ARRAY_TYPE_NODE: {

@@ -163,6 +163,15 @@ static Node *parse_deoptional(Lexer *lexer, Node *node) {
 	return deoptional;
 }
 
+static Node *parse_result(Lexer *lexer, Node *node) {
+	Token_Data token = lexer_consume(lexer);
+
+	Node *result = ast_new(RESULT_NODE, token.location);
+	result->result.value = node;
+	result->result.error = parse_expression(lexer);
+	return result;
+}
+
 static Node *parse_is(Lexer *lexer, Node *node) {
 	Token_Data token = lexer_consume(lexer);
 
@@ -170,6 +179,23 @@ static Node *parse_is(Lexer *lexer, Node *node) {
 	is->is.node = node;
 	is->is.check = parse_expression(lexer);
 	return is;
+}
+
+static Node *parse_catch(Lexer *lexer, Node *node) {
+	Token_Data token = lexer_consume(lexer);
+
+	Node *catch = ast_new(CATCH_NODE, token.location);
+	catch->catch.value = node;
+
+	if (lexer_peek(lexer).kind == VERTICAL_BAR) {
+		lexer_consume(lexer);
+		catch->catch.binding = lexer_consume_check(lexer, IDENTIFIER).string;
+		lexer_consume_check(lexer, VERTICAL_BAR);
+	}
+
+	catch->catch.error = parse_expression(lexer);
+
+	return catch;
 }
 
 static Node *parse_call(Lexer *lexer, Node *function) {
@@ -512,6 +538,10 @@ static Node *parse_return(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 
 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
+	if (lexer_peek_check_keyword(lexer, "error")) {
+		return_->return_.error = true;
+		lexer_consume(lexer);
+	}
 	return_->return_.value = parse_expression_or_nothing(lexer);
 
 	return return_;
@@ -966,9 +996,14 @@ static Node *parse_expression(Lexer *lexer) {
 			case QUESTION:
 				result = parse_deoptional(lexer, result);
 				break;
+			case EXCLAMATION:
+				result = parse_result(lexer, result);
+				break;
 			case KEYWORD:
 				if (streq(next.string, "is")) {
 					result = parse_is(lexer, result);
+				} else if (streq(next.string, "catch")) {
+					result = parse_catch(lexer, result);
 				} else {
 					operating = false;
 				}

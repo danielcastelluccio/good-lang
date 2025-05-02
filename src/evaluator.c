@@ -228,6 +228,7 @@ Value evaluate(Context *context, Node *node) {
 			}
 
 			function_value->function.compile_only = get_data(context, node)->function.compile_only;
+			function_value->function.returned = get_data(context, node)->function.returned;
 			function_value->function.static_argument_id = context->static_argument_id;
 			function_value->function.extern_name = function.extern_name;
 			function_value->function.node = node;
@@ -355,6 +356,14 @@ Value evaluate(Context *context, Node *node) {
 			Value_Data *optional_type_value = value_new(OPTIONAL_TYPE_VALUE);
 			optional_type_value->optional_type.inner = evaluate(context, optional.inner);
 			return create_value_data(optional_type_value, node);
+		}
+		case RESULT_NODE: {
+			Result_Node result = node->result;
+
+			Value_Data *result_type_value = value_new(RESULT_TYPE_VALUE);
+			result_type_value->result_type.value = evaluate(context, result.value);
+			result_type_value->result_type.error = evaluate(context, result.error);
+			return create_value_data(result_type_value, node);
 		}
 		case ARRAY_TYPE_NODE: {
 			Array_Type_Node array_type = node->array_type;
