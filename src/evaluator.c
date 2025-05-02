@@ -459,6 +459,13 @@ Value evaluate(Context *context, Node *node) {
 			}
 			break;
 		}
+		case BOOLEAN_NODE: {
+			Boolean_Node boolean = node->boolean;
+
+			Value_Data *value = value_new(BOOLEAN_VALUE);
+			value->integer.value = boolean.value;
+			return create_value_data(value, node);
+		}
 		case CALL_NODE: {
 			Call_Node call = node->call;
 			Call_Data call_data = get_data(context, node)->call;
@@ -524,6 +531,12 @@ Value evaluate(Context *context, Node *node) {
 				case SIZE_OF_FUNCTION_VALUE: {
 					Value_Data *value = value_new(INTEGER_VALUE);
 					value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
+					return create_value_data(value, node);
+				}
+				case INTN_FUNCTION_VALUE: {
+					Value_Data *value = value_new(INTEGER_TYPE_VALUE);
+					value->integer_type.signed_ = arguments[0].value->boolean.value;
+					value->integer_type.size = arguments[1].value->integer.value;
 					return create_value_data(value, node);
 				}
 				case FUNCTION_VALUE: {

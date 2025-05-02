@@ -1,5 +1,16 @@
-def printf = fn (s: ^[_]byte, ...) extern "printf";
+def char = intn(true, C_CHAR_SIZE);
+def unsigned_char = intn(false, C_CHAR_SIZE);
+def short = intn(true, C_SHORT_SIZE);
+def unsigned_short = intn(false, C_SHORT_SIZE);
+def int = intn(true, C_INT_SIZE);
+def unsigned_int = intn(false, C_INT_SIZE);
+def long = intn(true, C_LONG_SIZE);
+def unsigned_long = intn(false, C_LONG_SIZE);
 
-def malloc = fn (size: uint): ^void extern "malloc";
+def size_t = unsigned_long;
+
+def printf = fn (s: ^[_]byte, ...): int extern "printf";
+
+def malloc = fn (size: size_t): ^void extern "malloc";
 def free = fn (ptr: ^void) extern "free";
-def realloc = fn (ptr: ^void, size: uint): ^void extern "realloc";
+def realloc = fn (ptr: ^void, size: size_t): ^void extern "realloc";

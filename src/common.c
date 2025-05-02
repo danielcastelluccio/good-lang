@@ -132,3 +132,9 @@ Value create_float_type(size_t size) {
 	float_type.value->float_type.size = size;
 	return float_type;
 }
+
+Value create_integer(size_t value) {
+	Value integer = create_value(INTEGER_VALUE);
+	integer.value->integer.value = value;
+	return integer;
+}

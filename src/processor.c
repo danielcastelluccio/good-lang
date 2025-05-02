@@ -144,6 +144,14 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 			buffer += sprintf(buffer, ")");
 			break;
 		}
+		case NUMBER_NODE: {
+			buffer += sprintf(buffer, "%li", type_node->number.integer);
+			break;
+		}
+		case BOOLEAN_NODE: {
+			buffer += sprintf(buffer, "%s", type_node->boolean.value ? "true" : "false");
+			break;
+		}
 		default:
 			assert(false);
 	}
@@ -833,28 +841,28 @@ static void process_identifier(Context *context, Node *node) {
 
 	Value value = {};
 	Value type = {};
-	if (identifier.module == NULL && strcmp(identifier.value, "void") == 0) {
+	if (identifier.module == NULL && streq(identifier.value, "void")) {
 		value = create_value(VOID_TYPE_VALUE);
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && strcmp(identifier.value, "type") == 0) {
+	} else if (identifier.module == NULL && streq(identifier.value, "type")) {
 		value = create_value(TYPE_TYPE_VALUE);
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && strcmp(identifier.value, "byte") == 0) {
+	} else if (identifier.module == NULL && streq(identifier.value, "byte")) {
 		value.value = value_new(BYTE_TYPE_VALUE);
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && strcmp(identifier.value, "uint") == 0) {
+	} else if (identifier.module == NULL && streq(identifier.value, "uint")) {
 		value.value = value_new(INTEGER_TYPE_VALUE);
 		value.value->integer_type.size = 64;
 		value.value->integer_type.signed_ = false;
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && strcmp(identifier.value, "flt64") == 0) {
+	} else if (identifier.module == NULL && streq(identifier.value, "flt64")) {
 		value.value = value_new(FLOAT_TYPE_VALUE);
 		value.value->float_type.size = 64;
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && strcmp(identifier.value, "bool") == 0) {
+	} else if (identifier.module == NULL && streq(identifier.value, "bool")) {
 		value.value = value_new(BOOLEAN_TYPE_VALUE);
 		type = create_value(TYPE_TYPE_VALUE);
-	} else if (strcmp(identifier.value, "import") == 0) {
+	} else if (streq(identifier.value, "import")) {
 		value = create_value(IMPORT_FUNCTION_VALUE);
 
 		type.value = value_new(FUNCTION_TYPE_VALUE);
@@ -864,7 +872,7 @@ static void process_identifier(Context *context, Node *node) {
 		};
 		arrpush(type.value->function_type.arguments, argument);
 		type.value->function_type.return_type = (Value) { .value = value_new(MODULE_TYPE_VALUE) };
-	} else if (strcmp(identifier.value, "size_of") == 0) {
+	} else if (streq(identifier.value, "size_of")) {
 		value = create_value(SIZE_OF_FUNCTION_VALUE);
 
 		type.value = value_new(FUNCTION_TYPE_VALUE);
@@ -874,6 +882,36 @@ static void process_identifier(Context *context, Node *node) {
 		};
 		arrpush(type.value->function_type.arguments, argument);
 		type.value->function_type.return_type = create_integer_type(false, 64);
+	} else if (streq(identifier.value, "intn")) {
+		value = create_value(INTN_FUNCTION_VALUE);
+
+		type.value = value_new(FUNCTION_TYPE_VALUE);
+
+		Function_Argument_Value argument1 = {
+			.identifier = "",
+			.type = create_value(BOOLEAN_TYPE_VALUE)
+		};
+		arrpush(type.value->function_type.arguments, argument1);
+
+		Function_Argument_Value argument2 = {
+			.identifier = "",
+			.type = create_integer_type(false, 8)
+		};
+		arrpush(type.value->function_type.arguments, argument2);
+
+		type.value->function_type.return_type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+	} else if (streq(identifier.value, "C_CHAR_SIZE")) {
+		value = create_integer(context->codegen.c_size_fn(C_CHAR_SIZE));
+		type = create_integer_type(false, 8);
+	} else if (streq(identifier.value, "C_SHORT_SIZE")) {
+		value = create_integer(context->codegen.c_size_fn(C_SHORT_SIZE));
+		type = create_integer_type(false, 8);
+	} else if (streq(identifier.value, "C_INT_SIZE")) {
+		value = create_integer(context->codegen.c_size_fn(C_INT_SIZE));
+		type = create_integer_type(false, 8);
+	} else if (streq(identifier.value, "C_LONG_SIZE")) {
+		value = create_integer(context->codegen.c_size_fn(C_LONG_SIZE));
+		type = create_integer_type(false, 8);
 	} else {
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;

@@ -65,7 +65,8 @@ typedef enum {
 	ARRAY_VIEW_VALUE,
 	MODULE_TYPE_VALUE,
 	IMPORT_FUNCTION_VALUE,
-	SIZE_OF_FUNCTION_VALUE
+	SIZE_OF_FUNCTION_VALUE,
+	INTN_FUNCTION_VALUE
 } Value_Tag;
 
 typedef struct {
@@ -436,8 +437,16 @@ typedef struct { char *key; Node *value; } *Define_Operators;
 
 typedef struct Context Context;
 
+typedef enum {
+	C_CHAR_SIZE,
+	C_SHORT_SIZE,
+	C_INT_SIZE,
+	C_LONG_SIZE
+} C_Size_Fn_Input;
+
 typedef struct {
 	size_t (*size_fn)(Value_Data *, void *data);
+	size_t (*c_size_fn)(C_Size_Fn_Input input);
 	size_t (*alignment_fn)(Value_Data *, void *data);
 	void (*build_fn)(Context context, Node *root, void *data);
 	size_t default_integer_size;
@@ -487,5 +496,7 @@ Value create_array_type(Value value);
 Value create_array_view_type(Value value);
 Value create_integer_type(bool signed_, size_t size);
 Value create_float_type(size_t size);
+
+Value create_integer(size_t value);
 
 #endif

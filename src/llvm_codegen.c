@@ -1361,6 +1361,20 @@ size_t size_llvm(Value_Data *value, void *data) {
 	return LLVMABISizeOfType(LLVMCreateTargetDataLayout(state.llvm_target), llvm_type);
 }
 
+size_t c_size_llvm(C_Size_Fn_Input input) {
+	switch (input) {
+		case C_CHAR_SIZE:
+			return 8;
+		case C_SHORT_SIZE:
+			return 16;
+		case C_INT_SIZE:
+			return 32;
+		case C_LONG_SIZE:
+			return 64;
+	}
+	return 0;
+}
+
 size_t alignment_llvm(Value_Data *value, void *data) {
 	State state = { .llvm_target = ((LLVM_Data *) data)->target_machine };
 	LLVMTypeRef llvm_type = create_llvm_type(value, &state);
@@ -1426,6 +1440,7 @@ Codegen llvm_codegen() {
 
 	return (Codegen) {
 		.size_fn = size_llvm,
+		.c_size_fn = c_size_llvm,
 		.alignment_fn = alignment_llvm,
 		.build_fn = build_llvm,
 		.default_integer_size = 64,
