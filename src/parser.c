@@ -208,7 +208,7 @@ static Node *parse_catch(Lexer *lexer, Node *node) {
 		lexer_consume_check(lexer, VERTICAL_BAR);
 	}
 
-	catch->catch.error = parse_expression(lexer);
+	catch->catch.error = parse_statement(lexer);
 
 	return catch;
 }
@@ -1012,6 +1012,10 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case OPEN_BRACE: {
 			result = parse_array_or_array_view_type(lexer);
+			break;
+		}
+		case EXCLAMATION: {
+			result = parse_result(lexer, NULL);
 			break;
 		}
 		default:

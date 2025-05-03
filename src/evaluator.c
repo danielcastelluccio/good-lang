@@ -280,7 +280,9 @@ Value evaluate(Context *context, Node *node) {
 			Result_Node result = node->result;
 
 			Value_Data *result_type_value = value_new(RESULT_TYPE_VALUE);
-			result_type_value->result_type.value = evaluate(context, result.value);
+			if (result.value != NULL) {
+				result_type_value->result_type.value = evaluate(context, result.value);
+			}
 			result_type_value->result_type.error = evaluate(context, result.error);
 			return create_value_data(result_type_value, node);
 		}

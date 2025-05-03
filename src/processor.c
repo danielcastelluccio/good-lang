@@ -177,7 +177,9 @@ static int print_type(Value type, char *buffer) {
 			break;
 		}
 		case RESULT_TYPE_VALUE: {
-			buffer += print_type(type.value->result_type.value, buffer);
+			if (type.value->result_type.value.value != NULL) {
+				buffer += print_type(type.value->result_type.value, buffer);
+			}
 			buffer += sprintf(buffer, "!");
 			buffer += print_type(type.value->result_type.error, buffer);
 			break;
@@ -308,6 +310,13 @@ static void process_block(Context *context, Node *node) {
 				set_type(context, node, get_type(context, statement));
 			} else {
 				process_node(context, statement);
+
+				Value type = get_type(context, statement);
+				if (type.value != NULL) {
+					char type_string[64] = {};
+					print_type_outer(type, type_string);
+					handle_semantic_error(statement->location, "Unused value %s", type_string);
+				}
 			}
 		}
 	}
@@ -973,6 +982,11 @@ static void process_identifier(Context *context, Node *node) {
 				} else if (strcmp(identifier.value, "_") == 0) {
 					data->identifier.kind = IDENTIFIER_UNDERSCORE;
 					type = create_value(NONE_VALUE);
+
+					if (context->temporary_context.assign_value != NULL) {
+						process_node(context, context->temporary_context.assign_value);
+						data->identifier.assign_value = context->temporary_context.assign_value;
+					}
 				} else {
 					lookup_result = lookup(context, identifier.value);
 				}
@@ -1691,18 +1705,19 @@ static void process_return(Context *context, Node *node) {
 	
 	context->returned = true;
 
+	Node *current_function = NULL;
+	for (long int i = 0; i < arrlen(context->scopes); i++) {
+		Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
+		if (scope_node->kind == FUNCTION_NODE) {
+			current_function = scope_node;
+			break;
+		}
+	}
+
+	Value return_type = get_data(context, current_function->function.function_type)->function_type.value.value->function_type.return_type;
+
 	Node_Data *data = node_data_new(RETURN_NODE);
 	if (return_.value != NULL) {
-		Node *current_function = NULL;
-		for (long int i = 0; i < arrlen(context->scopes); i++) {
-			Node *scope_node = context->scopes[arrlen(context->scopes) - i - 1].node;
-			if (scope_node->kind == FUNCTION_NODE) {
-				current_function = scope_node;
-				break;
-			}
-		}
-
-		Value return_type = get_data(context, current_function->function.function_type)->function_type.value.value->function_type.return_type;
 		Value wanted_type = return_type;
 		if (wanted_type.value->tag == RESULT_TYPE_VALUE) {
 			switch (return_.type) {
@@ -1724,9 +1739,9 @@ static void process_return(Context *context, Node *node) {
 		if (!type_assignable(wanted_type.value, type.value)) {
 			handle_type_error(node, wanted_type, type);
 		}
-
-		data->return_.type = return_type;
 	}
+
+	data->return_.type = return_type;
 	set_data(context, node, data);
 }
 
@@ -2103,7 +2118,9 @@ static void process_optional(Context *context, Node *node) {
 
 static void process_result(Context *context, Node *node) {
 	Result_Node result = node->result;
-	process_node(context, result.value);
+	if (result.value != NULL) {
+		process_node(context, result.value);
+	}
 	process_node(context, result.error);
 
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
