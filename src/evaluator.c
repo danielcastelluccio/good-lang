@@ -37,6 +37,12 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 
 			return value_equal(value1->array_type.inner.value, value2->array_type.inner.value);
 		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			return value_equal(value1->array_view_type.inner.value, value2->array_view_type.inner.value);
+		}
+		case RESULT_TYPE_VALUE: {
+			return value_equal(value1->result_type.value.value, value2->result_type.value.value) && value_equal(value1->result_type.error.value, value2->result_type.error.value);
+		}
 		case INTEGER_TYPE_VALUE: {
 			return value1->integer_type.signed_ == value2->integer_type.signed_ && value1->integer_type.size == value2->integer_type.size;
 		}
@@ -77,10 +83,10 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 
 			return true;
 		}
+		case VOID_TYPE_VALUE:
+		case BYTE_TYPE_VALUE:
+		case BOOLEAN_TYPE_VALUE:
 		case TYPE_TYPE_VALUE: {
-			return true;
-		}
-		case VOID_TYPE_VALUE: {
 			return true;
 		}
 		case INTEGER_VALUE: {
@@ -92,106 +98,7 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 }
 
 bool type_assignable(Value_Data *type1, Value_Data *type2) {
-	if (type2 == NULL) return false;
-	if (type1->tag != type2->tag) return false;
-
-	switch (type1->tag) {
-		case POINTER_TYPE_VALUE: {
-			if (type1->pointer_type.inner.value->tag == VOID_TYPE_VALUE || type2->pointer_type.inner.value->tag == VOID_TYPE_VALUE) {
-				return true;
-			}
-
-			return type_assignable(type1->pointer_type.inner.value, type2->pointer_type.inner.value);
-		}
-		case OPTIONAL_TYPE_VALUE: {
-			return type_assignable(type1->optional_type.inner.value, type2->optional_type.inner.value);
-		}
-		case ARRAY_TYPE_VALUE: {
-			if ((type1->array_type.size.value == NULL && type2->array_type.size.value != NULL)) return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
-			if (type1->array_type.size.value != NULL && type2->array_type.size.value == NULL) return false;
-
-			if (type1->array_type.size.value != NULL) {
-				if (!type_assignable(type1->array_type.size.value, type2->array_type.size.value)) return false;
-			}
-
-			return type_assignable(type1->array_type.inner.value, type2->array_type.inner.value);
-		}
-		case RESULT_TYPE_VALUE: {
-			return type_assignable(type1->result_type.value.value, type2->result_type.value.value) && type_assignable(type1->result_type.error.value, type2->result_type.error.value);
-		}
-		case ARRAY_VIEW_TYPE_VALUE: {
-			return type_assignable(type1->array_view_type.inner.value, type2->array_view_type.inner.value);
-		}
-		case STRUCT_TYPE_VALUE: {
-			if (type1->struct_type.node != type2->struct_type.node) return false;
-			if (arrlen(type1->struct_type.items) != arrlen(type2->struct_type.items)) return false;
-
-			for (long int i = 0; i < arrlen(type1->struct_type.items); i++) {
-				if (strcmp(type1->struct_type.items[i].identifier, type2->struct_type.items[i].identifier) != 0) return false;
-				if (!type_assignable(type1->struct_type.items[i].type.value, type2->struct_type.items[i].type.value)) return false;
-			}
-
-			return true;
-		}
-		case TAGGED_UNION_TYPE_VALUE: {
-			if (type1->tagged_union_type.node != type2->tagged_union_type.node) return false;
-			if (arrlen(type1->tagged_union_type.items) != arrlen(type2->tagged_union_type.items)) return false;
-
-			for (long int i = 0; i < arrlen(type1->tagged_union_type.items); i++) {
-				if (strcmp(type1->tagged_union_type.items[i].identifier, type2->tagged_union_type.items[i].identifier) != 0) return false;
-				if (!type_assignable(type1->tagged_union_type.items[i].type.value, type2->tagged_union_type.items[i].type.value)) return false;
-			}
-
-			return true;
-		}
-		case ENUM_TYPE_VALUE: {
-			if (arrlen(type1->enum_type.items) != arrlen(type2->enum_type.items)) return false;
-
-			for (long int i = 0; i < arrlen(type1->enum_type.items); i++) {
-				if (strcmp(type1->enum_type.items[i], type2->enum_type.items[i]) != 0) return false;
-			}
-
-			return true;
-		}
-		case FUNCTION_TYPE_VALUE: {
-			if (arrlen(type1->function_type.arguments) != arrlen(type2->function_type.arguments)) return false;
-			for (long int i = 0; i < arrlen(type1->function_type.arguments); i++) {
-				if (strcmp(type1->function_type.arguments[i].identifier, type2->function_type.arguments[i].identifier) != 0) return false;
-				if (!type_assignable(type1->function_type.arguments[i].type.value, type2->function_type.arguments[i].type.value)) return false;
-			}
-
-			if ((type1->function_type.return_type.value == NULL && type2->function_type.return_type.value != NULL) || (type1->function_type.return_type.value != NULL && type2->function_type.return_type.value == NULL)) return false;
-			if (type1->function_type.return_type.value != NULL) {
-				if (!type_assignable(type1->function_type.return_type.value, type2->function_type.return_type.value)) {
-					return false;
-				}
-			}
-
-			if (type1->function_type.variadic != type2->function_type.variadic) return false;
-
-			return true;
-		}
-		case BYTE_TYPE_VALUE: {
-			return true;
-		}
-		case TYPE_TYPE_VALUE: {
-			return true;
-		}
-		case BOOLEAN_TYPE_VALUE: {
-			return true;
-		}
-		case VOID_TYPE_VALUE: {
-			return true;
-		}
-		case INTEGER_TYPE_VALUE: {
-			return type1->integer_type.signed_ == type2->integer_type.signed_ && type1->integer_type.size == type2->integer_type.size;
-		}
-		case INTEGER_VALUE: {
-			return type1->integer.value == type2->integer.value;
-		}
-		default:
-			assert(false);
-	}
+	return value_equal(type1, type2);
 }
 
 Value get_cached_file(Context *context, char *path) {

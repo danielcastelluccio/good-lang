@@ -291,6 +291,11 @@ typedef struct {
 } Run_Data;
 
 typedef struct {
+	Value from_type;
+	Value to_type;
+} Cast_Data;
+
+typedef struct {
 	Value type;
 } Null_Data;
 
@@ -413,6 +418,7 @@ typedef struct {
 		Number_Data number;
 		Structure_Data structure;
 		Run_Data run;
+		Cast_Data cast;
 		Null_Data null_;
 		Call_Data call;
 		Call_Method_Data call_method;

@@ -800,8 +800,15 @@ static Node *parse_module(Lexer *lexer) {
 static Node *parse_run(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 	Node *run = ast_new(RUN_NODE, first_token.location);
-	run->run.value = parse_expression(lexer);
+	run->run.node = parse_expression(lexer);
 	return run;
+}
+
+static Node *parse_cast(Lexer *lexer) {
+	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Node *cast = ast_new(CAST_NODE, first_token.location);
+	cast->cast.node = parse_expression(lexer);
+	return cast;
 }
 
 static Node *parse_defer(Lexer *lexer) {
@@ -979,6 +986,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (streq(value, "switch")) result = parse_switch(lexer);
 			else if (streq(value, "mod")) result = parse_module(lexer);
 			else if (streq(value, "run")) result = parse_run(lexer);
+			else if (streq(value, "cast")) result = parse_cast(lexer);
 			else if (streq(value, "defer")) result = parse_defer(lexer);
 			else {
 				printf("Unhandled keyword '%s'\n", value);

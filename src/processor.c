@@ -1138,13 +1138,7 @@ static void process_string(Context *context, Node *node) {
 	Value type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
 	if (type.value == NULL) invalid_type = true;
-	else if (type.value->tag == POINTER_TYPE_VALUE && type.value->pointer_type.inner.value->tag == ARRAY_TYPE_VALUE && type.value->pointer_type.inner.value->array_type.inner.value->tag == BYTE_TYPE_VALUE) {
-		type.value = value_new(POINTER_TYPE_VALUE);
-		type.value->pointer_type.inner.value = value_new(ARRAY_TYPE_VALUE);
-		type.value->pointer_type.inner.value->array_type.inner = create_value(BYTE_TYPE_VALUE);
-		type.value->pointer_type.inner.value->array_type.size.value = value_new(INTEGER_VALUE);
-		type.value->pointer_type.inner.value->array_type.size.value->integer.value = new_string.length;
-	}
+	else if (type.value->tag == POINTER_TYPE_VALUE && type.value->pointer_type.inner.value->tag == ARRAY_TYPE_VALUE && type.value->pointer_type.inner.value->array_type.inner.value->tag == BYTE_TYPE_VALUE) {}
 	else if (type.value->tag == ARRAY_VIEW_TYPE_VALUE && type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {}
 	else invalid_type = true;
 
@@ -1260,13 +1254,40 @@ static void process_structure(Context *context, Node *node) {
 static void process_run(Context *context, Node *node) {
 	Run_Node run = node->run;
 
-	process_node(context, run.value);
-	Value value = evaluate(context, run.value);
+	process_node(context, run.node);
+	Value value = evaluate(context, run.node);
 
 	Node_Data *data = node_data_new(RUN_NODE);
 	data->run.value = value;
 	set_data(context, node, data);
-	set_type(context, node, get_type(context, run.value));
+	set_type(context, node, get_type(context, run.node));
+}
+
+static void process_cast(Context *context, Node *node) {
+	Cast_Node cast = node->cast;
+
+	process_node(context, cast.node);
+
+	Value from_type = get_type(context, cast.node);
+	Value to_type = context->temporary_context.wanted_type;
+
+	bool cast_ok = false;
+	if (from_type.value->tag == POINTER_TYPE_VALUE && to_type.value->tag == POINTER_TYPE_VALUE) cast_ok = true;
+
+	if (!cast_ok) {
+		char from_string[64] = {};
+		print_type_outer(from_type, from_string);
+		char to_string[64] = {};
+		print_type_outer(to_type, to_string);
+		handle_semantic_error(node->location, "Cannot implicit cast from %s to %s", from_string, to_string);
+	}
+
+	Node_Data *data = node_data_new(CAST_NODE);
+	data->cast.from_type = from_type;
+	data->cast.to_type = to_type;
+
+	set_data(context, node, data);
+	set_type(context, node, context->temporary_context.wanted_type);
 }
 
 static void process_reference(Context *context, Node *node) {
@@ -2154,6 +2175,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case RUN_NODE: {
 			process_run(context, node);
+			break;
+		}
+		case CAST_NODE: {
+			process_cast(context, node);
 			break;
 		}
 		case REFERENCE_NODE: {

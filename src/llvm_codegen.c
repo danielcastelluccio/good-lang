@@ -470,6 +470,12 @@ static LLVMValueRef generate_run(Node *node, State *state) {
 	return generate_value(value.value, state);
 }
 
+static LLVMValueRef generate_cast(Node *node, State *state) {
+	assert(node->kind == CAST_NODE);
+	Cast_Node cast = node->cast;
+	return generate_node(cast.node, state);
+}
+
 static LLVMValueRef generate_reference(Node *node, State *state) {
 	assert(node->kind == REFERENCE_NODE);
 	Reference_Node reference = node->reference;
@@ -1116,6 +1122,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_structure(node, state);
 		case RUN_NODE:
 			return generate_run(node, state);
+		case CAST_NODE:
+			return generate_cast(node, state);
 		case REFERENCE_NODE:
 			return generate_reference(node, state);
 		case DEREFERENCE_NODE:

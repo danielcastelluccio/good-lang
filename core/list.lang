@@ -14,7 +14,7 @@ def List = fn (static T: type): type {
 
 				if list.capacity == 0 => list.capacity = 1;
 
-				list.items = list.allocator:realloc(list.items, list.capacity * run size_of(T)) catch |err| {
+				list.items = cast list.allocator:realloc(cast list.items, list.capacity * run size_of(T)) catch |err| {
 					return!! err;
 				};
 			};
@@ -37,7 +37,7 @@ def List = fn (static T: type): type {
 		};
 
 		op free = fn (list: ^self) {
-			list.allocator:free(list.items);
+			list.allocator:free(cast list.items);
 		};
 
 		op [] = fn (list: ^self, index: uint): ^T {
