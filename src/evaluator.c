@@ -40,6 +40,9 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case ARRAY_VIEW_TYPE_VALUE: {
 			return value_equal(value1->array_view_type.inner.value, value2->array_view_type.inner.value);
 		}
+		case OPTIONAL_TYPE_VALUE: {
+			return value_equal(value1->optional_type.inner.value, value2->optional_type.inner.value);
+		}
 		case RESULT_TYPE_VALUE: {
 			return value_equal(value1->result_type.value.value, value2->result_type.value.value) && value_equal(value1->result_type.error.value, value2->result_type.error.value);
 		}

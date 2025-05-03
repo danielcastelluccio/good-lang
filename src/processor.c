@@ -1416,10 +1416,13 @@ static void process_catch(Context *context, Node *node) {
 	}
 	process_node(context, catch.error);
 	(void) arrpop(context->scopes);
+
+	Node_Data *data = node_data_new(CATCH_NODE);
+	data->switch_.returned = context->returned;
+
 	context->returned = saved_returned;
 
 	set_type(context, node, result_type.value->result_type.value);
-	Node_Data *data = node_data_new(CATCH_NODE);
 	data->catch.type = result_type;
 	set_data(context, node, data);
 }
@@ -1732,14 +1735,6 @@ static void process_if(Context *context, Node *node) {
 
 	process_node(context, if_.condition);
 	Value condition_type = get_type(context, if_.condition);
-	// if (condition_type.value->tag != POINTER_TYPE_VALUE && condition_type.value->tag != BOOLEAN_TYPE_VALUE) {
-	// 	reset_node(context, if_.condition);
-
-	// 	Temporary_Context temporary_context = { .want_pointer = true };
-	// 	process_node_context(context, temporary_context, if_.condition);
-
-	// 	condition_type = get_type(context, if_.condition);
-	// }
 
 	Node_Data *data = node_data_new(IF_NODE);
 	data->if_.type = condition_type;
@@ -1769,9 +1764,13 @@ static void process_if(Context *context, Node *node) {
 	if (if_.else_body != NULL) {
 		bool saved_if_returned = context->returned;
 		context->returned = false;
-		process_node(context, if_.else_body);
+		data->if_.then_returned = saved_if_returned;
+
+		Temporary_Context temporary_context = { .wanted_type = if_type };
+		process_node_context(context, temporary_context, if_.else_body);
 
 		bool saved_else_returned = context->returned;
+		data->if_.else_returned = saved_else_returned;
 
 		context->returned = saved_returned;
 
@@ -1811,6 +1810,7 @@ static void process_if(Context *context, Node *node) {
 		}
 	}
 
+	data->if_.returned = context->returned;
 	set_data(context, node, data);
 }
 
@@ -1854,7 +1854,8 @@ static void process_switch(Context *context, Node *node) {
 
 		context->returned = saved_returned;
 
-		if (saved_previous_returned && saved_case_returned) {
+		arrpush(data->switch_.cases_returned, saved_case_returned);
+		if ((saved_previous_returned || i == 0) && saved_case_returned) {
 			context->returned = true;
 		}
 
@@ -1888,6 +1889,8 @@ static void process_switch(Context *context, Node *node) {
 			set_type(context, node, switch_type);
 		}
 	}
+
+	data->switch_.returned = context->returned;
 
 	if (case_count < arrlen(type.value->enum_type.items) && !else_case) {
 		context->returned = saved_returned;

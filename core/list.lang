@@ -10,13 +10,14 @@ def List = fn (static T: type): type {
 
 		op add = fn (list: ^self, element: T): void!allocate::Allocate_Error {
 			if list.length == list.capacity {
-				list.capacity = list.capacity * 2;
-
-				if list.capacity == 0 => list.capacity = 1;
+				var new_capacity = list.capacity * 2;
+				if new_capacity == 0 => new_capacity = 1;
 
 				list.items = cast list.allocator:realloc(cast list.items, list.capacity * run size_of(T)) catch |err| {
 					return!! err;
 				};
+
+				list.capacity = new_capacity;
 			};
 
 			list.items[list.length] = element;

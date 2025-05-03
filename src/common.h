@@ -319,10 +319,15 @@ typedef struct {
 	bool static_condition;
 	Value result_type;
 	Value type;
+	bool returned;
+	bool then_returned;
+	bool else_returned;
 } If_Data;
 
 typedef struct {
 	Value type;
+	bool returned;
+	bool *cases_returned; // stb_ds
 } Switch_Data;
 
 typedef struct {
@@ -372,6 +377,7 @@ typedef struct {
 
 typedef struct {
 	Value type;
+	bool returned;
 } Catch_Data;
 
 typedef struct {
