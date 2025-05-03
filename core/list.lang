@@ -36,6 +36,10 @@ def List = fn (static T: type): type {
 			list.items[index]
 		};
 
+		op free = fn (list: ^self) {
+			list.allocator:free(list.items);
+		};
+
 		op [] = fn (list: ^self, index: uint): ^T {
 			&list.items[index]
 		};

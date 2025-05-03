@@ -21,6 +21,10 @@ def Allocator = struct {
 	op realloc = fn (allocator: ^self, ptr: ^void, size: uint): ^void!Allocate_Error {
 		allocator.allocate_fn(REALLOC, ptr, size)
 	};
+
+	op free = fn (allocator: ^self, ptr: ^void) {
+		allocator.allocate_fn(FREE, ptr, 0)
+	};
 };
 
 def C_Allocator = struct {

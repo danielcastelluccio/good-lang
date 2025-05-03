@@ -293,19 +293,32 @@ static void handle_type_error(Node *node, Value wanted, Value given) {
 static void process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
 
+	Node_Data *data = node_data_new(BLOCK_NODE);
+
 	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(block.statements); i++) {
 		Node *statement = block.statements[i];
 
-		if (block.has_result && i == arrlen(block.statements) - 1) {
-			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
-			process_node_context(context, temporary_context, statement);
-			set_type(context, node, get_type(context, statement));
+		if (statement->kind == DEFER_NODE) {
+			arrpush(data->block.defers, statement->defer.node);
 		} else {
-			process_node(context, statement);
+			if (block.has_result && i == arrlen(block.statements) - 1) {
+				Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+				process_node_context(context, temporary_context, statement);
+				set_type(context, node, get_type(context, statement));
+			} else {
+				process_node(context, statement);
+			}
 		}
 	}
+
+	for (long int i = 0; i < arrlen(data->block.defers); i++) {
+		Node *statement = data->block.defers[i];
+		process_node(context, statement);
+	}
 	(void) arrpop(context->scopes);
+
+	set_data(context, node, data);
 }
 
 typedef struct {

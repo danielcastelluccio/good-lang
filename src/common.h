@@ -370,6 +370,10 @@ typedef struct {
 } Catch_Data;
 
 typedef struct {
+	Node **defers;
+} Block_Data;
+
+typedef struct {
 	Value array_type;
 	Value item_type;
 	Custom_Operator_Function custom_operator_function;
@@ -423,6 +427,7 @@ typedef struct {
 		Deoptional_Data deoptional;
 		Is_Data is;
 		Catch_Data catch;
+		Block_Data block;
 		Array_Access_Data array_access;
 		Binary_Operator_Data binary_operator;
 		Return_Data return_;

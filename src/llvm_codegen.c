@@ -217,25 +217,21 @@ static void generate_define(Node *node, State *state) {
 static LLVMValueRef generate_block(Node *node, State *state) {
 	assert(node->kind == BLOCK_NODE);
 	Block_Node block = node->block;
-	// Node_Data *data = get_data(&state->context, node);
+	Block_Data block_data = get_data(&state->context, node)->block;
 
-	// LLVMBasicBlockRef llvm_block = LLVMAppendBasicBlock(state->current_function, "");
-	// LLVMValueRef value = NULL;
-
-	// Block_Codegen_Data block_codegen_data = {
-	// 	.block = llvm_block,
-	// 	.value = value
-	// };
-	// hmput(state->blocks, data, block_codegen_data);
 	LLVMValueRef result = NULL;
 	for (long int i = 0; i < arrlen(block.statements); i++) {
+		if (block.statements[i]->kind == DEFER_NODE) continue;
+
 		LLVMValueRef value = generate_node(block.statements[i], state);
 		if (block.has_result && i == arrlen(block.statements) - 1) {
 			result = value;
 		}
 	}
-	// LLVMBuildBr(state->llvm_builder, llvm_block);
-	// LLVMPositionBuilderAtEnd(state->llvm_builder, llvm_block);
+
+	for (long int i = 0; i < arrlen(block_data.defers); i++) {
+		generate_node(block_data.defers[i], state);
+	}
 
 	if (block.has_result) {
 		return result;

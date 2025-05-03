@@ -109,6 +109,10 @@ typedef struct {
 } Run_Node;
 
 typedef struct {
+	Node *node;
+} Defer_Node;
+
+typedef struct {
 	Node *module;
 	char *value;
 } Identifier_Node;
@@ -271,6 +275,7 @@ typedef enum {
 	BOOLEAN_NODE,
 	STRUCTURE_NODE,
 	RUN_NODE,
+	DEFER_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,
 	CALL_METHOD_NODE,
@@ -315,6 +320,7 @@ struct Node {
 		Boolean_Node boolean;
 		Structure_Node structure;
 		Run_Node run;
+		Defer_Node defer;
 		Identifier_Node identifier;
 		Call_Node call;
 		Call_Method_Node call_method;

@@ -87,6 +87,7 @@ static bool is_keyword(char *identifier) {
 	else if (strcmp(identifier, "op") == 0) return true;
 	else if (strcmp(identifier, "is") == 0) return true;
 	else if (strcmp(identifier, "catch") == 0) return true;
+	else if (strcmp(identifier, "defer") == 0) return true;
 	else return false;
 }
 
