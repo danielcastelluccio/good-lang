@@ -168,7 +168,9 @@ static int print_type(Value type, char *buffer) {
 	switch (type.value->tag) {
 		case POINTER_TYPE_VALUE: {
 			buffer += sprintf(buffer, "^");
-			buffer += print_type(type.value->pointer_type.inner, buffer);
+			if (type.value->pointer_type.inner.value != NULL) {
+				buffer += print_type(type.value->pointer_type.inner, buffer);
+			}
 			break;
 		}
 		case OPTIONAL_TYPE_VALUE: {
@@ -872,10 +874,7 @@ static void process_identifier(Context *context, Node *node) {
 
 	Value value = {};
 	Value type = {};
-	if (identifier.module == NULL && streq(identifier.value, "void")) {
-		value = create_value(VOID_TYPE_VALUE);
-		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && streq(identifier.value, "type")) {
+	if (identifier.module == NULL && streq(identifier.value, "type")) {
 		value = create_value(TYPE_TYPE_VALUE);
 		type = create_value(TYPE_TYPE_VALUE);
 	} else if (identifier.module == NULL && streq(identifier.value, "byte")) {
@@ -1230,7 +1229,7 @@ static void process_structure(Context *context, Node *node) {
 		assert(false);
 	}
 
-	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE || wanted_type.value->tag == TAGGED_UNION_TYPE_VALUE || wanted_type.value->tag == VOID_TYPE_VALUE);
+	assert(wanted_type.value->tag == STRUCT_TYPE_VALUE || wanted_type.value->tag == ARRAY_TYPE_VALUE || wanted_type.value->tag == TAGGED_UNION_TYPE_VALUE);
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {
 		Value item_wanted_type = {};
@@ -2104,7 +2103,9 @@ static void process_function_type(Context *context, Node *node) {
 
 static void process_pointer(Context *context, Node *node) {
 	Pointer_Node pointer = node->pointer;
-	process_node(context, pointer.inner);
+	if (pointer.inner != NULL) {
+		process_node(context, pointer.inner);
+	}
 
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }

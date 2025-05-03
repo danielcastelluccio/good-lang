@@ -45,7 +45,8 @@ static Node *parse_expression(Lexer *lexer);
 static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
-	if (lexer_peek(lexer).kind == CLOSED_CURLY_BRACE || lexer_peek(lexer).kind == CLOSED_PARENTHESIS || lexer_peek(lexer).kind == SEMICOLON) {
+	Token_Data token = lexer_peek(lexer);
+	if (token.kind == CLOSED_CURLY_BRACE || token.kind == CLOSED_PARENTHESIS || token.kind == SEMICOLON || token.kind == COMMA || lexer_peek_check_keyword(lexer, "extern")) {
 		return NULL;
 	}
 
@@ -735,10 +736,10 @@ static Node *parse_pointer(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, CARET);
 
 	Node *pointer = ast_new(POINTER_NODE, first_token.location);
-	Node *inner = parse_expression(lexer);
+	Node *inner = parse_expression_or_nothing(lexer);
 
 	Node *result;
-	if (inner->kind == RESULT_NODE) {
+	if (inner != NULL && inner->kind == RESULT_NODE) {
 		pointer->pointer.inner = inner->result.value;
 		inner->result.value = pointer;
 		result = inner;

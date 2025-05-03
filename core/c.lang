@@ -11,6 +11,6 @@ def size_t = unsigned_long;
 
 def printf = fn (s: ^[_]byte, ...): int extern "printf";
 
-def malloc = fn (size: size_t): ?^void extern "malloc";
-def free = fn (ptr: ^void) extern "free";
-def realloc = fn (ptr: ^void, size: size_t): ?^void extern "realloc";
+def malloc = fn (size: size_t): ?^ extern "malloc";
+def free = fn (ptr: ^) extern "free";
+def realloc = fn (ptr: ^, size: size_t): ?^ extern "realloc";

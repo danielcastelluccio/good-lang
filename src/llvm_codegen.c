@@ -155,9 +155,6 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 		case BYTE_TYPE_VALUE: {
 			return LLVMInt8Type();
 		}
-		case VOID_TYPE_VALUE: {
-			return LLVMStructType(NULL, 0, false);
-		}
 		case BOOLEAN_TYPE_VALUE: {
 			return LLVMInt1Type();
 		}
@@ -474,10 +471,6 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 
 			assert(false);
 			return NULL;
-		}
-		case VOID_TYPE_VALUE: {
-			LLVMValueRef void_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
-			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), void_value, "");
 		}
 		default:
 			assert(false);

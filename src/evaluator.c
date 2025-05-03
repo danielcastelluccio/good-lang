@@ -22,11 +22,12 @@ Value jmp_result;
 Value *function_arguments;
 
 bool value_equal(Value_Data *value1, Value_Data *value2) {
-	if (value2 == NULL) return false;
+	if (value1 == NULL || value2 == NULL) return false;
 	if (value1->tag != value2->tag) return false;
 
 	switch (value1->tag) {
 		case POINTER_TYPE_VALUE: {
+			if (value1->pointer_type.inner.value == NULL && value2->pointer_type.inner.value == NULL) return true;
 			return value_equal(value1->pointer_type.inner.value, value2->pointer_type.inner.value);
 		}
 		case ARRAY_TYPE_VALUE: {
@@ -86,7 +87,6 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 
 			return true;
 		}
-		case VOID_TYPE_VALUE:
 		case BYTE_TYPE_VALUE:
 		case BOOLEAN_TYPE_VALUE:
 		case TYPE_TYPE_VALUE: {
@@ -266,7 +266,9 @@ Value evaluate(Context *context, Node *node) {
 			Pointer_Node pointer = node->pointer;
 
 			Value_Data *pointer_type_value = value_new(POINTER_TYPE_VALUE);
-			pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
+			if (pointer.inner) {
+				pointer_type_value->pointer_type.inner = evaluate(context, pointer.inner);
+			}
 			return create_value_data(pointer_type_value, node);
 		}
 		case OPTIONAL_NODE: {
