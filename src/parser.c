@@ -108,7 +108,7 @@ static Node *parse_number(Lexer *lexer) {
 static Node *parse_structure(Lexer *lexer) {
 	Token_Data token = lexer_consume_check(lexer, PERIOD_OPEN_CURLY_BRACE);
 
-	Node *structure = ast_new(STRUCT_NODE, token.location);
+	Node *structure = ast_new(STRUCTURE_NODE, token.location);
 
 	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE) {
 		while (true) {
@@ -391,7 +391,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 
 	lexer_consume_check(lexer, OPEN_CURLY_BRACE);
-	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE && lexer_peek(lexer).kind != SEMICOLON) {
+	if (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE && lexer_peek(lexer).kind != KEYWORD && !lexer_peek_check_keyword(lexer, "op")) {
 		while (true) {
 			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 			lexer_consume_check(lexer, COLON);
@@ -406,7 +406,10 @@ static Node *parse_struct_type(Lexer *lexer) {
 			Token_Data token = lexer_peek(lexer);
 			if (token.kind == COMMA) {
 				lexer_consume(lexer);
-			} else if (token.kind == CLOSED_CURLY_BRACE || token.kind == SEMICOLON) {
+			} else if (token.kind == SEMICOLON) {
+				lexer_consume(lexer);
+				break;
+			} else if (token.kind == CLOSED_CURLY_BRACE) {
 				break;
 			} else {
 				handle_token_error_no_expected(token);
@@ -414,8 +417,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 		}
 	}
 
-	if (lexer_peek(lexer).kind == SEMICOLON) {
-		lexer_consume(lexer);
+	if (lexer_peek_check_keyword(lexer, "op")) {
 		while (lexer_peek(lexer).kind != CLOSED_CURLY_BRACE) {
 			lexer_consume_check(lexer, KEYWORD);
 
@@ -538,13 +540,17 @@ static Node *parse_define(Lexer *lexer) {
 
 	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 
+	Node *define = ast_new(DEFINE_NODE, first_token.location);
+
+	if (lexer_peek(lexer).kind == COLON) {
+		lexer_consume_check(lexer, COLON);
+		define->define.type = parse_expression(lexer);
+	}
+
 	lexer_consume_check(lexer, EQUALS);
 
-	Node *define = ast_new(DEFINE_NODE, first_token.location);
-	define->define = (Define_Node) {
-		.identifier = identifier.string,
-		.expression = parse_expression(lexer)
-	};
+	define->define.identifier = identifier.string;
+	define->define.expression = parse_expression(lexer);
 
 	return define;
 }

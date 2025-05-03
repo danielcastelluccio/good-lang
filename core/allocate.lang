@@ -24,15 +24,12 @@ def Allocator = struct {
 };
 
 def C_Allocator = struct {
-	;
 	op allocator = fn (_: ^self): Allocator {
 		return .{ c_allocator_allocate };
 	};
 };
 
-def c_allocator = fn (): C_Allocator {
-	return .{};
-};
+def c_allocator: C_Allocator = .{};
 
 def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^void, size: uint): ^void!Allocate_Error {
 	return! switch mode {

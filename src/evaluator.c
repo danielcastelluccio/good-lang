@@ -623,6 +623,21 @@ Value evaluate(Context *context, Node *node) {
 			jmp_result = result;
 			longjmp(jmp, 1);
 		}
+		case STRUCTURE_NODE: {
+			Structure_Node structure = node->structure;
+			Structure_Data structure_data = get_data(context, node)->structure;
+			assert(arrlen(structure.values) == 0);
+
+			switch (structure_data.type.value->tag) {
+				case STRUCT_TYPE_VALUE: {
+					Value result = create_value_data(value_new(STRUCT_VALUE), node);
+					return result;
+				}
+				default:
+					assert(false);
+					return (Value) {};
+			}
+		}
 		default:
 			assert(false);
 	}

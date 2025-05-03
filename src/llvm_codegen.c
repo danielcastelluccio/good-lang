@@ -411,7 +411,7 @@ static LLVMValueRef generate_boolean(Node *node, State *state) {
 }
 
 static LLVMValueRef generate_structure(Node *node, State *state) {
-	assert(node->kind == STRUCT_NODE);
+	assert(node->kind == STRUCTURE_NODE);
 	Structure_Node structure = node->structure;
 
 	Value_Data *type = get_data(&state->context, node)->structure.type.value;
@@ -1116,7 +1116,7 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_null(node, state);
 		case BOOLEAN_NODE:
 			return generate_boolean(node, state);
-		case STRUCT_NODE:
+		case STRUCTURE_NODE:
 			return generate_structure(node, state);
 		case RUN_NODE:
 			return generate_run(node, state);
@@ -1242,6 +1242,12 @@ static LLVMValueRef generate_enum(Value_Data *value, State *state) {
 	return LLVMConstInt(LLVMInt64Type(), enum_.value, false);
 }
 
+static LLVMValueRef generate_struct(Value_Data *value, State *state) {
+	(void) value;
+	(void) state;
+	return LLVMConstStruct(NULL, 0, false);
+}
+
 static LLVMValueRef generate_value(Value_Data *value, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -1261,6 +1267,9 @@ static LLVMValueRef generate_value(Value_Data *value, State *state) {
 			break;
 		case ENUM_VALUE:
 			result = generate_enum(value, state);
+			break;
+		case STRUCT_VALUE:
+			result = generate_struct(value, state);
 			break;
 		default:
 			break;

@@ -238,6 +238,7 @@ typedef struct {
 
 typedef struct {
 	char *identifier;
+	Node *type;
 	Node *expression;
 } Define_Node;
 
@@ -268,7 +269,7 @@ typedef enum {
 	NUMBER_NODE,
 	NULL_NODE,
 	BOOLEAN_NODE,
-	STRUCT_NODE,
+	STRUCTURE_NODE,
 	RUN_NODE,
 	IDENTIFIER_NODE,
 	CALL_NODE,

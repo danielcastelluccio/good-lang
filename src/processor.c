@@ -384,7 +384,15 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 		};
 	}
 
-	process_node(context, define.expression);
+	Value wanted_type = {};
+	if (define.type != NULL) {
+		process_node(context, define.type);
+		wanted_type = evaluate(context, define.type);
+	}
+
+	Temporary_Context temporary_context = { .wanted_type = wanted_type };
+	process_node_context(context, temporary_context, define.expression);
+
 	Value type = get_type(context, define.expression);
 	Value value = evaluate(context, define.expression);
 
@@ -879,7 +887,7 @@ static void process_identifier(Context *context, Node *node) {
 		type.value = value_new(FUNCTION_TYPE_VALUE);
 		Function_Argument_Value argument = {
 			.identifier = "",
-			.type = create_value(TYPE_TYPE_VALUE) 
+			.type = create_value(TYPE_TYPE_VALUE)
 		};
 		arrpush(type.value->function_type.arguments, argument);
 		type.value->function_type.return_type = create_integer_type(false, 64);
@@ -1230,7 +1238,7 @@ static void process_structure(Context *context, Node *node) {
 		process_node_context(context, temporary_context, structure.values[i].node);
 	}
 
-	Node_Data *data = node_data_new(STRUCT_NODE);
+	Node_Data *data = node_data_new(STRUCTURE_NODE);
 	data->structure.type = wanted_type;
 	set_data(context, node, data);
 	set_type(context, node, wanted_type);
@@ -2127,7 +2135,7 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_boolean(context, node);
 			break;
 		}
-		case STRUCT_NODE: {
+		case STRUCTURE_NODE: {
 			process_structure(context, node);
 			break;
 		}

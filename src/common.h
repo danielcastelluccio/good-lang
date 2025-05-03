@@ -61,6 +61,7 @@ typedef enum {
 	ARRAY_VALUE,
 	BYTE_VALUE,
 	INTEGER_VALUE,
+	STRUCT_VALUE,
 	ENUM_VALUE,
 	ARRAY_VIEW_VALUE,
 	MODULE_TYPE_VALUE,
@@ -162,6 +163,9 @@ typedef struct {
 } Enum_Value;
 
 typedef struct {
+} Struct_Value;
+
+typedef struct {
 	size_t length;
 	Value_Data **values;
 } Array_View_Value;
@@ -229,6 +233,7 @@ struct Value_Data {
 		Byte_Value byte;
 		Integer_Value integer;
 		Enum_Value enum_;
+		Struct_Value struct_;
 		Internal_Value internal;
 	};
 };
