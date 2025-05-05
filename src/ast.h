@@ -270,9 +270,14 @@ typedef struct {
 		INTERNAL_BYTE,
 		INTERNAL_FLT64,
 		INTERNAL_BOOL,
-		INTERNAL_TYPE_OF
+		INTERNAL_TYPE_OF,
+		INTERNAL_INT,
+		INTERNAL_C_CHAR_SIZE,
+		INTERNAL_C_SHORT_SIZE,
+		INTERNAL_C_INT_SIZE,
+		INTERNAL_C_LONG_SIZE
 	} kind;
-	Node *input;
+	Node **inputs; // stb_ds
 } Internal_Node;
 
 typedef enum {
@@ -314,6 +319,7 @@ typedef enum {
 	FOR_NODE,
 	SWITCH_NODE,
 	MODULE_NODE,
+	MODULE_TYPE_NODE,
 	BINARY_OPERATOR_NODE,
 	DEFINE_NODE,
 	BLOCK_NODE,

@@ -173,15 +173,44 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		Node *internal = ast_new(INTERNAL_NODE, token.location);
 		internal->internal.kind = INTERNAL_BOOL;
 		return internal;
+	} else if (streq(token.string, "C_CHAR_SIZE")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_C_CHAR_SIZE;
+		return internal;
+	} else if (streq(token.string, "C_SHORT_SIZE")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_C_SHORT_SIZE;
+		return internal;
+	} else if (streq(token.string, "C_INT_SIZE")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_C_INT_SIZE;
+		return internal;
+	} else if (streq(token.string, "C_LONG_SIZE")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_C_LONG_SIZE;
+		return internal;
 	} else if (streq(token.string, "type_of")) {
 		Node *internal = ast_new(INTERNAL_NODE, token.location);
 		internal->internal.kind = INTERNAL_TYPE_OF;
 
 		lexer_consume_check(lexer, OPEN_PARENTHESIS);
-		internal->internal.input = parse_expression(lexer);
+		arrpush(internal->internal.inputs, parse_expression(lexer));
 		lexer_consume_check(lexer, CLOSED_PARENTHESIS);
 
 		return internal;
+	} else if (streq(token.string, "int")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_INT;
+
+		if (lexer_peek(lexer).kind == OPEN_PARENTHESIS) {
+			lexer_consume_check(lexer, OPEN_PARENTHESIS);
+			arrpush(internal->internal.inputs, parse_expression(lexer));
+			lexer_consume_check(lexer, COMMA);
+			arrpush(internal->internal.inputs, parse_expression(lexer));
+			lexer_consume_check(lexer, CLOSED_PARENTHESIS);
+
+			return internal;
+		}
 	}
 
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
@@ -819,8 +848,13 @@ static Node *parse_array_or_array_view_type(Lexer *lexer) {
 	}
 }
 
-static Node *parse_module(Lexer *lexer) {
+static Node *parse_module_or_module_type(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+
+	if (lexer_peek(lexer).kind != OPEN_CURLY_BRACE) {
+		return ast_new(MODULE_TYPE_NODE, first_token.location);
+	}
+
 	Node *module = ast_new(MODULE_NODE, first_token.location);
 	Node *body = parse_expression(lexer);
 	module->module.body = body;
@@ -1027,7 +1061,7 @@ static Node *parse_expression(Lexer *lexer) {
 			else if (streq(value, "while")) result = parse_while(lexer);
 			else if (streq(value, "for")) result = parse_for(lexer);
 			else if (streq(value, "switch")) result = parse_switch(lexer);
-			else if (streq(value, "mod")) result = parse_module(lexer);
+			else if (streq(value, "mod")) result = parse_module_or_module_type(lexer);
 			else if (streq(value, "run")) result = parse_run(lexer);
 			else if (streq(value, "cast")) result = parse_cast(lexer);
 			else if (streq(value, "defer")) result = parse_defer(lexer);

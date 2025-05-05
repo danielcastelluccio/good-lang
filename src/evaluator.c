@@ -262,6 +262,9 @@ Value evaluate(Context *context, Node *node) {
 
 			return create_value_data(module_value, node);
 		}
+		case MODULE_TYPE_NODE: {
+			return create_value_data(value_new(MODULE_TYPE_VALUE), node);
+		}
 		case POINTER_NODE: {
 			Pointer_Node pointer = node->pointer;
 
@@ -402,8 +405,32 @@ Value evaluate(Context *context, Node *node) {
 				arrpush(arguments, evaluate(context, call.arguments[i]));
 			}
 
-			switch (function.value->tag) {
-				case IMPORT_FUNCTION_VALUE: {
+			if (function.value->tag != FUNCTION_VALUE) {
+				assert(false);
+			}
+
+			Value_Data *result = NULL;
+
+			size_t saved_static_argument_id = context->static_argument_id;
+			context->static_argument_id = function.value->function.static_argument_id;
+
+			Value *saved_function_arguments = function_arguments;
+			function_arguments = arguments;
+
+			Function_Value function_value = function.value->function;
+
+			if (function_value.node->function.extern_name != NULL) {
+				handle_evaluate_error(node->location, "Cannot run extern function at compile time");
+			}
+
+			if (function_value.node->function.internal_name != NULL) {
+				char *internal_name = function_value.node->function.internal_name;
+
+				if (streq(internal_name, "size_of")) {
+					Value_Data *value = value_new(INTEGER_VALUE);
+					value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
+					result = value;
+				} else if (streq(internal_name, "import")) {
 					Value string = arguments[0];
 					char *source = malloc(string.value->array_view.length + 1);
 					source[string.value->array_view.length] = '\0';
@@ -431,80 +458,38 @@ Value evaluate(Context *context, Node *node) {
 						strcat(source, old_source);
 					}
 
-					Value value = get_cached_file(context, source);
-					if (value.value != NULL) {
-						return value;
+					result = get_cached_file(context, source).value;
+					if (result == NULL) {
+						Node *file_node = parse_file(source);
+
+						Scope *saved_scopes = context->scopes;
+						context->scopes = NULL;
+						process_node(context, file_node);
+						Value value = evaluate(context, file_node);
+						context->scopes = saved_scopes;
+
+						add_cached_file(context, source, value);
+
+						result = value.value;
 					}
-
-					Node *file_node = parse_file(source);
-
-					Scope *saved_scopes = context->scopes;
-					context->scopes = NULL;
-					process_node(context, file_node);
-					value = evaluate(context, file_node);
-					context->scopes = saved_scopes;
-
-					add_cached_file(context, source, value);
-
-					return value;
-				}
-				case SIZE_OF_FUNCTION_VALUE: {
-					Value_Data *value = value_new(INTEGER_VALUE);
-					value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
-					return create_value_data(value, node);
-				}
-				case INTN_FUNCTION_VALUE: {
-					Value_Data *value = value_new(INTEGER_TYPE_VALUE);
-					value->integer_type.signed_ = arguments[0].value->boolean.value;
-					value->integer_type.size = arguments[1].value->integer.value;
-					return create_value_data(value, node);
-				}
-				case FUNCTION_VALUE: {
-					Value_Data *result = NULL;
-
-					size_t saved_static_argument_id = context->static_argument_id;
-					context->static_argument_id = function.value->function.static_argument_id;
-
-					Value *saved_function_arguments = function_arguments;
-					function_arguments = arguments;
-
-					Function_Value function_value = function.value->function;
-
-					if (function_value.node->function.extern_name != NULL) {
-						handle_evaluate_error(node->location, "Cannot run extern function at compile time");
-					}
-
-					if (function_value.node->function.internal_name != NULL) {
-						char *internal_name = function_value.node->function.internal_name;
-
-						if (streq(internal_name, "size_of")) {
-							Value_Data *value = value_new(INTEGER_VALUE);
-							value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
-							result = value;
-						} else {
-							assert(false);
-						}
-					} else {
-						jmp_buf prev_jmp;
-						memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-						if (!setjmp(jmp)) {
-							result = evaluate(context, function_value.body).value;
-						} else {
-							result = jmp_result.value;
-						}
-						memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
-					}
-
-					function_arguments = saved_function_arguments;
-					context->static_argument_id = saved_static_argument_id;
-
-					return create_value_data(result, node);
-				}
-				default:
+				} else {
 					assert(false);
+				}
+			} else {
+				jmp_buf prev_jmp;
+				memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+				if (!setjmp(jmp)) {
+					result = evaluate(context, function_value.body).value;
+				} else {
+					result = jmp_result.value;
+				}
+				memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
 			}
 
-			return (Value) {};
+			function_arguments = saved_function_arguments;
+			context->static_argument_id = saved_static_argument_id;
+
+			return create_value_data(result, node);
 		}
 		case BINARY_OPERATOR_NODE: {
 			Binary_Operator_Node binary_operator = node->binary_operator;
