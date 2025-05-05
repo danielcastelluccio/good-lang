@@ -7,8 +7,7 @@
 #include "parser.h"
 #include "processor.h"
 
-char *internal =
-"";
+#include "internal_source.h"
 
 int main(int argc, char **argv) {
 	if (argc != 2) {
@@ -16,7 +15,7 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	Node *internal_root = parse_source(internal, strlen(internal), "internal");
+	Node *internal_root = parse_source((char *) src_internal_lang, src_internal_lang_len, "internal");
 
 	char *source = argv[1];
 	Node *root = parse_file(realpath(source, NULL));

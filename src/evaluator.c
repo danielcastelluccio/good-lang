@@ -11,6 +11,7 @@
 #include "ast.h"
 #include "evaluator.h"
 #include "parser.h"
+#include "util.h"
 
 #include <setjmp.h>
 
@@ -149,7 +150,6 @@ Value evaluate(Context *context, Node *node) {
 			function_value->function.compile_only = get_data(context, node)->function.compile_only;
 			function_value->function.returned = get_data(context, node)->function.returned;
 			function_value->function.static_argument_id = context->static_argument_id;
-			function_value->function.extern_name = function.extern_name;
 			function_value->function.node = node;
 
 			Scope *scopes = NULL;
@@ -413,7 +413,7 @@ Value evaluate(Context *context, Node *node) {
 
 					if (strcmp(source, "core") == 0) {
 						char *cwd = getcwd(NULL, PATH_MAX);
-						source = malloc(strlen(cwd) + 15);
+						source = malloc(strlen(cwd) + 16);
 						strcpy(source, cwd);
 						strcat(source, "/core/core.lang");
 					} else {
@@ -460,27 +460,45 @@ Value evaluate(Context *context, Node *node) {
 					return create_value_data(value, node);
 				}
 				case FUNCTION_VALUE: {
+					Value_Data *result = NULL;
+
 					size_t saved_static_argument_id = context->static_argument_id;
 					context->static_argument_id = function.value->function.static_argument_id;
 
 					Value *saved_function_arguments = function_arguments;
 					function_arguments = arguments;
 
-					jmp_buf prev_jmp;
-					memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-					Value result;
-					if (!setjmp(jmp)) {
-						result = evaluate(context, function.value->function.body);
-					} else {
-						result = jmp_result;
+					Function_Value function_value = function.value->function;
+
+					if (function_value.node->function.extern_name != NULL) {
+						handle_evaluate_error(node->location, "Cannot run extern function at compile time");
 					}
-					memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+
+					if (function_value.node->function.internal_name != NULL) {
+						char *internal_name = function_value.node->function.internal_name;
+
+						if (streq(internal_name, "size_of")) {
+							Value_Data *value = value_new(INTEGER_VALUE);
+							value->integer.value = context->codegen.size_fn(arguments[0].value, context->codegen.data);
+							result = value;
+						} else {
+							assert(false);
+						}
+					} else {
+						jmp_buf prev_jmp;
+						memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+						if (!setjmp(jmp)) {
+							result = evaluate(context, function_value.body).value;
+						} else {
+							result = jmp_result.value;
+						}
+						memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+					}
 
 					function_arguments = saved_function_arguments;
-
 					context->static_argument_id = saved_static_argument_id;
 
-					return create_value_data(result.value, node);
+					return create_value_data(result, node);
 				}
 				default:
 					assert(false);

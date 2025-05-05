@@ -1,0 +1,1 @@
+def size_of = fn [T = uint](ty: type): T internal "size_of";

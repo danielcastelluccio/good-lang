@@ -81,7 +81,6 @@ typedef struct {
 	size_t static_argument_id;
 	bool compile_only;
 	bool returned;
-	char *extern_name;
 	Node *node;
 } Function_Value;
 

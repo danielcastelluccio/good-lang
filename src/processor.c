@@ -614,6 +614,10 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 		for (long int k = 0; k < arrlen(function_node_arguments); k++) {
 			if (function_node_arguments[k].inferred) {
 				arrpush(inferred_arguments, function_node_arguments[k].identifier);
+
+				if (function_node_arguments[k].default_value != NULL) {
+					process_node(context, function_node_arguments[k].default_value);
+				}
 			}
 		}
 
@@ -652,10 +656,21 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 					}
 				}
 
+				if (function_type_node->function_type.return_ != NULL && context->temporary_context.wanted_type.value != NULL) {
+					if (!pattern_match(function_type_node->function_type.return_, context->temporary_context.wanted_type, context, inferred_arguments, &result)) {
+						pattern_match_fail = true;
+					}
+				}
+
 				for (long int k = 0; k < arrlen(function_node_arguments); k++) {
 					if (!function_node_arguments[k].inferred) continue;
 
 					Typed_Value typed_value = shget(result, function_node_arguments[k].identifier);
+					if (typed_value.value.value == NULL && function_node_arguments[k].default_value != NULL) {
+						typed_value.type = get_type(context, function_node_arguments[k].default_value);
+						typed_value.value = evaluate(context, function_node_arguments[k].default_value);
+					}
+
 					if (typed_value.value.value != NULL) {
 						Static_Argument_Value static_argument = {
 							.identifier = function_node_arguments[k].identifier,
@@ -663,6 +678,8 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 						};
 
 						arrpush(static_arguments, static_argument);
+					} else {
+						pattern_match_fail = true;
 					}
 				}
 			}
@@ -901,16 +918,6 @@ static void process_identifier(Context *context, Node *node) {
 		};
 		arrpush(type.value->function_type.arguments, argument);
 		type.value->function_type.return_type = (Value) { .value = value_new(MODULE_TYPE_VALUE) };
-	} else if (streq(identifier.value, "size_of")) {
-		value = create_value(SIZE_OF_FUNCTION_VALUE);
-
-		type.value = value_new(FUNCTION_TYPE_VALUE);
-		Function_Argument_Value argument = {
-			.identifier = "",
-			.type = create_value(TYPE_TYPE_VALUE)
-		};
-		arrpush(type.value->function_type.arguments, argument);
-		type.value->function_type.return_type = create_integer_type(false, 64);
 	} else if (streq(identifier.value, "intn")) {
 		value = create_value(INTN_FUNCTION_VALUE);
 
@@ -1096,7 +1103,7 @@ static void process_module(Context *context, Node *node) {
 static void process_internal(Context *context, Node *node) {
 	Internal_Node internal = node->internal;
 
-	Value value;
+	Value value = {};
 	switch (internal.kind) {
 		case INTERNAL_UINT: {
 			value.value = value_new(INTEGER_TYPE_VALUE);
@@ -1318,7 +1325,8 @@ static void process_structure(Context *context, Node *node) {
 static void process_run(Context *context, Node *node) {
 	Run_Node run = node->run;
 
-	process_node(context, run.node);
+	Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+	process_node_context(context, temporary_context, run.node);
 	Value value = evaluate(context, run.node);
 
 	Node_Data *data = node_data_new(RUN_NODE);

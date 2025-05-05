@@ -859,11 +859,18 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		if (lexer_peek(lexer).kind != CLOSED_BRACE) {
 			while (true) {
 				Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+
 				Function_Argument argument = {
 					.identifier = identifier.string,
 					.static_ = true,
 					.inferred = true
 				};
+
+				if (lexer_peek(lexer).kind == EQUALS) {
+					lexer_consume(lexer);
+					argument.default_value = parse_expression(lexer);
+				}
+
 				arrpush(arguments, argument);
 
 				Token_Data token = lexer_peek(lexer);
@@ -933,22 +940,28 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		.variadic = variadic
 	};
 
-	bool extern_ = false;
+	bool no_body = false;
 	char *extern_name = NULL;
+	char *internal_name = NULL;
 	Node *body = NULL;
 	if (lexer_peek_check_keyword(lexer, "extern")) {
-		extern_ = true;
+		no_body = true;
 		lexer_consume(lexer);
 		extern_name = lexer_consume_check(lexer, STRING).string;
+	} else if (lexer_peek_check_keyword(lexer, "internal")) {
+		no_body = true;
+		lexer_consume(lexer);
+		internal_name = lexer_consume_check(lexer, STRING).string;
 	} else {
 		body = parse_separated_statement_or_nothing(lexer);
 	}
 
-	if (body != NULL || extern_) {
+	if (body != NULL || no_body) {
 		Node *function = ast_new(FUNCTION_NODE, first_token.location);
 		function->function.function_type = function_type;
 		function->function.body = body;
 		function->function.extern_name = extern_name;
+		function->function.internal_name = internal_name;
 		return function;
 	} else {
 		return function_type;

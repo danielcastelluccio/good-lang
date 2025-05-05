@@ -1265,8 +1265,8 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	state->context.static_argument_id = saved_static_argument_id;
 	state->llvm_builder = saved_llvm_builder;
 
-	if (function.extern_name != NULL) {
-		LLVMSetValueName(llvm_function, function.extern_name);
+	if (function.node->function.extern_name != NULL) {
+		LLVMSetValueName(llvm_function, function.node->function.extern_name);
 	}
 
 	return llvm_function;

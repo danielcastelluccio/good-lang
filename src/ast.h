@@ -44,6 +44,7 @@ typedef struct {
 	Node *type;
 	bool static_;
 	bool inferred;
+	Node *default_value;
 } Function_Argument;
 
 typedef struct {
@@ -259,6 +260,7 @@ typedef struct {
 	Node *function_type;
 	Node *body;
 	char *extern_name;
+	char *internal_name;
 } Function_Node;
 
 typedef struct {
