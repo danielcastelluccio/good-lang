@@ -261,6 +261,18 @@ typedef struct {
 	char *extern_name;
 } Function_Node;
 
+typedef struct {
+	enum {
+		INTERNAL_UINT,
+		INTERNAL_TYPE,
+		INTERNAL_BYTE,
+		INTERNAL_FLT64,
+		INTERNAL_BOOL,
+		INTERNAL_TYPE_OF
+	} kind;
+	Node *input;
+} Internal_Node;
+
 typedef enum {
 	POINTER_NODE,
 	OPTIONAL_NODE,
@@ -303,7 +315,8 @@ typedef enum {
 	BINARY_OPERATOR_NODE,
 	DEFINE_NODE,
 	BLOCK_NODE,
-	FUNCTION_NODE
+	FUNCTION_NODE,
+	INTERNAL_NODE
 } Node_Kind;
 
 struct Node {
@@ -350,6 +363,7 @@ struct Node {
 		Define_Node define;
 		Block_Node block;
 		Function_Node function;
+		Internal_Node internal;
 	};
 	Source_Location location;
 };

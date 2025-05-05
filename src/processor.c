@@ -891,25 +891,7 @@ static void process_identifier(Context *context, Node *node) {
 
 	Value value = {};
 	Value type = {};
-	if (identifier.module == NULL && streq(identifier.value, "type")) {
-		value = create_value(TYPE_TYPE_VALUE);
-		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && streq(identifier.value, "byte")) {
-		value.value = value_new(BYTE_TYPE_VALUE);
-		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && streq(identifier.value, "uint")) {
-		value.value = value_new(INTEGER_TYPE_VALUE);
-		value.value->integer_type.size = 64;
-		value.value->integer_type.signed_ = false;
-		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && streq(identifier.value, "flt64")) {
-		value.value = value_new(FLOAT_TYPE_VALUE);
-		value.value->float_type.size = 64;
-		type = create_value(TYPE_TYPE_VALUE);
-	} else if (identifier.module == NULL && streq(identifier.value, "bool")) {
-		value.value = value_new(BOOLEAN_TYPE_VALUE);
-		type = create_value(TYPE_TYPE_VALUE);
-	} else if (streq(identifier.value, "import")) {
+	if (streq(identifier.value, "import")) {
 		value = create_value(IMPORT_FUNCTION_VALUE);
 
 		type.value = value_new(FUNCTION_TYPE_VALUE);
@@ -1109,6 +1091,53 @@ static void process_module(Context *context, Node *node) {
 	Module_Node module = node->module;
 	process_node(context, module.body);
 	set_type(context, node, (Value) { .value = value_new(MODULE_TYPE_VALUE) });
+}
+
+static void process_internal(Context *context, Node *node) {
+	Internal_Node internal = node->internal;
+
+	Value value;
+	switch (internal.kind) {
+		case INTERNAL_UINT: {
+			value.value = value_new(INTEGER_TYPE_VALUE);
+			value.value->integer_type.size = context->codegen.default_integer_size;
+			value.value->integer_type.signed_ = false;
+
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
+		case INTERNAL_TYPE: {
+			value.value = value_new(TYPE_TYPE_VALUE);
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
+		case INTERNAL_BYTE: {
+			value.value = value_new(BYTE_TYPE_VALUE);
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
+		case INTERNAL_FLT64: {
+			value.value = value_new(FLOAT_TYPE_VALUE);
+			value.value->float_type.size = 64;
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
+		case INTERNAL_BOOL: {
+			value.value = value_new(BOOLEAN_TYPE_VALUE);
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
+		case INTERNAL_TYPE_OF: {
+			process_node(context, internal.input);
+			value.value = get_type(context, internal.input).value;
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
+	}
+
+	Node_Data *data = node_data_new(INTERNAL_NODE);
+	data->internal.value = value;
+	set_data(context, node, data);
 }
 
 static void process_union_type(Context *context, Node *node) {
@@ -2334,6 +2363,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case MODULE_NODE: {
 			process_module(context, node);
+			break;
+		}
+		case INTERNAL_NODE: {
+			process_internal(context, node);
 			break;
 		}
 		default:

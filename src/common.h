@@ -414,6 +414,10 @@ typedef struct {
 } Break_Data;
 
 typedef struct {
+	Value value;
+} Internal_Data;
+
+typedef struct {
 	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
@@ -445,6 +449,7 @@ typedef struct {
 		Break_Data break_;
 		While_Data while_;
 		For_Data for_;
+		Internal_Data internal;
 	};
 } Node_Data;
 

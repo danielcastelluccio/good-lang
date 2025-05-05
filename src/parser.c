@@ -153,6 +153,35 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		Node *boolean = ast_new(BOOLEAN_NODE, token.location);
 		boolean->boolean.value = false;
 		return boolean;
+	} else if (streq(token.string, "uint")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_UINT;
+		return internal;
+	} else if (streq(token.string, "type")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_TYPE;
+		return internal;
+	} else if (streq(token.string, "byte")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_BYTE;
+		return internal;
+	} else if (streq(token.string, "flt64")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_FLT64;
+		return internal;
+	} else if (streq(token.string, "bool")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_BOOL;
+		return internal;
+	} else if (streq(token.string, "type_of")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_TYPE_OF;
+
+		lexer_consume_check(lexer, OPEN_PARENTHESIS);
+		internal->internal.input = parse_expression(lexer);
+		lexer_consume_check(lexer, CLOSED_PARENTHESIS);
+
+		return internal;
 	}
 
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);

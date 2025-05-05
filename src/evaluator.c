@@ -552,6 +552,10 @@ Value evaluate(Context *context, Node *node) {
 					return (Value) {};
 			}
 		}
+		case INTERNAL_NODE: {
+			Internal_Data internal_data = get_data(context, node)->internal;
+			return internal_data.value;
+		}
 		default:
 			assert(false);
 	}
