@@ -500,6 +500,7 @@ struct Context {
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
+	Node *internal_root;
 };
 
 Value get_type(Context *context, Node *node);

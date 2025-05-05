@@ -34,6 +34,7 @@ typedef struct {
 	enum {
 		LOOKUP_RESULT_FAIL,
 		LOOKUP_RESULT_DEFINE,
+		LOOKUP_RESULT_DEFINE_INTERNAL,
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_BINDING,
 		LOOKUP_RESULT_ARGUMENT,
@@ -47,6 +48,21 @@ typedef struct {
 } Lookup_Define_Result;
 
 static Lookup_Result lookup(Context *context, char *identifier) {
+	if (context->internal_root != NULL) {
+		Node *internal_block = context->internal_root->module.body;
+		for (long int i = 0; i < arrlen(internal_block->block.statements); i++) {
+			Node *statement = internal_block->block.statements[arrlen(internal_block->block.statements) - i - 1];
+			if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
+				Scope *scope = malloc(sizeof(Scope));
+				*scope = (Scope) {
+					.node = internal_block
+				};
+
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = { .node = statement, .scope = scope } };
+			}
+		}
+	}
+
 	bool found_function = false;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
@@ -85,6 +101,7 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 		switch (node->kind) {
 			case BLOCK_NODE:
 				for (long int i = 0; i < arrlen(node->block.statements); i++) {
+					// FIXME: Why looking up in reverse order??
 					Node *statement = node->block.statements[arrlen(node->block.statements) - i - 1];
 					if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE, .define = { .node = statement, .scope = scope } };
@@ -990,6 +1007,11 @@ static void process_identifier(Context *context, Node *node) {
 					lookup_result = lookup(context, identifier.value);
 				}
 			}
+		}
+
+		if (lookup_result.tag == LOOKUP_RESULT_DEFINE_INTERNAL) {
+			arrpush(define_scopes, *lookup_result.define.scope);
+			define_node = lookup_result.define.node;
 		}
 
 		if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {

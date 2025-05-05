@@ -1082,6 +1082,20 @@ static Node *parse_expression(Lexer *lexer) {
 	return result;
 }
 
+Node *parse_source(char *source, size_t length, char *path) {
+	Lexer lexer = lexer_create(path, source, length);
+
+	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
+	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
+	while (lexer_peek(&lexer).kind != END_OF_FILE) {
+		arrpush(block->block.statements, parse_expression(&lexer));
+		lexer_consume_check(&lexer, SEMICOLON);
+	}
+	root->module.body = block;
+
+	return root;
+}
+
 Node *parse_file(char *path) {
 	FILE *file = fopen(path, "r");
 	if (!file) {
@@ -1096,15 +1110,5 @@ Node *parse_file(char *path) {
 	char *contents = malloc(length);
 	fread(contents, length, 1, file);
 
-	Lexer lexer = lexer_create(path, contents, length);
-
-	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
-	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
-	while (lexer_peek(&lexer).kind != END_OF_FILE) {
-		arrpush(block->block.statements, parse_expression(&lexer));
-		lexer_consume_check(&lexer, SEMICOLON);
-	}
-	root->module.body = block;
-
-	return root;
+	return parse_source(contents, length, path);
 }
