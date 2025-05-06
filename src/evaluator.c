@@ -72,6 +72,16 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 
 			return true;
 		}
+		case TAGGED_UNION_TYPE_VALUE: {
+			if (arrlen(value1->tagged_union_type.items) != arrlen(value2->tagged_union_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(value1->tagged_union_type.items); i++) {
+				if (strcmp(value1->tagged_union_type.items[i].identifier, value2->tagged_union_type.items[i].identifier) != 0) return false;
+				if (!value_equal(value1->tagged_union_type.items[i].type.value, value2->tagged_union_type.items[i].type.value)) return false;
+			}
+
+			return true;
+		}
 		case ENUM_TYPE_VALUE: {
 			if (arrlen(value1->enum_type.items) != arrlen(value2->enum_type.items)) return false;
 
@@ -161,7 +171,7 @@ static Value evaluate_function(State *state, Node *node) {
 		function_value->function.body = function.body;
 	}
 
-	function_value->function.static_argument_id = state->context->static_argument_id;
+	function_value->function.static_argument_id = state->context->static_value_id;
 	function_value->function.node = node;
 
 	Scope *scopes = NULL;
@@ -453,8 +463,8 @@ static Value evaluate_call(State *state, Node *node) {
 
 	Value_Data *result = NULL;
 
-	size_t saved_static_argument_id = state->context->static_argument_id;
-	state->context->static_argument_id = function.value->function.static_argument_id;
+	size_t saved_static_argument_id = state->context->static_value_id;
+	state->context->static_value_id = function.value->function.static_argument_id;
 
 	Value *saved_function_arguments = function_arguments;
 	function_arguments = arguments;
@@ -597,7 +607,7 @@ static Value evaluate_call(State *state, Node *node) {
 	}
 
 	function_arguments = saved_function_arguments;
-	state->context->static_argument_id = saved_static_argument_id;
+	state->context->static_value_id = saved_static_argument_id;
 
 	return create_value_data(result, node);
 }

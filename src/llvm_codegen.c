@@ -1227,8 +1227,8 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	assert(value->tag == FUNCTION_VALUE);
 	Function_Value function = value->function;
 
-	size_t saved_static_argument_id = state->context.static_argument_id;
-	state->context.static_argument_id = function.static_argument_id;
+	size_t saved_static_argument_id = state->context.static_value_id;
+	state->context.static_value_id = function.static_argument_id;
 
 	Function_Data function_data = get_data(&state->context, function.node)->function;
 	if (function_data.compile_only || function.type->function_type.incomplete) {
@@ -1276,7 +1276,7 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 
 	state->function_arguments = saved_function_arguments;
 	state->current_function = saved_current_function;
-	state->context.static_argument_id = saved_static_argument_id;
+	state->context.static_value_id = saved_static_argument_id;
 	state->llvm_builder = saved_llvm_builder;
 
 	if (function.node->function.extern_name != NULL) {

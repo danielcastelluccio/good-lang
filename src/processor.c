@@ -92,7 +92,7 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			}
 		}
 
-		Typed_Value value = shget(scope->static_arguments, identifier);
+		Typed_Value value = shget(scope->static_values, identifier);
 		if (value.type.value != NULL) {
 			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_ARGUMENT, .static_argument = value.value, .type = value.type };
 		}
@@ -696,11 +696,11 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 			shput(static_arguments_map, static_arguments[i].identifier, static_arguments[i].value);
 		}
 
-		Value *values = NULL;
+		Value *static_argument_values = NULL;
 		for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
 			Function_Argument argument = function_type_node->function_type.arguments[i];
 			if (argument.static_) {
-				arrpush(values, shget(static_arguments_map, argument.identifier).value);
+				arrpush(static_argument_values, shget(static_arguments_map, argument.identifier).value);
 			}
 		}
 
@@ -712,9 +712,9 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 
 		Static_Argument_Variation *function_values = function_data->function_type.function_values;
 		for (long int i = 0; i < arrlen(function_values); i++) {
-			bool match = arrlen(function_values) == arrlen(values);
+			bool match = arrlen(function_values) == arrlen(static_argument_values);
 			for (long int j = 0; j < arrlen(function_values[i].static_arguments); j++) {
-				if (!value_equal(function_values[i].static_arguments[j].value, values[j].value)) {
+				if (!value_equal(function_values[i].static_arguments[j].value, static_argument_values[j].value)) {
 					match = false;
 				}
 			}
@@ -733,8 +733,8 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 				function_value = function_value_in;
 			}
 
-			size_t saved_static_argument_id = context->static_argument_id;
-			context->static_argument_id = ++context->static_argument_id_counter;
+			size_t saved_static_argument_id = context->static_value_id;
+			context->static_value_id = ++context->static_value_id_counter;
 
 			reset_node(context, function_value.value->function.node);
 
@@ -747,7 +747,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 			arrpush(context->scopes, (Scope) { .node = node });
 
 			for (long int i = 0; i < arrlen(static_arguments); i++) {
-				shput(arrlast(context->scopes).static_arguments, static_arguments[i].identifier, static_arguments[i].value);
+				shput(arrlast(context->scopes).static_values, static_arguments[i].identifier, static_arguments[i].value);
 			}
 
 			process_function(context, function_value.value->function.node, true);
@@ -760,14 +760,14 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 			function_value = evaluate(context, function_value.value->function.node);
 
 			Static_Argument_Variation static_argument_variation = {
-				.static_arguments = values,
+				.static_arguments = static_argument_values,
 				.value = { .value = function_value, .type = *function_type }
 			};
 			arrpush(function_data->function_type.function_values, static_argument_variation);
 
 			(void) arrpop(context->scopes);
 			context->scopes = saved_scopes;
-			context->static_argument_id = saved_static_argument_id;
+			context->static_value_id = saved_static_argument_id;
 		}
 	}
 

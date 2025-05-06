@@ -31,7 +31,7 @@ typedef struct {
 typedef struct {
 	struct { char *key; Node *value; } *variables; // stb_ds
 	struct { char *key; Binding value; } *bindings; // stb_ds
-	struct { char *key; Typed_Value value; } *static_arguments; // stb_ds
+	struct { char *key; Typed_Value value; } *static_values; // stb_ds
 	Node *node;
 	Value current_type;
 } Scope;
@@ -247,7 +247,6 @@ typedef struct {
 		IDENTIFIER_ARGUMENT,
 		IDENTIFIER_BINDING,
 		IDENTIFIER_VALUE,
-		IDENTIFIER_STATIC_ARGUMENT,
 		IDENTIFIER_SELF,
 		IDENTIFIER_UNDERSCORE
 	} kind;
@@ -503,8 +502,8 @@ struct Context {
 	bool returned;
 	Scope *scopes; // stb_ds
 	bool compile_only;
-	size_t static_argument_id;
-	size_t static_argument_id_counter;
+	size_t static_value_id;
+	size_t static_value_id_counter;
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
