@@ -33,6 +33,7 @@ typedef struct {
 	struct { char *key; Binding value; } *bindings; // stb_ds
 	struct { char *key; Typed_Value value; } *static_values; // stb_ds
 	Node *node;
+	Value node_type;
 	Value current_type;
 } Scope;
 
@@ -328,6 +329,7 @@ typedef struct {
 	Value type;
 	bool returned;
 	bool *cases_returned; // stb_ds
+	size_t static_case;
 } Switch_Data;
 
 typedef struct {
@@ -409,6 +411,7 @@ typedef struct {
 
 typedef struct {
 	Value type;
+	size_t *static_value_ids; // stb_ds
 } For_Data;
 
 typedef struct {
@@ -417,6 +420,7 @@ typedef struct {
 
 typedef struct {
 	Value value;
+	Node *node;
 } Internal_Data;
 
 typedef struct {

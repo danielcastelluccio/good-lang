@@ -1,9 +1,11 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ast.h"
 #include "common.h"
+#include "parser.h"
 #include "stb/ds.h"
 #include "util.h"
 
@@ -85,7 +87,7 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			for (long int i = 0; i < arrlen(current_function_type->function_type.arguments); i++) {
 				if (!current_function_type->function_type.arguments[i].static_) {
 					if (strcmp(current_function_type->function_type.arguments[i].identifier, identifier) == 0) {
-						return (Lookup_Result) { .tag = LOOKUP_RESULT_ARGUMENT, .argument = j, .type = get_data(context, current_function_type)->function_type.value.value->function_type.arguments[i].type };
+						return (Lookup_Result) { .tag = LOOKUP_RESULT_ARGUMENT, .argument = j, .type = scope->node_type.value->function_type.arguments[i].type };
 					}
 					j++;
 				}
@@ -469,6 +471,7 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 static bool uses_inferred_arguments(Node *node, char **inferred_arguments) {
 	switch (node->kind) {
 		case POINTER_NODE: {
+			if (node->pointer.inner == NULL) return false;
 			return uses_inferred_arguments(node->pointer.inner, inferred_arguments);
 		}
 		case ARRAY_TYPE_NODE: {
@@ -512,13 +515,15 @@ static Value *get_initial_argument_types(Context *context, Value function_type, 
 	for (long int i = 0; i < arrlen(arguments); i++) {
 		Value type = get_type(context, arguments[i]);
 		if (type.value == NULL) {
-			Temporary_Context temporary_context = { .wanted_type = NULL };
+			if (function_type_node != NULL) {
+				Function_Argument *function_node_arguments = function_type_node->function_type.arguments;
+				long int function_argument_index = i + arrlen(inferred_arguments);
+				if (function_argument_index < arrlen(function_node_arguments) && uses_inferred_arguments(function_node_arguments[function_argument_index].type, inferred_arguments)) {
+					process_node(context, arguments[i]);
 
-			if (uses_inferred_arguments(arguments[i], inferred_arguments)) {
-				process_node_context(context, temporary_context, arguments[i]);
-
-				type = get_type(context, arguments[i]);
-				reset_node(context, arguments[i]);
+					type = get_type(context, arguments[i]);
+					reset_node(context, arguments[i]);
+				}
 			}
 		}
 
@@ -563,7 +568,11 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 		set_type(context, node, function_type_value);
 
 		if (function.body != NULL) {
-			arrpush(context->scopes, (Scope) { .node = node });
+			Scope scope = {
+				.node = node,
+				.node_type = function_type_value
+			};
+			arrpush(context->scopes, scope);
 
 			Temporary_Context temporary_context = { .wanted_type = function_type_value.value->function_type.return_type };
 			process_node_context(context, temporary_context, function.body);
@@ -755,7 +764,6 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 			context->compile_only = compile_only_parent;
 
 			*function_type = get_type(context, function_value.value->function.node);
-			set_type(context, function, *function_type);
 
 			function_value = evaluate(context, function_value.value->function.node);
 
@@ -768,6 +776,8 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 			(void) arrpop(context->scopes);
 			context->scopes = saved_scopes;
 			context->static_value_id = saved_static_argument_id;
+
+			set_type(context, function, *function_type);
 		}
 	}
 
@@ -1062,6 +1072,7 @@ static void process_internal(Context *context, Node *node) {
 	Internal_Node internal = node->internal;
 
 	Value value = {};
+	Node *inner_node = NULL;
 	switch (internal.kind) {
 		case INTERNAL_UINT: {
 			value.value = value_new(INTEGER_TYPE_VALUE);
@@ -1140,6 +1151,33 @@ static void process_internal(Context *context, Node *node) {
 			set_type(context, node, (Value) { .value = create_integer_type(false, 8).value });
 			break;
 		}
+		case INTERNAL_EMBED: {
+			Value *values = NULL;
+			for (long int i = 0; i < arrlen(internal.inputs); i++) {
+				process_node(context, internal.inputs[i]);
+				arrpush(values, evaluate(context, internal.inputs[i]));
+			}
+
+			size_t total_length = 0;
+			for (long int i = 0; i < arrlen(values); i++) {
+				total_length += values[i].value->array_view.length;
+			}
+
+			char *source_string = malloc(total_length + 1);
+			size_t index = 0;
+			for (long int i = 0; i < arrlen(values); i++) {
+				for (size_t j = 0; j < values[i].value->array_view.length; j++) {
+					source_string[index++] = values[i].value->array_view.values[j]->byte.value;
+				}
+			}
+
+			inner_node = parse_source_expr(source_string, index, "");
+			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+			process_node_context(context, temporary_context, inner_node);
+
+			set_type(context, node, get_type(context, inner_node));
+			break;
+		}
 		case INTERNAL_PRINT: {
 			process_node(context, internal.inputs[0]);
 			break;
@@ -1148,6 +1186,7 @@ static void process_internal(Context *context, Node *node) {
 
 	Node_Data *data = node_data_new(INTERNAL_NODE);
 	data->internal.value = value;
+	data->internal.node = inner_node;
 	set_data(context, node, data);
 }
 
@@ -1526,6 +1565,7 @@ static void process_structure_access(Context *context, Node *node) {
 	if (structure_type.value->tag != STRUCT_TYPE_VALUE && structure_type.value->tag != UNION_TYPE_VALUE && structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(structure_type, given_string);
+		__builtin_trap();
 		handle_semantic_error(node->location, "Expected structure or union or string, but got %s", given_string);
 	}
 
@@ -1703,8 +1743,16 @@ static void process_variable(Context *context, Node *node) {
 		handle_semantic_error(node->location, "Expected value");
 	}
 
-	Scope *scope = &arrlast(context->scopes);
-	shput(scope->variables, variable.identifier, node);
+	if (variable.static_) {
+		Value value = evaluate(context, variable.value);
+		Typed_Value typed_value = {
+			.value = value,
+			.type = get_type(context, variable.value)
+		};
+		shput(arrlast(context->scopes).static_values, variable.identifier, typed_value);
+	} else {
+		shput(arrlast(context->scopes).variables, variable.identifier, node);
+	}
 
 	Node_Data *data = node_data_new(VARIABLE_NODE);
 	data->variable.type = type;
@@ -1916,88 +1964,134 @@ static void process_switch(Context *context, Node *node) {
 		enum_type = enum_type->tagged_union_type.enum_;
 	}
 
-	Value switch_type = {};
-	bool set_switch_type = false;
-	long int case_count = 0;
-	bool else_case = false;
 	for (long int i = 0; i < arrlen(switch_.cases); i++) {
 		Switch_Case switch_case = switch_.cases[i];
 
-		Value binding_type = (Value) {};
 		if (switch_case.check != NULL) {
 			Temporary_Context temporary_context = { .wanted_type = (Value) { .value = enum_type } };
 			process_node_context(context, temporary_context, switch_case.check);
-			case_count++;
-
-			Value check_value = evaluate(context, switch_case.check);
-			binding_type = type.value->tagged_union_type.items[check_value.value->enum_.value].type;
-		} else {
-			else_case = true;
-		}
-
-		arrpush(context->scopes, (Scope) { .node = node });
-
-		if (switch_case.binding != NULL) {
-			Binding binding = {
-				.type = binding_type,
-				.index = 0
-			};
-			shput(arrlast(context->scopes).bindings, switch_case.binding, binding);
-		}
-
-		bool saved_previous_returned = context->returned;
-		context->returned = NULL;
-		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
-		process_node_context(context, temporary_context, switch_case.body);
-
-		bool saved_case_returned = context->returned;
-
-		context->returned = saved_returned;
-
-		(void) arrpop(context->scopes);
-
-		arrpush(data->switch_.cases_returned, saved_case_returned);
-		if ((saved_previous_returned || i == 0) && saved_case_returned) {
-			context->returned = true;
-		}
-
-		Value case_type = get_type(context, switch_case.body);
-		if (case_type.value != NULL) {
-			if (switch_type.value == NULL) {
-				if (set_switch_type) {
-					handle_semantic_error(node->location, "Expected value from case");
-				} else {
-					switch_type = case_type;
-				}
-			}
-
-			set_switch_type = true;
-		}
-
-		if (switch_type.value != NULL) {
-			if (case_type.value == NULL) {
-				handle_semantic_error(node->location, "Expected value from case");
-			}
-
-			if (!value_equal(switch_type.value, case_type.value)) {
-				char switch_string[64] = {};
-				print_type_outer(switch_type, switch_string);
-				char case_string[64] = {};
-				print_type_outer(case_type, case_string);
-				handle_semantic_error(node->location, "Mismatched types %s and %s", switch_string, case_string);
-			}
-
-			data->switch_.type = switch_type;
-			set_type(context, node, switch_type);
 		}
 	}
 
-	data->switch_.returned = context->returned;
+	if (switch_.static_) {
+		Value_Data *switched_value = evaluate(context, switch_.value).value;
+		Value_Data *switched_enum_value = evaluate(context, switch_.value).value;
+		if (switched_enum_value->tag == TAGGED_UNION_VALUE) {
+			switched_enum_value = switched_enum_value->tagged_union.tag;
+		}
 
-	if (case_count < arrlen(enum_type->enum_type.items) && !else_case) {
-		context->returned = saved_returned;
-		if (switch_type.value != NULL) {
-			handle_semantic_error(node->location, "Expected else case");
+		for (long int i = 0; i < arrlen(switch_.cases); i++) {
+			Switch_Case switch_case = switch_.cases[i];
+			if (switch_case.check != NULL) {
+				Value value = evaluate(context, switch_case.check);
+
+				if (value_equal(value.value, switched_enum_value)) {
+					data->switch_.static_case = i;
+					break;
+				}
+			} else {
+				data->switch_.static_case = i;
+			}
+		}
+
+		Switch_Case switch_case = switch_.cases[data->switch_.static_case];
+
+		if (switched_value->tag == TAGGED_UNION_VALUE && switch_case.binding != NULL) {
+			Typed_Value typed_value = {
+				.value = (Value) { .value = switched_value->tagged_union.data },
+				.type = type.value->tagged_union_type.items[switched_enum_value->enum_.value].type
+			};
+			shput(arrlast(context->scopes).static_values, switch_case.binding, typed_value);
+		}
+
+		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+		process_node_context(context, temporary_context, switch_case.body);
+	} else {
+		Value switch_type = {};
+		bool set_switch_type = false;
+		long int case_count = 0;
+		bool else_case = false;
+		for (long int i = 0; i < arrlen(switch_.cases); i++) {
+			Switch_Case switch_case = switch_.cases[i];
+
+			Value binding_type = (Value) {};
+			if (switch_case.check != NULL) {
+				Temporary_Context temporary_context = { .wanted_type = (Value) { .value = enum_type } };
+				process_node_context(context, temporary_context, switch_case.check);
+				case_count++;
+
+				if (type.value->tag == TAGGED_UNION_TYPE_VALUE) {
+					Value check_value = evaluate(context, switch_case.check);
+					binding_type = type.value->tagged_union_type.items[check_value.value->enum_.value].type;
+				}
+			} else {
+				else_case = true;
+			}
+
+			arrpush(context->scopes, (Scope) { .node = node });
+
+			if (switch_case.binding != NULL) {
+				Binding binding = {
+					.type = binding_type,
+					.index = 0
+				};
+				shput(arrlast(context->scopes).bindings, switch_case.binding, binding);
+			}
+
+			bool saved_previous_returned = context->returned;
+			context->returned = NULL;
+			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+			process_node_context(context, temporary_context, switch_case.body);
+
+			bool saved_case_returned = context->returned;
+
+			context->returned = saved_returned;
+
+			(void) arrpop(context->scopes);
+
+			arrpush(data->switch_.cases_returned, saved_case_returned);
+			if ((saved_previous_returned || i == 0) && saved_case_returned) {
+				context->returned = true;
+			}
+
+			Value case_type = get_type(context, switch_case.body);
+			if (case_type.value != NULL) {
+				if (switch_type.value == NULL) {
+					if (set_switch_type) {
+						handle_semantic_error(node->location, "Expected value from case");
+					} else {
+						switch_type = case_type;
+					}
+				}
+
+				set_switch_type = true;
+			}
+
+			if (switch_type.value != NULL) {
+				if (case_type.value == NULL) {
+					handle_semantic_error(node->location, "Expected value from case");
+				}
+
+				if (!value_equal(switch_type.value, case_type.value)) {
+					char switch_string[64] = {};
+					print_type_outer(switch_type, switch_string);
+					char case_string[64] = {};
+					print_type_outer(case_type, case_string);
+					handle_semantic_error(node->location, "Mismatched types %s and %s", switch_string, case_string);
+				}
+
+				data->switch_.type = switch_type;
+				set_type(context, node, switch_type);
+			}
+		}
+
+		data->switch_.returned = context->returned;
+
+		if (case_count < arrlen(enum_type->enum_type.items) && !else_case) {
+			context->returned = saved_returned;
+			if (switch_type.value != NULL) {
+				handle_semantic_error(node->location, "Expected else case");
+			}
 		}
 	}
 
@@ -2059,25 +2153,54 @@ static void process_for(Context *context, Node *node) {
 	Value item_type = get_type(context, for_.item);
 
 	Value element_type = item_type.value->array_view_type.inner;
-	Binding binding = {
-		.type = element_type,
-		.index = 0
-	};
-	shput(arrlast(context->scopes).bindings, for_.bindings[0], binding);
-
-	if (arrlen(for_.bindings) > 1) {
-		binding = (Binding) {
-			.type = create_integer_type(false, context->codegen.default_integer_size),
-			.index = 1
-		};
-		shput(arrlast(context->scopes).bindings, for_.bindings[1], binding);
-	}
-
-	process_node(context, for_.body);
-
-	(void) arrpop(context->scopes);
 
 	Node_Data *data = node_data_new(FOR_NODE);
+	if (for_.static_) {
+		Value looped_value = evaluate(context, for_.item);
+
+		size_t saved_static_value_id = context->static_value_id;
+		for (size_t i = 0; i < looped_value.value->array_view.length; i++) {
+			size_t static_value_id = context->static_value_id_counter++;
+			context->static_value_id = static_value_id;
+			arrpush(data->for_.static_value_ids, static_value_id);
+
+			Typed_Value typed_value = {
+				.value = (Value) { .value = looped_value.value->array_view.values[i] },
+				.type = element_type
+			};
+			shput(arrlast(context->scopes).static_values, for_.bindings[0], typed_value);
+
+			if (arrlen(for_.bindings) > 1) {
+				Typed_Value typed_value = {
+					.value = create_integer(i),
+					.type = create_integer_type(false, context->codegen.default_integer_size)
+				};
+				shput(arrlast(context->scopes).static_values, for_.bindings[1], typed_value);
+			}
+
+			process_node(context, for_.body);
+		}
+		context->static_value_id = saved_static_value_id;
+	} else {
+		Binding binding = {
+			.type = element_type,
+			.index = 0
+		};
+		shput(arrlast(context->scopes).bindings, for_.bindings[0], binding);
+
+		if (arrlen(for_.bindings) > 1) {
+			binding = (Binding) {
+				.type = create_integer_type(false, context->codegen.default_integer_size),
+				.index = 1
+			};
+			shput(arrlast(context->scopes).bindings, for_.bindings[1], binding);
+		}
+
+		process_node(context, for_.body);
+
+		(void) arrpop(context->scopes);
+	}
+
 	data->for_.type = item_type;
 	set_data(context, node, data);
 }

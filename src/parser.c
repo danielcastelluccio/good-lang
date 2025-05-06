@@ -215,6 +215,21 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 			return internal;
 		}
+	} else if (streq(token.string, "embed")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_EMBED;
+
+		lexer_consume_check(lexer, OPEN_PARENTHESIS);
+		while (lexer_peek(lexer).kind != CLOSED_PARENTHESIS) {
+			arrpush(internal->internal.inputs, parse_expression(lexer));
+
+			if (lexer_peek(lexer).kind == COMMA) {
+				lexer_consume(lexer);
+			}
+		}
+		lexer_consume(lexer);
+
+		return internal;
 	} else if (streq(token.string, "print")) {
 		Node *internal = ast_new(INTERNAL_NODE, token.location);
 		internal->internal.kind = INTERNAL_PRINT;
@@ -657,8 +672,14 @@ static Node *parse_variable(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 
 	Node *variable = ast_new(VARIABLE_NODE, first_token.location);
+
+	if (lexer_peek_check_keyword(lexer, "static")) {
+		lexer_consume(lexer);
+		variable->variable.static_ = true;
+	}
+
 	variable->variable.identifier = lexer_consume_check(lexer, IDENTIFIER).string;
-	
+
 	if (lexer_peek(lexer).kind == COLON) {
 		lexer_consume_check(lexer, COLON);
 		variable->variable.type = parse_expression(lexer);
@@ -741,6 +762,11 @@ static Node *parse_for(Lexer *lexer) {
 
 	Node *for_ = ast_new(FOR_NODE, first_token.location);
 
+	if (lexer_peek_check_keyword(lexer, "static")) {
+		lexer_consume(lexer);
+		for_->for_.static_ = true;
+	}
+
 	for_->for_.item = parse_expression(lexer);
 
 	lexer_consume_check(lexer, VERTICAL_BAR);
@@ -767,6 +793,11 @@ static Node *parse_for(Lexer *lexer) {
 static Node *parse_switch(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
+
+	if (lexer_peek_check_keyword(lexer, "static")) {
+		lexer_consume_check(lexer, KEYWORD);
+		switch_->switch_.static_ = true;
+	}
 
 	switch_->switch_.value = parse_expression(lexer);
 
@@ -1181,6 +1212,11 @@ static Node *parse_expression(Lexer *lexer) {
 	}
 
 	return result;
+}
+
+Node *parse_source_expr(char *source, size_t length, char *path) {
+	Lexer lexer = lexer_create(path, source, length);
+	return parse_expression(&lexer);
 }
 
 Node *parse_source(char *source, size_t length, char *path) {

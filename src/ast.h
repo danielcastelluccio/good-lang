@@ -186,6 +186,7 @@ typedef struct {
 	char *identifier;
 	Node *type;
 	Node *value;
+	bool static_;
 } Variable_Node;
 
 typedef struct {
@@ -210,6 +211,7 @@ typedef struct {
 	Node *item;
 	Node *body;
 	char **bindings;
+	bool static_;
 } For_Node;
 
 typedef struct {
@@ -221,6 +223,7 @@ typedef struct {
 typedef struct {
 	Node *value;
 	Switch_Case *cases; // stb_ds
+	bool static_;
 } Switch_Node;
 
 typedef struct {
@@ -278,7 +281,8 @@ typedef struct {
 		INTERNAL_C_SHORT_SIZE,
 		INTERNAL_C_INT_SIZE,
 		INTERNAL_C_LONG_SIZE,
-		INTERNAL_PRINT
+		INTERNAL_PRINT,
+		INTERNAL_EMBED
 	} kind;
 	Node **inputs; // stb_ds
 } Internal_Node;

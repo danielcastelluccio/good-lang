@@ -57,7 +57,7 @@ typedef struct {
 } State;
 
 static LLVMValueRef generate_node(Node *node, State *state);
-static LLVMValueRef generate_value(Value_Data *value, State *state);
+static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *state);
 
 static LLVMTypeRef create_llvm_type(Value_Data *node, State *state);
 
@@ -209,15 +209,15 @@ static void generate_define(Node *node, State *state) {
 		return;
 	}
 
-	Value value = data->define.typed_value.value;
-	if (value.value == NULL) {
+	Typed_Value typed_value = data->define.typed_value;
+	if (typed_value.value.value == NULL) {
 		return;
 	}
 
-	LLVMValueRef llvm_value = generate_value(value.value, state);
+	LLVMValueRef llvm_value = generate_value(typed_value.value.value, typed_value.type.value, state);
 	if (strcmp(define.identifier, "main") == 0) {
 		state->main_function = llvm_value;
-		state->main_takes_arguments = arrlen(value.value->function.type->function_type.arguments) > 0;
+		state->main_takes_arguments = arrlen(typed_value.value.value->function.type->function_type.arguments) > 0;
 	}
 }
 
@@ -268,7 +268,7 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	Value function_type = call_data.function_type;
 
 	if (call_data.function_value.value != NULL) {
-		return generate_call_generic(generate_value(call_data.function_value.value, state), function_type.value, call.arguments, state);
+		return generate_call_generic(generate_value(call_data.function_value.value, call_data.function_type.value, state), function_type.value, call.arguments, state);
 	} else {
 		return generate_call_generic(generate_node(call.function, state), function_type.value, call.arguments, state);
 	}
@@ -278,8 +278,8 @@ static LLVMValueRef generate_call_method(Node *node, State *state) {
 	assert(node->kind == CALL_METHOD_NODE);
 	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
 
-	Value_Data *function_value = call_method_data.custom_operator_function.function;
-	return generate_call_generic(generate_value(function_value, state), call_method_data.custom_operator_function.function_type.value, call_method_data.arguments, state);
+	Custom_Operator_Function operator = call_method_data.custom_operator_function;
+	return generate_call_generic(generate_value(operator.function, operator.function_type.value, state), call_method_data.custom_operator_function.function_type.value, call_method_data.arguments, state);
 }
 
 static LLVMValueRef generate_identifier(Node *node, State *state) {
@@ -335,7 +335,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			return NULL;
 		}
 		case IDENTIFIER_VALUE: {
-			return generate_value(identifier_data->identifier.value.value, state);
+			return generate_value(identifier_data->identifier.value.value, identifier_data->identifier.type.value, state);
 		}
 		case IDENTIFIER_UNDERSCORE: {
 			if (identifier_data->identifier.assign_value != NULL) {
@@ -482,7 +482,7 @@ static LLVMValueRef generate_run(Node *node, State *state) {
 	Value value = get_data(&state->context, node)->run.value;
 
 	if (value.value != NULL) {
-		return generate_value(value.value, state);
+		return generate_value(value.value, get_type(&state->context, node).value, state);
 	}
 
 	return NULL;
@@ -552,7 +552,7 @@ static LLVMValueRef generate_is(Node *node, State *state) {
 	value_temp_storage = LLVMBuildBitCast(state->llvm_builder, value_temp_storage, create_llvm_type(create_pointer_type(is_data.type.value->optional_type.inner).value, state), "bitcast");
 
 	value_data = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(is_data.type.value->optional_type.inner.value, state), value_temp_storage, "");
-	LLVMValueRef check_value = generate_value(is_data.value.value, state);
+	LLVMValueRef check_value = generate_value(is_data.value.value, is_data.type.value, state);
 
 	LLVMTypeRef optional_llvm_type = create_llvm_type(is_data.type.value, state);
 	if (is_data.type.value->optional_type.inner.value->tag == POINTER_TYPE_VALUE) {
@@ -722,8 +722,8 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 		arrpush(arguments, array_access.array);
 		arrpush(arguments, array_access.index);
 
-		Value_Data *function_value = array_access_data.custom_operator_function.function;
-		element_pointer = generate_call_generic(generate_value(function_value, state), array_access_data.custom_operator_function.function_type.value, arguments, state);
+		Custom_Operator_Function operator = array_access_data.custom_operator_function;
+		element_pointer = generate_call_generic(generate_value(operator.function, operator.function_type.value, state), array_access_data.custom_operator_function.function_type.value, arguments, state);
 	} else {
 		LLVMValueRef indices[2] = {
 			LLVMConstInt(LLVMInt64Type(), 0, false),
@@ -899,6 +899,10 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 	assert(node->kind == VARIABLE_NODE);
 	Variable_Node variable = node->variable;
 
+	if (variable.static_) {
+		return NULL;
+	}
+
 	LLVMValueRef allocated_variable_llvm = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(get_data(&state->context, node)->variable.type.value, state), "");
 	if (variable.value != NULL) {
 		LLVMValueRef llvm_value = generate_node(variable.value, state);
@@ -1016,6 +1020,11 @@ static LLVMValueRef generate_switch(Node *node, State *state) {
 	Switch_Node switch_ = node->switch_;
 	Switch_Data switch_data = get_data(&state->context, node)->switch_;
 
+	if (switch_.static_) {
+		Switch_Case switch_case = switch_.cases[switch_data.static_case];
+		return generate_node(switch_case.body, state);
+	}
+
 	LLVMValueRef value = NULL;
 	if (switch_data.type.value != NULL) {
 		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(switch_data.type.value, state), "");
@@ -1113,6 +1122,16 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	For_Node for_ = node->for_;
 	Node_Data *for_data = get_data(&state->context, node);
 
+	if (for_.static_) {
+		size_t saved_static_value_id = state->context.static_value_id;
+		for (long int i = 0; i < arrlen(for_data->for_.static_value_ids); i++) {
+			state->context.static_value_id = for_data->for_.static_value_ids[i];
+			generate_node(for_.body, state);
+		}
+		state->context.static_value_id = saved_static_value_id;
+		return NULL;
+	}
+
 	LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
@@ -1155,6 +1174,15 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 
 	return NULL;
+}
+
+static LLVMValueRef generate_internal(Node *node, State *state) {
+	assert(node->kind == INTERNAL_NODE);
+	Internal_Node internal = node->internal;
+	Internal_Data internal_data = get_data(&state->context, node)->internal;
+
+	assert(internal.kind == INTERNAL_EMBED);
+	return generate_node(internal_data.node, state);
 }
 
 static LLVMValueRef generate_node(Node *node, State *state) {
@@ -1218,6 +1246,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_while(node, state);
 		case FOR_NODE:
 			return generate_for(node, state);
+		case INTERNAL_NODE:
+			return generate_internal(node, state);
 		default:
 			assert(false);
 	}
@@ -1301,6 +1331,14 @@ static LLVMValueRef generate_integer(Value_Data *value, State *state) {
 	return LLVMConstInt(LLVMInt64Type(), integer.value, false);
 }
 
+static LLVMValueRef generate_byte(Value_Data *value, State *state) {
+	(void) state;
+	assert(value->tag == BYTE_VALUE);
+	Byte_Value byte = value->byte;
+
+	return LLVMConstInt(LLVMInt8Type(), byte.value, false);
+}
+
 static LLVMValueRef generate_enum(Value_Data *value, State *state) {
 	(void) state;
 	assert(value->tag == ENUM_VALUE);
@@ -1309,13 +1347,40 @@ static LLVMValueRef generate_enum(Value_Data *value, State *state) {
 	return LLVMConstInt(LLVMInt64Type(), enum_.value, false);
 }
 
-static LLVMValueRef generate_struct(Value_Data *value, State *state) {
-	(void) value;
-	(void) state;
-	return LLVMConstStruct(NULL, 0, false);
+static LLVMValueRef generate_struct(Value_Data *value, Value_Data *type, State *state) {
+	Struct_Value struct_ = value->struct_;
+
+	LLVMValueRef struct_value = LLVMGetUndef(create_llvm_type(type, state));
+	for (long int i = 0; i < arrlen(struct_.values); i++) {
+		struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, generate_value(struct_.values[i], type->struct_type.items[i].type.value, state), i, "");
+	}
+	return struct_value;
 }
 
-static LLVMValueRef generate_value(Value_Data *value, State *state) {
+static LLVMValueRef generate_array_view(Value_Data *value, Value_Data *type, State *state) {
+	Array_View_Value array_view = value->array_view;
+
+	Value_Data *inner_type = type->array_view_type.inner.value;
+	LLVMTypeRef inner_llvm_type = create_llvm_type(inner_type, state);
+
+	LLVMValueRef array_value = LLVMGetUndef(LLVMArrayType(inner_llvm_type, array_view.length));
+	for (size_t i = 0; i < array_view.length; i++) {
+		array_value = LLVMBuildInsertValue(state->llvm_builder, array_value, generate_value(array_view.values[i], inner_type, state), i, "");
+	}
+	LLVMValueRef global_array = LLVMAddGlobal(state->llvm_module, LLVMArrayType(inner_llvm_type, array_view.length), "");
+	LLVMSetLinkage(global_array, LLVMPrivateLinkage);
+	LLVMSetGlobalConstant(global_array, true);
+	LLVMSetUnnamedAddr(global_array, true);
+	LLVMSetInitializer(global_array, array_value);
+
+	LLVMValueRef struct_value = LLVMGetUndef(create_llvm_type(type, state));
+	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMConstInt(LLVMInt64Type(), array_view.length, false), 0, "");
+	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMBuildPointerCast(state->llvm_builder, global_array, LLVMPointerType(inner_llvm_type, 0), ""), 1, "");
+
+	return struct_value;
+}
+
+static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
 		return cached_result;
@@ -1332,11 +1397,17 @@ static LLVMValueRef generate_value(Value_Data *value, State *state) {
 		case INTEGER_VALUE:
 			result = generate_integer(value, state);
 			break;
+		case BYTE_VALUE:
+			result = generate_byte(value, state);
+			break;
 		case ENUM_VALUE:
 			result = generate_enum(value, state);
 			break;
+		case ARRAY_VIEW_VALUE:
+			result = generate_array_view(value, type, state);
+			break;
 		case STRUCT_VALUE:
-			result = generate_struct(value, state);
+			result = generate_struct(value, type, state);
 			break;
 		default:
 			break;
