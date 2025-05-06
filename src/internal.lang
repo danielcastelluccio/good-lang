@@ -1,2 +1,7 @@
-def size_of = fn [T = uint](ty: type): T internal "size_of";
+def size_of = fn [T = uint](t: type): T internal "size_of";
 def import = fn (path: []byte): mod internal "import";
+
+def type_info_of = fn (t: type): Type_Info internal "type_info_of";
+
+def Type_Info = tagged_union {
+};

@@ -1039,10 +1039,6 @@ static void process_identifier(Context *context, Node *node) {
 	if (value.value != NULL) {
 		value.node = node;
 
-		if (value.value->tag == TYPE_TYPE_VALUE) {
-			context->compile_only = true;
-		}
-
 		data->identifier.kind = IDENTIFIER_VALUE;
 		data->identifier.value = value;
 	}
@@ -1078,6 +1074,8 @@ static void process_internal(Context *context, Node *node) {
 		case INTERNAL_TYPE: {
 			value.value = value_new(TYPE_TYPE_VALUE);
 			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+
+			context->compile_only = true;
 			break;
 		}
 		case INTERNAL_BYTE: {
@@ -2122,9 +2120,7 @@ static void process_function_type(Context *context, Node *node) {
 				.inferred = true
 			};
 		} else {
-			bool compile_only_saved = context->compile_only;
 			process_node(context, function_type.arguments[i].type);
-			context->compile_only = compile_only_saved;
 			argument = (Function_Argument_Value) {
 				.identifier = function_type.arguments[i].identifier,
 				.type = evaluate(context, function_type.arguments[i].type),
