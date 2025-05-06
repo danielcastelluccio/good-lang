@@ -3,5 +3,17 @@ def import = fn (path: []byte): mod internal "import";
 
 def type_info_of = fn (t: type): Type_Info internal "type_info_of";
 
+def Struct_Item = struct {
+	name: []byte,
+	type: type
+};
+
 def Type_Info = tagged_union {
+	Integer: struct {
+		size: uint8,
+		signed: bool
+	},
+	Struct: struct {
+		items: []Struct_Item
+	}
 };

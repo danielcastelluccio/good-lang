@@ -480,7 +480,12 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 static LLVMValueRef generate_run(Node *node, State *state) {
 	assert(node->kind == RUN_NODE);
 	Value value = get_data(&state->context, node)->run.value;
-	return generate_value(value.value, state);
+
+	if (value.value != NULL) {
+		return generate_value(value.value, state);
+	}
+
+	return NULL;
 }
 
 static LLVMValueRef generate_cast(Node *node, State *state) {
@@ -633,7 +638,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	Structure_Access_Node structure_access = node->structure_access;
 
 	Structure_Access_Data data = get_data(&state->context, node)->structure_access;
-	Value_Data *structure_type = data.structure_value.value;
+	Value_Data *structure_type = data.structure_type.value;
 
 	unsigned int index = 0;
 	Value_Data *item_type = data.item_type.value;
@@ -671,23 +676,32 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	}
 
 	LLVMValueRef structure_llvm_value = generate_node(structure_access.structure, state);
-	LLVMValueRef element_pointer = NULL;
-	if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
-		element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type, state), structure_llvm_value, index, "");
-	} else if (structure_type->tag == UNION_TYPE_VALUE) {
-		element_pointer = LLVMBuildBitCast(state->llvm_builder, structure_llvm_value, LLVMPointerType(create_llvm_type(item_type, state), 0), "");
-	} else {
-		assert(false);
-	}
 
-	if (data.assign_value != NULL) {
-		LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
-		return NULL;
+	if (data.pointer_access) {
+		LLVMValueRef element_pointer = NULL;
+		if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
+			element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type, state), structure_llvm_value, index, "");
+		} else if (structure_type->tag == UNION_TYPE_VALUE) {
+			element_pointer = LLVMBuildBitCast(state->llvm_builder, structure_llvm_value, LLVMPointerType(create_llvm_type(item_type, state), 0), "");
+		} else {
+			assert(false);
+		}
+
+		if (data.assign_value != NULL) {
+			LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
+			return NULL;
+		} else {
+			if (data.want_pointer) {
+				return element_pointer;
+			} else  {
+				return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(item_type, state), element_pointer, "");
+			}
+		}
 	} else {
-		if (data.want_pointer) {
-			return element_pointer;
-		} else  {
-			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(item_type, state), element_pointer, "");
+		if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
+			return LLVMBuildExtractValue(state->llvm_builder, structure_llvm_value, index, "");
+		} else {
+			assert(false);
 		}
 	}
 }
@@ -892,7 +906,6 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 	}
 
 	Node_Data *node_data = get_data(&state->context, node);
-
 	hmput(state->variables, node_data, allocated_variable_llvm);
 
 	return NULL;
@@ -1217,7 +1230,8 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	size_t saved_static_argument_id = state->context.static_argument_id;
 	state->context.static_argument_id = function.static_argument_id;
 
-	if (function.compile_only || function.type->function_type.incomplete) {
+	Function_Data function_data = get_data(&state->context, function.node)->function;
+	if (function_data.compile_only || function.type->function_type.incomplete) {
 		return NULL;
 	}
 
@@ -1251,7 +1265,7 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 
 		LLVMValueRef value = generate_node(function.body, state);
 
-		if (!function.returned) {
+		if (!function_data.returned) {
 			if (function.type->function_type.return_type.value != NULL) {
 				LLVMBuildRet(state->llvm_builder, value);
 			} else {

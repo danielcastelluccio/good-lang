@@ -61,6 +61,7 @@ typedef enum {
 	BYTE_VALUE,
 	INTEGER_VALUE,
 	STRUCT_VALUE,
+	TAGGED_UNION_VALUE,
 	ENUM_VALUE,
 	ARRAY_VIEW_VALUE,
 	MODULE_TYPE_VALUE
@@ -76,8 +77,6 @@ typedef struct {
 	Node *body;
 	Scope *scopes;
 	size_t static_argument_id;
-	bool compile_only;
-	bool returned;
 	Node *node;
 } Function_Value;
 
@@ -158,7 +157,13 @@ typedef struct {
 } Enum_Value;
 
 typedef struct {
+	Value_Data **values;
 } Struct_Value;
+
+typedef struct {
+	Value_Data *tag;
+	Value_Data *data;
+} Tagged_Union_Value;
 
 typedef struct {
 	size_t length;
@@ -229,6 +234,7 @@ struct Value_Data {
 		Integer_Value integer;
 		Enum_Value enum_;
 		Struct_Value struct_;
+		Tagged_Union_Value tagged_union;
 		Internal_Value internal;
 	};
 };
@@ -349,10 +355,11 @@ typedef struct {
 } Module_Access_Data;
 
 typedef struct {
-	Value structure_value;
+	Value structure_type;
 	Node *assign_value;
-	bool want_pointer;
 	Value item_type;
+	bool want_pointer;
+	bool pointer_access;
 } Structure_Access_Data;
 
 typedef struct {
@@ -521,5 +528,6 @@ Value create_integer_type(bool signed_, size_t size);
 Value create_float_type(size_t size);
 
 Value create_integer(size_t value);
+Value create_boolean(bool value);
 
 #endif

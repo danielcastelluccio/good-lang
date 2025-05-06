@@ -215,6 +215,7 @@ typedef struct {
 typedef struct {
 	Node *check;
 	Node *body;
+	char *binding;
 } Switch_Case;
 
 typedef struct {
@@ -266,6 +267,7 @@ typedef struct {
 typedef struct {
 	enum {
 		INTERNAL_UINT,
+		INTERNAL_UINT8,
 		INTERNAL_TYPE,
 		INTERNAL_BYTE,
 		INTERNAL_FLT64,
@@ -275,7 +277,8 @@ typedef struct {
 		INTERNAL_C_CHAR_SIZE,
 		INTERNAL_C_SHORT_SIZE,
 		INTERNAL_C_INT_SIZE,
-		INTERNAL_C_LONG_SIZE
+		INTERNAL_C_LONG_SIZE,
+		INTERNAL_PRINT
 	} kind;
 	Node **inputs; // stb_ds
 } Internal_Node;

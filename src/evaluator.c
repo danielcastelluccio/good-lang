@@ -17,9 +17,15 @@
 
 #include <stdio.h>
 
+typedef struct { Node_Data *key; Value value; } *Variable_Datas;
+typedef struct { Node_Data *key; Value value; } *Switch_Datas;
+typedef struct { Node_Data *key; Value *value; } *For_Datas;
+
 typedef struct {
 	Context *context;
-	struct { Node_Data *key; Value value; } *variables; // stb_ds
+	Variable_Datas variables; // stb_ds
+	Switch_Datas switchs; // stb_ds
+	For_Datas fors; // stb_ds
 } State;
 
 jmp_buf jmp;
@@ -101,6 +107,9 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case INTEGER_VALUE: {
 			return value1->integer.value == value2->integer.value;
 		}
+		case ENUM_VALUE: {
+			return value1->enum_.value == value2->enum_.value;
+		}
 		default:
 			assert(false);
 	}
@@ -152,8 +161,6 @@ static Value evaluate_function(State *state, Node *node) {
 		function_value->function.body = function.body;
 	}
 
-	function_value->function.compile_only = get_data(state->context, node)->function.compile_only;
-	function_value->function.returned = get_data(state->context, node)->function.returned;
 	function_value->function.static_argument_id = state->context->static_argument_id;
 	function_value->function.node = node;
 
@@ -343,7 +350,22 @@ static Value evaluate_identifier(State *state, Node *node) {
 			break;
 		case IDENTIFIER_UNDERSCORE:
 			return create_value_data(NULL, node);
+		case IDENTIFIER_VARIABLE: {
+			Node_Data *variable_data = get_data(state->context, identifier_data.variable_definition);
+			return hmget(state->variables, variable_data);
+		}
+		case IDENTIFIER_BINDING: {
+			Node *node = identifier_data.binding.node;
+			Node_Data *node_data = get_data(state->context, node);
+
+			if (node->kind == SWITCH_NODE) {
+				return hmget(state->switchs, node_data);
+			} else if (node->kind == FOR_NODE) {
+				return hmget(state->fors, node_data)[identifier_data.binding.index];
+			}
+			assert(false);
 			break;
+		}
 		default:
 			handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
 			break;
@@ -358,11 +380,6 @@ static Value evaluate_string(State *state, Node *node) {
 	size_t string_length = string_data.length;
 
 	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
-		char *data = malloc(string_length);
-		for (size_t i = 0; i < string_length; i++) {
-			data[i] = string_value[i];
-		}
-
 		Value_Data *string = value_new(ARRAY_VIEW_VALUE);
 		string->array_view.length = string_length;
 		for (size_t i = 0; i < string_length; i++) {
@@ -373,20 +390,21 @@ static Value evaluate_string(State *state, Node *node) {
 
 		return create_value_data(string, node);
 	} else {
-		Value_Data **values = malloc(sizeof(Value_Data *) * string_length);
-		for (size_t i = 0; i < string_length; i++) {
-			Value_Data *byte = value_new(BYTE_VALUE);
-			byte->byte.value = string_value[i];
-			values[i] = byte;
-		}
+		assert(false);
+		// Value_Data **values = malloc(sizeof(Value_Data *) * string_length);
+		// for (size_t i = 0; i < string_length; i++) {
+		// 	Value_Data *byte = value_new(BYTE_VALUE);
+		// 	byte->byte.value = string_value[i];
+		// 	values[i] = byte;
+		// }
 
-		Value_Data *pointer = value_new(POINTER_VALUE);
-		Value_Data *array = value_new(ARRAY_VALUE);
-		array->array.length = string_length;
-		array->array.values = values;
-		pointer->pointer.value = array;
+		// Value_Data *pointer = value_new(POINTER_VALUE);
+		// Value_Data *array = value_new(ARRAY_VALUE);
+		// array->array.length = string_length;
+		// array->array.values = values;
+		// pointer->pointer.value = array;
 
-		return create_value_data(pointer, node);
+		// return create_value_data(pointer, node);
 	}
 }
 
@@ -496,10 +514,74 @@ static Value evaluate_call(State *state, Node *node) {
 
 				result = value.value;
 			}
+		} else if (streq(internal_name, "type_info_of")) {
+			result = value_new(TAGGED_UNION_VALUE);
+
+			Value type = arguments[0];
+
+			Value_Data *enum_value = value_new(ENUM_VALUE);
+			Value_Data *data = NULL;
+			switch (type.value->tag) {
+				case INTEGER_TYPE_VALUE: {
+					enum_value->enum_.value = 0;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *size_value = create_integer(type.value->integer_type.size).value;
+					arrpush(data->struct_.values, size_value);
+
+					Value_Data *signed_value = create_boolean(type.value->integer_type.signed_).value;
+					arrpush(data->struct_.values, signed_value);
+					break;
+				}
+				case STRUCT_TYPE_VALUE: {
+					enum_value->enum_.value = 1;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->struct_type.items);
+					for (long int i = 0; i < arrlen(type.value->struct_type.items); i++) {
+						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
+
+						char *name_string = type.value->struct_type.items[i].identifier;
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(struct_item_value->struct_.values, name_value);
+
+						Value_Data *type_value = type.value->struct_type.items[i].type.value;
+						arrpush(struct_item_value->struct_.values, type_value);
+
+						arrpush(items_value->array_view.values, struct_item_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				default:
+					assert(false);
+			}
+
+			result->tagged_union.tag = enum_value;
+			result->tagged_union.data = data;
 		} else {
 			assert(false);
 		}
 	} else {
+		Variable_Datas saved_variables = state->variables;
+		Switch_Datas saved_switchs = state->switchs;
+		For_Datas saved_fors = state->fors;
+
+		state->variables = NULL;
+		state->switchs = NULL;
+		state->fors = NULL;
+
 		jmp_buf prev_jmp;
 		memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
 		if (!setjmp(jmp)) {
@@ -508,6 +590,10 @@ static Value evaluate_call(State *state, Node *node) {
 			result = jmp_result.value;
 		}
 		memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+
+		state->variables = saved_variables;
+		state->switchs = saved_switchs;
+		state->fors = saved_fors;
 	}
 
 	function_arguments = saved_function_arguments;
@@ -533,6 +619,20 @@ static Value evaluate_binary_operator(State *state, Node *node) {
 				false_value->boolean.value = false;
 				return create_value_data(false_value, node);
 			}
+		}
+		case OPERATOR_LESS: {
+			if (left_value.value->integer.value < right_value.value->integer.value) {
+				Value_Data *true_value = value_new(BOOLEAN_VALUE);
+				true_value->boolean.value = true;
+				return create_value_data(true_value, node);
+			} else {
+				Value_Data *false_value = value_new(BOOLEAN_VALUE);
+				false_value->boolean.value = false;
+				return create_value_data(false_value, node);
+			}
+		}
+		case OPERATOR_SUBTRACT: {
+			return create_integer(left_value.value->integer.value - right_value.value->integer.value);
 		}
 		default:
 			assert(false);
@@ -582,9 +682,149 @@ static Value evaluate_structure(State *state, Node *node) {
 	}
 }
 
+static void print_value(Value_Data *value) {
+	switch (value->tag) {
+		case INTEGER_VALUE: {
+			printf("%li", value->integer.value);
+			break;
+		}
+		case BOOLEAN_VALUE: {
+			printf("%s", value->boolean.value ? "true" : "false");
+			break;
+		}
+		case ARRAY_VIEW_VALUE: {
+			for (size_t i = 0; i < value->array_view.length; i++) {
+				print_value(value->array_view.values[i]);
+			}
+			break;
+		}
+		case BYTE_VALUE: {
+			printf("%c", value->byte.value);
+			break;
+		}
+		default:
+			assert(false);
+	}
+}
+
 static Value evaluate_internal(State *state, Node *node) {
+	Internal_Node internal = node->internal;
 	Internal_Data internal_data = get_data(state->context, node)->internal;
-	return internal_data.value;
+
+	if (internal.kind == INTERNAL_PRINT) {
+		Value value = evaluate_state(state, internal.inputs[0]);
+		print_value(value.value);
+
+		return (Value) {};
+	} else {
+		return internal_data.value;
+	}
+}
+
+static Value evaluate_variable(State *state, Node *node) {
+	Variable_Node variable = node->variable;
+	Node_Data *node_data = get_data(state->context, node);
+
+	Value value = {};
+	if (variable.value != NULL) {
+		value = evaluate_state(state, variable.value);
+	}
+
+	hmput(state->variables, node_data, value);
+
+	return (Value) {};
+}
+
+static Value evaluate_structure_access(State *state, Node *node) {
+	Structure_Access_Node structure_access = node->structure_access;
+	Structure_Access_Data structure_access_data = get_data(state->context, node)->structure_access;
+
+	assert(structure_access_data.structure_type.value->tag == STRUCT_TYPE_VALUE || structure_access_data.structure_type.value->tag == ARRAY_VIEW_TYPE_VALUE);
+	assert(!structure_access_data.pointer_access);
+
+	switch (structure_access_data.structure_type.value->tag) {
+		case STRUCT_TYPE_VALUE: {
+			Struct_Type_Value structure_type = structure_access_data.structure_type.value->struct_type;
+			Struct_Value structure_value = evaluate_state(state, structure_access.structure).value->struct_;
+
+			for (long int i = 0; i < arrlen(structure_type.items); i++) {
+				if (streq(structure_type.items[i].identifier, structure_access.item)) {
+					return (Value) { .value = structure_value.values[i] };
+				}
+			}
+			break;
+		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			Array_View_Value array_view_value = evaluate_state(state, structure_access.structure).value->array_view;
+
+			if (streq(structure_access.item, "ptr")) {
+				assert(false);
+			} else if (streq(structure_access.item, "len")) {
+				return (Value) { .value = create_integer(array_view_value.length).value };
+			} else {
+				assert(false);
+			}
+			break;
+		}
+		default:
+			assert(false);
+	}
+	assert(false);
+}
+
+static Value evaluate_switch(State *state, Node *node) {
+	Switch_Node switch_ = node->switch_;
+	Node_Data *data = get_data(state->context, node);
+
+	Value value = evaluate_state(state, switch_.value);
+
+	for (long int i = 0; i < arrlen(switch_.cases); i++) {
+		Switch_Case switch_case = switch_.cases[i];
+
+		Value case_value = switch_case.check == NULL ? (Value) {} : evaluate_state(state, switch_case.check);
+		if (switch_case.check == NULL || value_equal(case_value.value, value.value->tagged_union.tag)) {
+			if (case_value.value != NULL) {
+				hmput(state->switchs, data, (Value) { .value = value.value->tagged_union.data });
+			}
+
+			return evaluate_state(state, switch_case.body);
+		}
+	}
+
+	return (Value) {};
+}
+
+static Value evaluate_for(State *state, Node *node) {
+	For_Node for_ = node->for_;
+	Node_Data *data = get_data(state->context, node);
+
+	Value value = evaluate_state(state, for_.item);
+	for (size_t i = 0; i < value.value->array_view.length; i++) {
+		Value_Data *item_value = value.value->array_view.values[i];
+
+		Value *values = NULL;
+		arrpush(values, (Value) { .value = item_value });
+		arrpush(values, create_integer(i));
+
+		hmput(state->fors, data, values);
+		evaluate_state(state, for_.body);
+	}
+
+	return (Value) {};
+}
+
+static Value evaluate_if(State *state, Node *node) {
+	If_Node if_ = node->if_;
+
+	if (evaluate_state(state, if_.condition).value->boolean.value) {
+		return evaluate_state(state, if_.if_body);
+	} else {
+		if (if_.else_body != NULL) {
+			return evaluate_state(state, if_.else_body);
+		}
+	}
+
+	return (Value) {};
 }
 
 static Value evaluate_state(State *state, Node *node) {
@@ -612,6 +852,11 @@ static Value evaluate_state(State *state, Node *node) {
 		case RETURN_NODE:            return evaluate_return(state, node);
 		case STRUCTURE_NODE:         return evaluate_structure(state, node);
 		case INTERNAL_NODE:          return evaluate_internal(state, node);
+		case VARIABLE_NODE:          return evaluate_variable(state, node);
+		case STRUCTURE_ACCESS_NODE:  return evaluate_structure_access(state, node);
+		case SWITCH_NODE:            return evaluate_switch(state, node);
+		case FOR_NODE:               return evaluate_for(state, node);
+		case IF_NODE:                return evaluate_if(state, node);
 		default:                     assert(false);
 	}
 }

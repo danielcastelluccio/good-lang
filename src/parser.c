@@ -157,6 +157,10 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		Node *internal = ast_new(INTERNAL_NODE, token.location);
 		internal->internal.kind = INTERNAL_UINT;
 		return internal;
+	} else if (streq(token.string, "uint8")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_UINT8;
+		return internal;
 	} else if (streq(token.string, "type")) {
 		Node *internal = ast_new(INTERNAL_NODE, token.location);
 		internal->internal.kind = INTERNAL_TYPE;
@@ -211,6 +215,15 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 			return internal;
 		}
+	} else if (streq(token.string, "print")) {
+		Node *internal = ast_new(INTERNAL_NODE, token.location);
+		internal->internal.kind = INTERNAL_PRINT;
+
+		lexer_consume_check(lexer, OPEN_PARENTHESIS);
+		arrpush(internal->internal.inputs, parse_expression(lexer));
+		lexer_consume_check(lexer, CLOSED_PARENTHESIS);
+
+		return internal;
 	}
 
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
@@ -307,6 +320,10 @@ static size_t get_precedence(Binary_Operatory_Node_Kind kind) {
 		case OPERATOR_DIVIDE:
 			return 2;
 		case OPERATOR_EQUALS:
+		case OPERATOR_LESS:
+		case OPERATOR_GREATER:
+		case OPERATOR_LESS_EQUALS:
+		case OPERATOR_GREATER_EQUALS:
 			return 0;
 		default:
 			assert(false);
@@ -759,9 +776,17 @@ static Node *parse_switch(Lexer *lexer) {
 		lexer_consume_check(lexer, KEYWORD);
 		Node *check = parse_expression(lexer);
 
+		char *binding = NULL;
+		if (lexer_peek(lexer).kind == VERTICAL_BAR) {
+			lexer_consume_check(lexer, VERTICAL_BAR);
+			binding = lexer_consume_check(lexer, IDENTIFIER).string;
+			lexer_consume_check(lexer, VERTICAL_BAR);
+		}
+
 		Switch_Case switch_case = {
 			.check = check,
-			.body = parse_separated_statement(lexer)
+			.body = parse_separated_statement(lexer),
+			.binding = binding
 		};
 		arrpush(switch_->switch_.cases, switch_case);
 	}

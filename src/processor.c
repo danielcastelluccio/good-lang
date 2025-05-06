@@ -1071,6 +1071,14 @@ static void process_internal(Context *context, Node *node) {
 			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
 			break;
 		}
+		case INTERNAL_UINT8: {
+			value.value = value_new(INTEGER_TYPE_VALUE);
+			value.value->integer_type.size = 8;
+			value.value->integer_type.signed_ = false;
+
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
 		case INTERNAL_TYPE: {
 			value.value = value_new(TYPE_TYPE_VALUE);
 			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
@@ -1130,6 +1138,10 @@ static void process_internal(Context *context, Node *node) {
 		case INTERNAL_C_LONG_SIZE: {
 			value = create_integer(context->codegen.c_size_fn(C_LONG_SIZE));
 			set_type(context, node, (Value) { .value = create_integer_type(false, 8).value });
+			break;
+		}
+		case INTERNAL_PRINT: {
+			process_node(context, internal.inputs[0]);
 			break;
 		}
 	}
@@ -1496,23 +1508,26 @@ static void process_structure_access(Context *context, Node *node) {
 
 	process_node(context, structure_access.structure);
 
-	Value structure_pointer_type = get_type(context, structure_access.structure);
-	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE) {
+	Value real_structure_type = get_type(context, structure_access.structure);
+	if (context->temporary_context.assign_value != NULL && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, structure_access.structure);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
 		process_node_context(context, temporary_context, structure_access.structure);
 
-		structure_pointer_type = get_type(context, structure_access.structure);
+		real_structure_type = get_type(context, structure_access.structure);
 	}
 
-	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE || (structure_pointer_type.value->pointer_type.inner.value->tag != STRUCT_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != UNION_TYPE_VALUE && structure_pointer_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE)) {
+	Value structure_type = real_structure_type;
+	if (structure_type.value->tag == POINTER_TYPE_VALUE) {
+		structure_type = structure_type.value->pointer_type.inner;
+	}
+
+	if (structure_type.value->tag != STRUCT_TYPE_VALUE && structure_type.value->tag != UNION_TYPE_VALUE && structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
-		print_type_outer(structure_pointer_type, given_string);
+		print_type_outer(structure_type, given_string);
 		handle_semantic_error(node->location, "Expected structure or union or string, but got %s", given_string);
 	}
-
-	Value structure_type = structure_pointer_type.value->pointer_type.inner;
 
 	Value item_type = {};
 	switch (structure_type.value->tag) {
@@ -1547,9 +1562,10 @@ static void process_structure_access(Context *context, Node *node) {
 	}
 
 	Node_Data *data = node_data_new(STRUCTURE_ACCESS_NODE);
-	data->structure_access.structure_value = structure_type;
+	data->structure_access.structure_type = structure_type;
 	data->structure_access.want_pointer = context->temporary_context.want_pointer;
 	data->structure_access.item_type = item_type;
+	data->structure_access.pointer_access = real_structure_type.value->tag == POINTER_TYPE_VALUE;
 
 	if (context->temporary_context.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
@@ -1889,10 +1905,15 @@ static void process_switch(Context *context, Node *node) {
 	bool saved_returned = context->returned;
 
 	Value type = get_type(context, switch_.value);
-	if (type.value->tag != ENUM_TYPE_VALUE) {
+	if (type.value->tag != ENUM_TYPE_VALUE && type.value->tag != TAGGED_UNION_TYPE_VALUE) {
 		char string[64] = {};
 		print_type_outer(type, string);
 		handle_semantic_error(node->location, "Expected enum, but got %s", string);
+	}
+
+	Value_Data *enum_type = type.value;
+	if (enum_type->tag == TAGGED_UNION_TYPE_VALUE) {
+		enum_type = enum_type->tagged_union_type.enum_;
 	}
 
 	Value switch_type = {};
@@ -1902,12 +1923,26 @@ static void process_switch(Context *context, Node *node) {
 	for (long int i = 0; i < arrlen(switch_.cases); i++) {
 		Switch_Case switch_case = switch_.cases[i];
 
+		Value binding_type = (Value) {};
 		if (switch_case.check != NULL) {
-			Temporary_Context temporary_context = { .wanted_type = get_type(context, switch_.value) };
+			Temporary_Context temporary_context = { .wanted_type = (Value) { .value = enum_type } };
 			process_node_context(context, temporary_context, switch_case.check);
 			case_count++;
+
+			Value check_value = evaluate(context, switch_case.check);
+			binding_type = type.value->tagged_union_type.items[check_value.value->enum_.value].type;
 		} else {
 			else_case = true;
+		}
+
+		arrpush(context->scopes, (Scope) { .node = node });
+
+		if (switch_case.binding != NULL) {
+			Binding binding = {
+				.type = binding_type,
+				.index = 0
+			};
+			shput(arrlast(context->scopes).bindings, switch_case.binding, binding);
 		}
 
 		bool saved_previous_returned = context->returned;
@@ -1918,6 +1953,8 @@ static void process_switch(Context *context, Node *node) {
 		bool saved_case_returned = context->returned;
 
 		context->returned = saved_returned;
+
+		(void) arrpop(context->scopes);
 
 		arrpush(data->switch_.cases_returned, saved_case_returned);
 		if ((saved_previous_returned || i == 0) && saved_case_returned) {
@@ -1957,7 +1994,7 @@ static void process_switch(Context *context, Node *node) {
 
 	data->switch_.returned = context->returned;
 
-	if (case_count < arrlen(type.value->enum_type.items) && !else_case) {
+	if (case_count < arrlen(enum_type->enum_type.items) && !else_case) {
 		context->returned = saved_returned;
 		if (switch_type.value != NULL) {
 			handle_semantic_error(node->location, "Expected else case");

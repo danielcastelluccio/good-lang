@@ -139,3 +139,9 @@ Value create_integer(size_t value) {
 	integer.value->integer.value = value;
 	return integer;
 }
+
+Value create_boolean(bool value) {
+	Value boolean = create_value(BOOLEAN_VALUE);
+	boolean.value->boolean.value = value;
+	return boolean;
+}
