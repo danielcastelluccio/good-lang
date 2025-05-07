@@ -721,7 +721,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 
 		Static_Argument_Variation *function_values = function_data->function_type.function_values;
 		for (long int i = 0; i < arrlen(function_values); i++) {
-			bool match = arrlen(function_values) == arrlen(static_argument_values);
+			bool match = arrlen(function_values[i].static_arguments) == arrlen(static_argument_values);
 			for (long int j = 0; j < arrlen(function_values[i].static_arguments); j++) {
 				if (!value_equal(function_values[i].static_arguments[j].value, static_argument_values[j].value)) {
 					match = false;
