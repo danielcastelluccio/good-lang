@@ -230,15 +230,15 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		lexer_consume(lexer);
 
 		return internal;
-	} else if (streq(token.string, "print")) {
-		Node *internal = ast_new(INTERNAL_NODE, token.location);
-		internal->internal.kind = INTERNAL_PRINT;
+	// } else if (streq(token.string, "print")) {
+	// 	Node *internal = ast_new(INTERNAL_NODE, token.location);
+	// 	internal->internal.kind = INTERNAL_PRINT;
 
-		lexer_consume_check(lexer, OPEN_PARENTHESIS);
-		arrpush(internal->internal.inputs, parse_expression(lexer));
-		lexer_consume_check(lexer, CLOSED_PARENTHESIS);
+	// 	lexer_consume_check(lexer, OPEN_PARENTHESIS);
+	// 	arrpush(internal->internal.inputs, parse_expression(lexer));
+	// 	lexer_consume_check(lexer, CLOSED_PARENTHESIS);
 
-		return internal;
+	// 	return internal;
 	}
 
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
@@ -920,13 +920,18 @@ static Node *parse_module_or_module_type(Lexer *lexer) {
 static Node *parse_run(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 	Node *run = ast_new(RUN_NODE, first_token.location);
-	run->run.node = parse_expression(lexer);
+	run->run.node = parse_statement(lexer);
 	return run;
 }
 
 static Node *parse_cast(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 	Node *cast = ast_new(CAST_NODE, first_token.location);
+	if (lexer_peek(lexer).kind == OPEN_PARENTHESIS) {
+		lexer_consume(lexer);
+		cast->cast.type = parse_expression(lexer);
+		lexer_consume_check(lexer, CLOSED_PARENTHESIS);
+	}
 	cast->cast.node = parse_expression(lexer);
 	return cast;
 }

@@ -4,6 +4,7 @@
 #include "ast.h"
 
 typedef struct Value_Data Value_Data;
+typedef struct Node_Data Node_Data;
 
 // typedef struct {
 // 	Value *type;
@@ -29,9 +30,15 @@ typedef struct {
 } Binding;
 
 typedef struct {
-	struct { char *key; Node *value; } *variables; // stb_ds
+	Node *node;
+	Node_Data *node_data;
+} Variable_Definition;
+
+typedef struct {
+	struct { char *key; Variable_Definition value; } *variables; // stb_ds
 	struct { char *key; Binding value; } *bindings; // stb_ds
 	struct { char *key; Typed_Value value; } *static_values; // stb_ds
+	struct { char *key; Variable_Definition value; } *static_variables; // stb_ds
 	Node *node;
 	Value node_type;
 	Value current_type;
@@ -62,6 +69,7 @@ typedef enum {
 	BYTE_VALUE,
 	INTEGER_VALUE,
 	STRUCT_VALUE,
+	OPTIONAL_VALUE,
 	TAGGED_UNION_VALUE,
 	ENUM_VALUE,
 	ARRAY_VIEW_VALUE,
@@ -162,6 +170,11 @@ typedef struct {
 } Struct_Value;
 
 typedef struct {
+	bool present;
+	Value_Data *value;
+} Optional_Value;
+
+typedef struct {
 	Value_Data *tag;
 	Value_Data *data;
 } Tagged_Union_Value;
@@ -235,6 +248,7 @@ struct Value_Data {
 		Integer_Value integer;
 		Enum_Value enum_;
 		Struct_Value struct_;
+		Optional_Value optional;
 		Tagged_Union_Value tagged_union;
 		Internal_Value internal;
 	};
@@ -248,6 +262,7 @@ typedef struct {
 		IDENTIFIER_ARGUMENT,
 		IDENTIFIER_BINDING,
 		IDENTIFIER_VALUE,
+		IDENTIFIER_STATIC_VARIABLE,
 		IDENTIFIER_SELF,
 		IDENTIFIER_UNDERSCORE
 	} kind;
@@ -260,6 +275,7 @@ typedef struct {
 			size_t index;
 		} binding;
 	};
+	Node_Data *node_data;
 	Value type;
 	bool want_pointer;
 	Node *assign_value;
@@ -423,7 +439,7 @@ typedef struct {
 	Node *node;
 } Internal_Data;
 
-typedef struct {
+struct Node_Data {
 	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
@@ -457,7 +473,7 @@ typedef struct {
 		For_Data for_;
 		Internal_Data internal;
 	};
-} Node_Data;
+};
 
 Node_Data *node_data_new(Node_Kind kind);
 
@@ -503,6 +519,7 @@ struct Context {
 	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
+	struct { Node_Data *key; Value value; } *static_variables; // stb_ds
 	bool returned;
 	Scope *scopes; // stb_ds
 	bool compile_only;
@@ -531,6 +548,7 @@ Value create_integer_type(bool signed_, size_t size);
 Value create_float_type(size_t size);
 
 Value create_integer(size_t value);
+Value create_byte(char value);
 Value create_boolean(bool value);
 
 #endif

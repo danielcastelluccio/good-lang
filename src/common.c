@@ -140,6 +140,12 @@ Value create_integer(size_t value) {
 	return integer;
 }
 
+Value create_byte(char value) {
+	Value byte = create_value(BYTE_VALUE);
+	byte.value->byte.value = value;
+	return byte;
+}
+
 Value create_boolean(bool value) {
 	Value boolean = create_value(BOOLEAN_VALUE);
 	boolean.value->boolean.value = value;

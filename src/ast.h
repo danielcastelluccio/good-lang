@@ -111,6 +111,7 @@ typedef struct {
 
 typedef struct {
 	Node *node;
+	Node *type;
 } Cast_Node;
 
 typedef struct {

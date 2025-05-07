@@ -337,6 +337,9 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 		case IDENTIFIER_VALUE: {
 			return generate_value(identifier_data->identifier.value.value, identifier_data->identifier.type.value, state);
 		}
+		case IDENTIFIER_STATIC_VARIABLE: {
+			return generate_value(hmget(state->context.static_variables, identifier_data->identifier.node_data).value, identifier_data->identifier.type.value, state);
+		}
 		case IDENTIFIER_UNDERSCORE: {
 			if (identifier_data->identifier.assign_value != NULL) {
 				generate_node(identifier_data->identifier.assign_value, state);

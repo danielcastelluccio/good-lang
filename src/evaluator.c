@@ -120,6 +120,9 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case ENUM_VALUE: {
 			return value1->enum_.value == value2->enum_.value;
 		}
+		case BYTE_VALUE: {
+			return value1->byte.value == value2->byte.value;
+		}
 		default:
 			assert(false);
 	}
@@ -349,6 +352,12 @@ static Value evaluate_identifier(State *state, Node *node) {
 	switch (identifier_data.kind) {
 		case IDENTIFIER_VALUE:
 			return identifier_data.value;
+		case IDENTIFIER_STATIC_VARIABLE:
+			if (identifier_data.assign_value != NULL) {
+				return hmput(state->context->static_variables, identifier_data.node_data, evaluate_state(state, identifier_data.assign_value));
+			} else {
+				return hmget(state->context->static_variables, identifier_data.node_data);
+			}
 		case IDENTIFIER_ARGUMENT:
 			return function_arguments[identifier_data.argument_index];
 		case IDENTIFIER_SELF:
@@ -430,6 +439,14 @@ static Value evaluate_number(State *state, Node *node) {
 		default:
 			assert(false);
 	}
+}
+
+static Value evaluate_character(State *state, Node *node) {
+	(void) state;
+	Character_Node character = node->character;
+	Value_Data *value = value_new(BYTE_VALUE);
+	value->byte.value = character.value[0];
+	return create_value_data(value, node);
 }
 
 static Value evaluate_boolean(State *state, Node *node) {
@@ -641,6 +658,9 @@ static Value evaluate_binary_operator(State *state, Node *node) {
 				return create_value_data(false_value, node);
 			}
 		}
+		case OPERATOR_ADD: {
+			return create_integer(left_value.value->integer.value + right_value.value->integer.value);
+		}
 		case OPERATOR_SUBTRACT: {
 			return create_integer(left_value.value->integer.value - right_value.value->integer.value);
 		}
@@ -826,7 +846,20 @@ static Value evaluate_for(State *state, Node *node) {
 static Value evaluate_if(State *state, Node *node) {
 	If_Node if_ = node->if_;
 
-	if (evaluate_state(state, if_.condition).value->boolean.value) {
+	Value value = evaluate_state(state, if_.condition);
+	bool truthy = false;
+	switch (value.value->tag) {
+		case BOOLEAN_VALUE:
+			truthy = value.value->boolean.value;
+			break;
+		case OPTIONAL_VALUE:
+			truthy = value.value->optional.present;
+			break;
+		default:
+			assert(false);
+	}
+
+	if (truthy) {
 		return evaluate_state(state, if_.if_body);
 	} else {
 		if (if_.else_body != NULL) {
@@ -835,6 +868,44 @@ static Value evaluate_if(State *state, Node *node) {
 	}
 
 	return (Value) {};
+}
+
+static Value evaluate_is(State *state, Node *node) {
+	Is_Node is = node->is;
+
+	Value value = evaluate_state(state, is.node);
+	Value type = get_type(state->context, is.node);
+	assert(type.value->tag == TAGGED_UNION_TYPE_VALUE);
+
+	Value check = evaluate_state(state, is.check);
+
+	if (value_equal(value.value->tagged_union.tag, check.value)) {
+		Value optional = create_value(OPTIONAL_VALUE);
+		optional.value->optional.present = true;
+		optional.value->optional.value = value.value->tagged_union.data;
+		return optional;
+	} else {
+		Value optional = create_value(OPTIONAL_VALUE);
+		optional.value->optional.present = false;
+		return optional;
+	}
+}
+
+static Value evaluate_assign(State *state, Node *node) {
+	Assign_Node assign = node->assign;
+	return evaluate_state(state, assign.container);
+}
+
+static Value evaluate_cast(State *state, Node *node) {
+	Cast_Node cast = node->cast;
+	Cast_Data cast_data = get_data(state->context, node)->cast;
+
+	Value value = evaluate_state(state, cast.node);
+	if (cast_data.from_type.value->tag == INTEGER_TYPE_VALUE && cast_data.to_type.value->tag == BYTE_TYPE_VALUE) {
+		return create_byte(value.value->integer.value);
+	} else {
+		assert(false);
+	}
 }
 
 static Value evaluate_state(State *state, Node *node) {
@@ -855,6 +926,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case IDENTIFIER_NODE:        return evaluate_identifier(state, node);
 		case STRING_NODE:            return evaluate_string(state, node);
 		case NUMBER_NODE:            return evaluate_number(state, node);
+		case CHARACTER_NODE:         return evaluate_character(state, node);
 		case BOOLEAN_NODE:           return evaluate_boolean(state, node);
 		case CALL_NODE:              return evaluate_call(state, node);
 		case BINARY_OPERATOR_NODE:   return evaluate_binary_operator(state, node);
@@ -867,6 +939,9 @@ static Value evaluate_state(State *state, Node *node) {
 		case SWITCH_NODE:            return evaluate_switch(state, node);
 		case FOR_NODE:               return evaluate_for(state, node);
 		case IF_NODE:                return evaluate_if(state, node);
+		case IS_NODE:                return evaluate_is(state, node);
+		case ASSIGN_NODE:            return evaluate_assign(state, node);
+		case CAST_NODE:              return evaluate_cast(state, node);
 		default:                     assert(false);
 	}
 }
