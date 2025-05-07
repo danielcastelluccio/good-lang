@@ -1391,6 +1391,15 @@ static void process_structure(Context *context, Node *node) {
 					}
 					assert(item_wanted_type.value != NULL);
 					break;
+				case UNION_TYPE_VALUE:
+					for (long int j = 0; j < arrlen(wanted_type.value->union_type.items); j++) {
+						if (streq(wanted_type.value->union_type.items[j].identifier, structure.values[i].identifier)) {
+							item_wanted_type = wanted_type.value->union_type.items[j].type;
+							break;
+						}
+					}
+					assert(item_wanted_type.value != NULL);
+					break;
 				default:
 					assert(false);
 			}
@@ -1624,7 +1633,6 @@ static void process_structure_access(Context *context, Node *node) {
 	if (structure_type.value->tag != STRUCT_TYPE_VALUE && structure_type.value->tag != UNION_TYPE_VALUE && structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(structure_type, given_string);
-		__builtin_trap();
 		handle_semantic_error(node->location, "Expected structure or union or string, but got %s", given_string);
 	}
 
@@ -2069,6 +2077,7 @@ static void process_switch(Context *context, Node *node) {
 			switched_enum_value = switched_enum_value->tagged_union.tag;
 		}
 
+		data->switch_.static_case = -1;
 		for (long int i = 0; i < arrlen(switch_.cases); i++) {
 			Switch_Case switch_case = switch_.cases[i];
 			if (switch_case.check != NULL) {
@@ -2083,18 +2092,19 @@ static void process_switch(Context *context, Node *node) {
 			}
 		}
 
-		Switch_Case switch_case = switch_.cases[data->switch_.static_case];
+		if (data->switch_.static_case >= 0) {
+			Switch_Case switch_case = switch_.cases[data->switch_.static_case];
+			if (switched_value->tag == TAGGED_UNION_VALUE && switch_case.binding != NULL) {
+				Typed_Value typed_value = {
+					.value = (Value) { .value = switched_value->tagged_union.data },
+					.type = type.value->tagged_union_type.items[switched_enum_value->enum_.value].type
+				};
+				shput(arrlast(context->scopes).static_bindings, switch_case.binding, typed_value);
+			}
 
-		if (switched_value->tag == TAGGED_UNION_VALUE && switch_case.binding != NULL) {
-			Typed_Value typed_value = {
-				.value = (Value) { .value = switched_value->tagged_union.data },
-				.type = type.value->tagged_union_type.items[switched_enum_value->enum_.value].type
-			};
-			shput(arrlast(context->scopes).static_bindings, switch_case.binding, typed_value);
+			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+			process_node_context(context, temporary_context, switch_case.body);
 		}
-
-		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
-		process_node_context(context, temporary_context, switch_case.body);
 	} else {
 		Value switch_type = {};
 		bool set_switch_type = false;

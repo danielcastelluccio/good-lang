@@ -1,0 +1,109 @@
+def c = import("c.lang");
+
+def print_value = fn [T](t: T) {
+ 	var static type_info = type_info_of(T);
+ 	switch static type_info {
+		case Integer {
+			_ = c::printf("%li\0", t);
+		}
+		case Struct |struct_| {
+			_ = c::printf(".{\0");
+			for static struct_.items |item, i| {
+				var static name = item.name;
+				_ = c::printf(" .%.*s = \0", name.len, name.ptr);
+
+				print_value(embed("t.", name));
+
+ 				if static i < struct_.items.len - 1 {
+ 					_ = c::printf(",\0");
+ 				} else {
+ 					_ = c::printf(" \0");
+				};
+			};
+			_ = c::printf("}\0");
+		}
+		case Tagged_Union |tagged_union_| {
+			_ = c::printf(".{\0");
+
+			for static tagged_union_.items |item| {
+				var static name = item.name;
+				if t is embed(name) |value| {
+					_ = c::printf(" .%.*s = \0", name.len, name.ptr);
+					print_value(value);
+					_ = c::printf(" \0");
+				};
+			};
+
+			_ = c::printf("}\0");
+		}
+		case Enum |enum_| {
+			for static enum_.items |name| {
+				if t == embed(name) {
+					_ = c::printf("%.*s\0", name.len, name.ptr);
+				};
+			};
+		}
+		case Optional {
+			if t |value| {
+				print_value(value);
+			} else {
+				_ = c::printf("null\0");
+			};
+		}
+		case Array |array| {
+			_ = c::printf(".{\0");
+
+			var static size = array.size;
+			var i: uint = 0;
+			// TODO: do this static
+			while i < size {
+				_ = c::printf(" \0");
+
+				print_value(t[i]);
+
+ 				if i < size - 1 {
+ 					_ = c::printf(",\0");
+ 				} else {
+ 					_ = c::printf(" \0");
+				};
+				i = i + 1;
+			};
+
+			_ = c::printf("}\0");
+		}
+		case Array_View {
+			_ = c::printf(".{\0");
+
+			var i: uint = 0;
+			while i < t.len {
+				_ = c::printf(" \0");
+
+				print_value(t[i]);
+
+ 				if i < t.len - 1 {
+ 					_ = c::printf(",\0");
+ 				} else {
+ 					_ = c::printf(" \0");
+				};
+				i = i + 1;
+			};
+
+			_ = c::printf("}\0");
+		}
+ 	};
+};
+
+def print = fn [T](static fmt: []byte, args: T) {
+	var static type_info = type_info_of(T);
+	if static type_info is Struct |struct_| {
+		var static argument_index = 0;
+		for static fmt |char| {
+			if static char == '%' {
+				print_value(embed("args._", cast(byte) argument_index + 48));
+				run argument_index = argument_index + 1;
+			} else {
+				_ = c::printf("%c\0", char);
+			};
+		};
+	};
+};

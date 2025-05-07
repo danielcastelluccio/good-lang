@@ -53,6 +53,14 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case ARRAY_VIEW_TYPE_VALUE: {
 			return value_equal(value1->array_view_type.inner.value, value2->array_view_type.inner.value);
 		}
+		case ARRAY_VIEW_VALUE: {
+			if (value1->array_view.length != value2->array_view.length) return false;
+
+			for (long int i = 0; i < arrlen(value1->array_view.values); i++) {
+				if (!value_equal(value1->array_view.values[i], value2->array_view.values[i])) return false;
+			}
+			return true;
+		}
 		case OPTIONAL_TYPE_VALUE: {
 			return value_equal(value1->optional_type.inner.value, value2->optional_type.inner.value);
 		}
@@ -68,6 +76,16 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 			for (long int i = 0; i < arrlen(value1->struct_type.items); i++) {
 				if (strcmp(value1->struct_type.items[i].identifier, value2->struct_type.items[i].identifier) != 0) return false;
 				if (!value_equal(value1->struct_type.items[i].type.value, value2->struct_type.items[i].type.value)) return false;
+			}
+
+			return true;
+		}
+		case UNION_TYPE_VALUE: {
+			if (arrlen(value1->union_type.items) != arrlen(value2->union_type.items)) return false;
+
+			for (long int i = 0; i < arrlen(value1->union_type.items); i++) {
+				if (strcmp(value1->union_type.items[i].identifier, value2->union_type.items[i].identifier) != 0) return false;
+				if (!value_equal(value1->union_type.items[i].type.value, value2->union_type.items[i].type.value)) return false;
 			}
 
 			return true;
@@ -591,6 +609,118 @@ static Value evaluate_call(State *state, Node *node) {
 					arrpush(data->struct_.values, items_value);
 					break;
 				}
+				case UNION_TYPE_VALUE: {
+					enum_value->enum_.value = 2;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->union_type.items);
+					for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
+						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
+
+						char *name_string = type.value->union_type.items[i].identifier;
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(struct_item_value->struct_.values, name_value);
+
+						Value_Data *type_value = type.value->union_type.items[i].type.value;
+						arrpush(struct_item_value->struct_.values, type_value);
+
+						arrpush(items_value->array_view.values, struct_item_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case TAGGED_UNION_TYPE_VALUE: {
+					enum_value->enum_.value = 3;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->tagged_union_type.items);
+					for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
+						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
+
+						char *name_string = type.value->tagged_union_type.items[i].identifier;
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(struct_item_value->struct_.values, name_value);
+
+						Value_Data *type_value = type.value->tagged_union_type.items[i].type.value;
+						arrpush(struct_item_value->struct_.values, type_value);
+
+						arrpush(items_value->array_view.values, struct_item_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case ENUM_TYPE_VALUE: {
+					enum_value->enum_.value = 4;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->enum_type.items);
+					for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
+						char *name_string = type.value->enum_type.items[i];
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(items_value->array_view.values, name_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case OPTIONAL_TYPE_VALUE: {
+					enum_value->enum_.value = 5;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *type_value = type.value->optional_type.inner.value;
+					arrpush(data->struct_.values, type_value);
+					break;
+				}
+				case ARRAY_TYPE_VALUE: {
+					enum_value->enum_.value = 6;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *size_value = type.value->array_type.size.value;
+					arrpush(data->struct_.values, size_value);
+					Value_Data *type_value = type.value->array_type.inner.value;
+					arrpush(data->struct_.values, type_value);
+					break;
+				}
+				case ARRAY_VIEW_TYPE_VALUE: {
+					enum_value->enum_.value = 7;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *type_value = type.value->array_type.inner.value;
+					arrpush(data->struct_.values, type_value);
+					break;
+				}
 				default:
 					assert(false);
 			}
@@ -746,6 +876,8 @@ static Value evaluate_internal(State *state, Node *node) {
 		print_value(value.value);
 
 		return (Value) {};
+	} else if (internal.kind == INTERNAL_EMBED) {
+		return evaluate_state(state, internal_data.node);
 	} else {
 		return internal_data.value;
 	}

@@ -475,6 +475,22 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 			assert(false);
 			return NULL;
 		}
+		case UNION_TYPE_VALUE: {
+			LLVMValueRef union_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
+			char *identifier = structure.values[0].identifier;
+			Node *node = structure.values[0].node;
+			for (long int i = 0; i < arrlen(type->tagged_union_type.items); i++) {
+				if (streq(type->tagged_union_type.items[i].identifier, identifier)) {
+					LLVMValueRef element_pointer = LLVMBuildBitCast(state->llvm_builder, union_value, LLVMPointerType(create_llvm_type(type->tagged_union_type.items[i].type.value, state), 0), "");
+					LLVMBuildStore(state->llvm_builder, generate_node(node, state), element_pointer);
+
+					return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), union_value, "");
+				}
+			}
+
+			assert(false);
+			return NULL;
+		}
 		default:
 			assert(false);
 	}
@@ -703,6 +719,12 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	} else {
 		if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
 			return LLVMBuildExtractValue(state->llvm_builder, structure_llvm_value, index, "");
+		} else if (structure_type->tag == UNION_TYPE_VALUE) {
+			LLVMValueRef temp = LLVMBuildAlloca(state->llvm_builder, LLVMTypeOf(structure_llvm_value), "");
+			LLVMBuildStore(state->llvm_builder, structure_llvm_value, temp);
+
+			LLVMTypeRef item_type_llvm = create_llvm_type(data.item_type.value, state);
+			return LLVMBuildLoad2(state->llvm_builder, item_type_llvm, LLVMBuildBitCast(state->llvm_builder, temp, LLVMPointerType(item_type_llvm, 0), ""), "");
 		} else {
 			assert(false);
 		}
@@ -779,6 +801,9 @@ static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValu
 			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
 		}
 		case INTEGER_TYPE_VALUE: {
+			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
+		}
+		case ENUM_TYPE_VALUE: {
 			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
 		}
 		default:
@@ -1024,8 +1049,12 @@ static LLVMValueRef generate_switch(Node *node, State *state) {
 	Switch_Data switch_data = get_data(&state->context, node)->switch_;
 
 	if (switch_.static_) {
-		Switch_Case switch_case = switch_.cases[switch_data.static_case];
-		return generate_node(switch_case.body, state);
+		if (switch_data.static_case >= 0) {
+			Switch_Case switch_case = switch_.cases[switch_data.static_case];
+			return generate_node(switch_case.body, state);
+		} else {
+			return NULL;
+		}
 	}
 
 	LLVMValueRef value = NULL;

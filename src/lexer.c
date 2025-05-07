@@ -282,7 +282,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 				size_t string_start_row = lexer->row;
 				size_t string_start_column = lexer->column - 1;
 
-				while (is_alphanumericplus(lexer->source[lexer->position])) {
+				while (is_alphanumericplus(lexer->source[lexer->position]) && lexer->position < lexer->source_length) {
 					increment_position(lexer);
 				}
 

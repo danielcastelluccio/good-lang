@@ -8,6 +8,16 @@ def Struct_Item = struct {
 	type: type
 };
 
+def Union_Item = struct {
+	name: []byte,
+	type: type
+};
+
+def Tagged_Union_Item = struct {
+	name: []byte,
+	type: type
+};
+
 def Type_Info = tagged_union {
 	Integer: struct {
 		size: uint8,
@@ -15,5 +25,24 @@ def Type_Info = tagged_union {
 	},
 	Struct: struct {
 		items: []Struct_Item
+	},
+	Union: struct {
+		items: []Union_Item
+	},
+	Tagged_Union: struct {
+		items: []Tagged_Union_Item
+	},
+	Enum: struct {
+		items: [][]byte
+	},
+	Optional: struct {
+		type: type
+	},
+	Array: struct {
+		size: uint,
+		type: type
+	},
+	Array_View: struct {
+		type: type
 	}
 };

@@ -69,6 +69,7 @@ typedef enum {
 	BYTE_VALUE,
 	INTEGER_VALUE,
 	STRUCT_VALUE,
+	UNION_VALUE,
 	OPTIONAL_VALUE,
 	TAGGED_UNION_VALUE,
 	ENUM_VALUE,
@@ -170,6 +171,10 @@ typedef struct {
 } Struct_Value;
 
 typedef struct {
+	Value_Data *value;
+} Union_Value;
+
+typedef struct {
 	bool present;
 	Value_Data *value;
 } Optional_Value;
@@ -248,6 +253,7 @@ struct Value_Data {
 		Integer_Value integer;
 		Enum_Value enum_;
 		Struct_Value struct_;
+		Union_Value union_;
 		Optional_Value optional;
 		Tagged_Union_Value tagged_union;
 		Internal_Value internal;
@@ -345,7 +351,7 @@ typedef struct {
 	Value type;
 	bool returned;
 	bool *cases_returned; // stb_ds
-	size_t static_case;
+	int static_case;
 } Switch_Data;
 
 typedef struct {
