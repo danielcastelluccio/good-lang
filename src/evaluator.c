@@ -174,7 +174,7 @@ static Value evaluate_function(State *state, Node *node) {
 		function_value->function.body = function.body;
 	}
 
-	function_value->function.static_argument_id = state->context->static_value_id;
+	function_value->function.static_id = state->context->static_id;
 	function_value->function.node = node;
 
 	Scope *scopes = NULL;
@@ -354,9 +354,9 @@ static Value evaluate_identifier(State *state, Node *node) {
 			return identifier_data.value;
 		case IDENTIFIER_STATIC_VARIABLE:
 			if (identifier_data.assign_value != NULL) {
-				return hmput(state->context->static_variables, identifier_data.node_data, evaluate_state(state, identifier_data.assign_value));
+				return hmput(state->context->static_variables, identifier_data.static_variable.node_data, evaluate_state(state, identifier_data.assign_value));
 			} else {
-				return hmget(state->context->static_variables, identifier_data.node_data);
+				return hmget(state->context->static_variables, identifier_data.static_variable.node_data);
 			}
 		case IDENTIFIER_ARGUMENT:
 			return function_arguments[identifier_data.argument_index];
@@ -370,7 +370,7 @@ static Value evaluate_identifier(State *state, Node *node) {
 		case IDENTIFIER_UNDERSCORE:
 			return create_value_data(NULL, node);
 		case IDENTIFIER_VARIABLE: {
-			Node_Data *variable_data = get_data(state->context, identifier_data.variable_definition);
+			Node_Data *variable_data = get_data(state->context, identifier_data.variable);
 			return hmget(state->variables, variable_data);
 		}
 		case IDENTIFIER_BINDING: {
@@ -480,8 +480,8 @@ static Value evaluate_call(State *state, Node *node) {
 
 	Value_Data *result = NULL;
 
-	size_t saved_static_argument_id = state->context->static_value_id;
-	state->context->static_value_id = function.value->function.static_argument_id;
+	size_t saved_static_argument_id = state->context->static_id;
+	state->context->static_id = function.value->function.static_id;
 
 	Value *saved_function_arguments = function_arguments;
 	function_arguments = arguments;
@@ -624,7 +624,7 @@ static Value evaluate_call(State *state, Node *node) {
 	}
 
 	function_arguments = saved_function_arguments;
-	state->context->static_value_id = saved_static_argument_id;
+	state->context->static_id = saved_static_argument_id;
 
 	return create_value_data(result, node);
 }

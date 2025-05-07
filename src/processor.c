@@ -24,15 +24,15 @@ typedef struct {
 			Scope *scope;
 		} define;
 		Node *variable;
+		Variable_Definition static_variable;
 		struct {
 			Node *node;
 			size_t index;
 		} binding;
-		Value static_value;
+		Value static_binding;
 		size_t argument;
 		size_t enum_variant;
 	};
-	Node_Data *node_data;
 	Value type;
 	enum {
 		LOOKUP_RESULT_FAIL,
@@ -41,7 +41,7 @@ typedef struct {
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_BINDING,
 		LOOKUP_RESULT_ARGUMENT,
-		LOOKUP_RESULT_STATIC_VALUE,
+		LOOKUP_RESULT_STATIC_BINDING,
 		LOOKUP_RESULT_STATIC_VARIABLE
 	} tag;
 } Lookup_Result;
@@ -96,14 +96,14 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			}
 		}
 
-		Typed_Value value = shget(scope->static_values, identifier);
+		Typed_Value value = shget(scope->static_bindings, identifier);
 		if (value.type.value != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VALUE, .static_value = value.value, .type = value.type };
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_BINDING, .static_binding = value.value, .type = value.type };
 		}
 
 		variable = shget(scope->static_variables, identifier);
 		if (variable.node != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .variable = variable.node, .node_data = variable.node_data, .type = variable.node_data->variable.type };
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = (Variable_Definition) { .node = variable.node, .node_data = variable.node_data }, .type = variable.node_data->variable.type };
 		}
 
 		Node *node = scope->node;
@@ -749,8 +749,8 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 				function_value = function_value_in;
 			}
 
-			size_t saved_static_argument_id = context->static_value_id;
-			context->static_value_id = ++context->static_value_id_counter;
+			size_t saved_static_argument_id = context->static_id;
+			context->static_id = ++context->static_id_counter;
 
 			reset_node(context, function_value.value->function.node);
 
@@ -763,7 +763,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 			arrpush(context->scopes, (Scope) { .node = node });
 
 			for (long int i = 0; i < arrlen(static_arguments); i++) {
-				shput(arrlast(context->scopes).static_values, static_arguments[i].identifier, static_arguments[i].value);
+				shput(arrlast(context->scopes).static_bindings, static_arguments[i].identifier, static_arguments[i].value);
 			}
 
 			process_function(context, function_value.value->function.node, true);
@@ -782,7 +782,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 
 			(void) arrpop(context->scopes);
 			context->scopes = saved_scopes;
-			context->static_value_id = saved_static_argument_id;
+			context->static_id = saved_static_argument_id;
 
 			set_type(context, function, *function_type);
 		}
@@ -997,7 +997,7 @@ static void process_identifier(Context *context, Node *node) {
 
 	if (lookup_result.tag == LOOKUP_RESULT_VARIABLE) {
 		data->identifier.kind = IDENTIFIER_VARIABLE;
-		data->identifier.variable_definition = lookup_result.variable;
+		data->identifier.variable = lookup_result.variable;
 
 		type = lookup_result.type;
 		if (data->identifier.want_pointer) {
@@ -1044,15 +1044,14 @@ static void process_identifier(Context *context, Node *node) {
 		}
 	}
 
-	if (lookup_result.tag == LOOKUP_RESULT_STATIC_VALUE) {
-		value = lookup_result.static_value;
+	if (lookup_result.tag == LOOKUP_RESULT_STATIC_BINDING) {
+		value = lookup_result.static_binding;
 		type = lookup_result.type;
 	}
 
 	if (lookup_result.tag == LOOKUP_RESULT_STATIC_VARIABLE) {
 		data->identifier.kind = IDENTIFIER_STATIC_VARIABLE;
-		data->identifier.variable_definition = lookup_result.variable;
-		data->identifier.node_data = lookup_result.node_data;
+		data->identifier.static_variable = lookup_result.static_variable;
 		type = lookup_result.type;
 
 		if (context->temporary_context.assign_value != NULL) {
@@ -1953,7 +1952,7 @@ static void process_if(Context *context, Node *node) {
 					.value = (Value) { .value = evaluated.value->optional.value },
 					.type = condition_type.value->optional_type.inner
 				};
-				shput(arrlast(context->scopes).static_values, if_.bindings[0], typed_value);
+				shput(arrlast(context->scopes).static_bindings, if_.bindings[0], typed_value);
 			}
 
 			process_node_context(context, temporary_context, if_.if_body);
@@ -2091,7 +2090,7 @@ static void process_switch(Context *context, Node *node) {
 				.value = (Value) { .value = switched_value->tagged_union.data },
 				.type = type.value->tagged_union_type.items[switched_enum_value->enum_.value].type
 			};
-			shput(arrlast(context->scopes).static_values, switch_case.binding, typed_value);
+			shput(arrlast(context->scopes).static_bindings, switch_case.binding, typed_value);
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
@@ -2248,29 +2247,29 @@ static void process_for(Context *context, Node *node) {
 	if (for_.static_) {
 		Value looped_value = evaluate(context, for_.item);
 
-		size_t saved_static_value_id = context->static_value_id;
+		size_t saved_static_id = context->static_id;
 		for (size_t i = 0; i < looped_value.value->array_view.length; i++) {
-			size_t static_value_id = context->static_value_id_counter++;
-			context->static_value_id = static_value_id;
-			arrpush(data->for_.static_value_ids, static_value_id);
+			size_t static_id = context->static_id_counter++;
+			context->static_id = static_id;
+			arrpush(data->for_.static_ids, static_id);
 
 			Typed_Value typed_value = {
 				.value = (Value) { .value = looped_value.value->array_view.values[i] },
 				.type = element_type
 			};
-			shput(arrlast(context->scopes).static_values, for_.bindings[0], typed_value);
+			shput(arrlast(context->scopes).static_bindings, for_.bindings[0], typed_value);
 
 			if (arrlen(for_.bindings) > 1) {
 				Typed_Value typed_value = {
 					.value = create_integer(i),
 					.type = create_integer_type(false, context->codegen.default_integer_size)
 				};
-				shput(arrlast(context->scopes).static_values, for_.bindings[1], typed_value);
+				shput(arrlast(context->scopes).static_bindings, for_.bindings[1], typed_value);
 			}
 
 			process_node(context, for_.body);
 		}
-		context->static_value_id = saved_static_value_id;
+		context->static_id = saved_static_id;
 	} else {
 		Binding binding = {
 			.type = element_type,

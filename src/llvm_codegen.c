@@ -288,7 +288,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 	Node_Data *identifier_data = get_data(&state->context, node);
 	switch (identifier_data->identifier.kind) {
 		case IDENTIFIER_VARIABLE: {
-			Node *variable = get_data(&state->context, node)->identifier.variable_definition;
+			Node *variable = get_data(&state->context, node)->identifier.variable;
 			Node_Data *variable_data = get_data(&state->context, variable);
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable_data);
 			if (identifier_data->identifier.assign_value != NULL) {
@@ -338,7 +338,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			return generate_value(identifier_data->identifier.value.value, identifier_data->identifier.type.value, state);
 		}
 		case IDENTIFIER_STATIC_VARIABLE: {
-			return generate_value(hmget(state->context.static_variables, identifier_data->identifier.node_data).value, identifier_data->identifier.type.value, state);
+			return generate_value(hmget(state->context.static_variables, identifier_data->identifier.static_variable.node_data).value, identifier_data->identifier.type.value, state);
 		}
 		case IDENTIFIER_UNDERSCORE: {
 			if (identifier_data->identifier.assign_value != NULL) {
@@ -1126,12 +1126,12 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	Node_Data *for_data = get_data(&state->context, node);
 
 	if (for_.static_) {
-		size_t saved_static_value_id = state->context.static_value_id;
-		for (long int i = 0; i < arrlen(for_data->for_.static_value_ids); i++) {
-			state->context.static_value_id = for_data->for_.static_value_ids[i];
+		size_t saved_static_id = state->context.static_id;
+		for (long int i = 0; i < arrlen(for_data->for_.static_ids); i++) {
+			state->context.static_id = for_data->for_.static_ids[i];
 			generate_node(for_.body, state);
 		}
-		state->context.static_value_id = saved_static_value_id;
+		state->context.static_id = saved_static_id;
 		return NULL;
 	}
 
@@ -1260,8 +1260,8 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	assert(value->tag == FUNCTION_VALUE);
 	Function_Value function = value->function;
 
-	size_t saved_static_argument_id = state->context.static_value_id;
-	state->context.static_value_id = function.static_argument_id;
+	size_t saved_static_argument_id = state->context.static_id;
+	state->context.static_id = function.static_id;
 
 	Function_Data function_data = get_data(&state->context, function.node)->function;
 	if (function_data.compile_only || function.type->function_type.incomplete) {
@@ -1309,7 +1309,7 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 
 	state->function_arguments = saved_function_arguments;
 	state->current_function = saved_current_function;
-	state->context.static_value_id = saved_static_argument_id;
+	state->context.static_id = saved_static_argument_id;
 	state->llvm_builder = saved_llvm_builder;
 
 	if (function.node->function.extern_name != NULL) {

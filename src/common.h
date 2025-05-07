@@ -37,7 +37,7 @@ typedef struct {
 typedef struct {
 	struct { char *key; Variable_Definition value; } *variables; // stb_ds
 	struct { char *key; Binding value; } *bindings; // stb_ds
-	struct { char *key; Typed_Value value; } *static_values; // stb_ds
+	struct { char *key; Typed_Value value; } *static_bindings; // stb_ds
 	struct { char *key; Variable_Definition value; } *static_variables; // stb_ds
 	Node *node;
 	Value node_type;
@@ -85,7 +85,7 @@ typedef struct {
 	Value_Data *type;
 	Node *body;
 	Scope *scopes;
-	size_t static_argument_id;
+	size_t static_id;
 	Node *node;
 } Function_Value;
 
@@ -267,7 +267,8 @@ typedef struct {
 		IDENTIFIER_UNDERSCORE
 	} kind;
 	union {
-		Node *variable_definition;
+		Node *variable;
+		Variable_Definition static_variable;
 		size_t argument_index;
 		Value value;
 		struct {
@@ -275,7 +276,6 @@ typedef struct {
 			size_t index;
 		} binding;
 	};
-	Node_Data *node_data;
 	Value type;
 	bool want_pointer;
 	Node *assign_value;
@@ -427,7 +427,7 @@ typedef struct {
 
 typedef struct {
 	Value type;
-	size_t *static_value_ids; // stb_ds
+	size_t *static_ids; // stb_ds
 } For_Data;
 
 typedef struct {
@@ -523,8 +523,8 @@ struct Context {
 	bool returned;
 	Scope *scopes; // stb_ds
 	bool compile_only;
-	size_t static_value_id;
-	size_t static_value_id_counter;
+	size_t static_id;
+	size_t static_id_counter;
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
