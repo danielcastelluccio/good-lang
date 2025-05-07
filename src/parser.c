@@ -982,8 +982,8 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 	bool variadic = false;
 	if (lexer_peek(lexer).kind != CLOSED_PARENTHESIS) {
 		while (true) {
-			if (lexer_peek(lexer).kind == PERIOD_PERIOD_PERIOD) {
-				lexer_consume_check(lexer, PERIOD_PERIOD_PERIOD);
+			if (lexer_peek(lexer).kind == PERIOD_PERIOD) {
+				lexer_consume(lexer);
 				variadic = true;
 			} else {
 				bool static_ = false;

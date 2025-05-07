@@ -219,13 +219,6 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
-				if (lexer->source[lexer->position] == '.') {
-					result = create_token(PERIOD_PERIOD_PERIOD, lexer);
-					increment_position(lexer);
-					increment_position(lexer);
-					break;
-				}
-
 				increment_position(lexer);
 				result = create_token(PERIOD_PERIOD, lexer);
 				break;
@@ -407,8 +400,6 @@ char *token_to_string(Token_Kind kind) {
 			return ".";
 		case PERIOD_PERIOD:
 			return "..";
-		case PERIOD_PERIOD_PERIOD:
-			return "...";
 		case PERIOD_OPEN_CURLY_BRACE:
 			return ".{";
 		case MINUS_GREATER:
