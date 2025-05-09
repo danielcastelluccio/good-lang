@@ -10,9 +10,9 @@
 #include <llvm-c/TargetMachine.h>
 
 #include "ast.h"
-#include "common.h"
 #include "stb/ds.h"
 #include "util.h"
+#include "value.h"
 
 #include "llvm_codegen.h"
 
@@ -100,8 +100,18 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 			Struct_Type_Value struct_type = value->struct_type;
 
 			LLVMTypeRef *items = NULL;
-			for (long int i = 0; i < arrlen(struct_type.items); i++) {
-				arrpush(items, create_llvm_type(struct_type.items[i].type.value, state));
+			for (long int i = 0; i < arrlen(struct_type.members); i++) {
+				arrpush(items, create_llvm_type(struct_type.members[i].value, state));
+			}
+
+			return LLVMStructType(items, arrlen(items), false);
+		}
+		case TUPLE_TYPE_VALUE: {
+			Tuple_Type_Value tuple_type = value->tuple_type;
+
+			LLVMTypeRef *items = NULL;
+			for (long int i = 0; i < arrlen(tuple_type.members); i++) {
+				arrpush(items, create_llvm_type(tuple_type.members[i].value, state));
 			}
 
 			return LLVMStructType(items, arrlen(items), false);
@@ -437,7 +447,16 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 	switch (type->tag) {
 		case STRUCT_TYPE_VALUE: {
 			LLVMValueRef struct_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
-			for (long int i = 0; i < arrlen(type->struct_type.items); i++) {
+			for (long int i = 0; i < arrlen(type->struct_type.members); i++) {
+				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), struct_value, i, "");
+				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i].node, state), item_pointer);
+			}
+
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), struct_value, "");
+		}
+		case TUPLE_TYPE_VALUE: {
+			LLVMValueRef struct_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
+			for (long int i = 0; i < arrlen(type->tuple_type.members); i++) {
 				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), struct_value, i, "");
 				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i].node, state), item_pointer);
 			}
@@ -665,12 +684,16 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	Value_Data *item_type = data.item_type.value;
 	switch (structure_type->tag) {
 		case STRUCT_TYPE_VALUE: {
-			for (long int i = 0; i < arrlen(structure_type->struct_type.items); i++) {
-				if (strcmp(structure_access.name, structure_type->struct_type.items[i].identifier) == 0) {
+			for (long int i = 0; i < arrlen(structure_type->struct_type.members); i++) {
+				if (strcmp(structure_access.name, structure_type->struct_type.node->struct_type.members[i].name) == 0) {
 					index = i;
 					break;
 				}
 			}
+			break;
+		}
+		case TUPLE_TYPE_VALUE: {
+			index = strtoul(structure_access.name + 1, NULL, 10);
 			break;
 		}
 		case UNION_TYPE_VALUE: {
@@ -719,7 +742,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 			}
 		}
 	} else {
-		if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
+		if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == TUPLE_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
 			return LLVMBuildExtractValue(state->llvm_builder, structure_llvm_value, index, "");
 		} else if (structure_type->tag == UNION_TYPE_VALUE) {
 			LLVMValueRef temp = LLVMBuildAlloca(state->llvm_builder, LLVMTypeOf(structure_llvm_value), "");
@@ -1390,7 +1413,7 @@ static LLVMValueRef generate_struct(Value_Data *value, Value_Data *type, State *
 
 	LLVMValueRef struct_value = LLVMGetUndef(create_llvm_type(type, state));
 	for (long int i = 0; i < arrlen(struct_.values); i++) {
-		struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, generate_value(struct_.values[i], type->struct_type.items[i].type.value, state), i, "");
+		struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, generate_value(struct_.values[i], type->struct_type.members[i].value, state), i, "");
 	}
 	return struct_value;
 }

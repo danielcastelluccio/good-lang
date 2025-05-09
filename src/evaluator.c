@@ -5,13 +5,13 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "common.h"
 #include "stb/ds.h"
 
 #include "ast.h"
 #include "evaluator.h"
 #include "parser.h"
 #include "util.h"
+#include "value.h"
 
 #include <setjmp.h>
 
@@ -71,11 +71,20 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 			return value1->integer_type.signed_ == value2->integer_type.signed_ && value1->integer_type.size == value2->integer_type.size;
 		}
 		case STRUCT_TYPE_VALUE: {
-			if (arrlen(value1->struct_type.items) != arrlen(value2->struct_type.items)) return false;
+			if (arrlen(value1->struct_type.members) != arrlen(value2->struct_type.members)) return false;
 
-			for (long int i = 0; i < arrlen(value1->struct_type.items); i++) {
-				if (strcmp(value1->struct_type.items[i].identifier, value2->struct_type.items[i].identifier) != 0) return false;
-				if (!value_equal(value1->struct_type.items[i].type.value, value2->struct_type.items[i].type.value)) return false;
+			for (long int i = 0; i < arrlen(value1->struct_type.members); i++) {
+				if (strcmp(value1->struct_type.node->struct_type.members[i].name, value2->struct_type.node->struct_type.members[i].name) != 0) return false;
+				if (!value_equal(value1->struct_type.members[i].value, value2->struct_type.members[i].value)) return false;
+			}
+
+			return true;
+		}
+		case TUPLE_TYPE_VALUE: {
+			if (arrlen(value1->tuple_type.members) != arrlen(value2->tuple_type.members)) return false;
+
+			for (long int i = 0; i < arrlen(value1->tuple_type.members); i++) {
+				if (!value_equal(value1->tuple_type.members[i].value, value2->tuple_type.members[i].value)) return false;
 			}
 
 			return true;
@@ -222,22 +231,18 @@ static Value evaluate_struct_type(State *state, Node *node) {
 	};
 	arrpush(state->context->scopes, scope);
 
-	struct_value_data->struct_type.items = NULL;
+	struct_value_data->struct_type.members = NULL;
 	for (long int i = 0; i < arrlen(struct_type.members); i++) {
-		Struct_Item_Value item = {
-			.identifier = struct_type.members[i].name,
-			.type = evaluate_state(state, struct_type.members[i].type)
-		};
-		arrpush(struct_value_data->struct_type.items, item);
+		arrpush(struct_value_data->struct_type.members, evaluate_state(state, struct_type.members[i].type));
 	}
 
 	struct_value_data->struct_type.arguments = function_arguments;
 
-	for (long int i = 0; i < arrlen(struct_type.op_overloads); i++) {
-		process_node(state->context, struct_type.op_overloads[i].function);
+	for (long int i = 0; i < arrlen(struct_type.operator_overloads); i++) {
+		process_node(state->context, struct_type.operator_overloads[i].function);
 		Operator_Value_Definition item = {
-			.operator = struct_type.op_overloads[i].name,
-			.function = evaluate_state(state, struct_type.op_overloads[i].function)
+			.operator = struct_type.operator_overloads[i].name,
+			.function = evaluate_state(state, struct_type.operator_overloads[i].function)
 		};
 		arrpush(struct_value.value->struct_type.operators, item);
 	}
@@ -585,11 +590,21 @@ static Value evaluate_call(State *state, Node *node) {
 					data = value_new(STRUCT_VALUE);
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->struct_type.items);
-					for (long int i = 0; i < arrlen(type.value->struct_type.items); i++) {
+					items_value->array_view.length = arrlen(type.value->struct_type.members);
+					for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 
-						char *name_string = type.value->struct_type.items[i].identifier;
+						char *name_string;
+						if (type.value->struct_type.node != NULL) {
+							name_string = type.value->struct_type.node->struct_type.members[i].name;
+						} else {
+							char *buffer = malloc(8);
+							memset(buffer, 0, 8);
+							buffer[0] = '_';
+							sprintf(buffer + 1, "%i", (int) i);
+							name_string = buffer;
+						}
+
 						size_t name_string_length = strlen(name_string);
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
@@ -601,7 +616,7 @@ static Value evaluate_call(State *state, Node *node) {
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
 
-						Value_Data *type_value = type.value->struct_type.items[i].type.value;
+						Value_Data *type_value = type.value->struct_type.members[i].value;
 						arrpush(struct_item_value->struct_.values, type_value);
 
 						arrpush(items_value->array_view.values, struct_item_value);
@@ -719,6 +734,20 @@ static Value evaluate_call(State *state, Node *node) {
 
 					Value_Data *type_value = type.value->array_type.inner.value;
 					arrpush(data->struct_.values, type_value);
+					break;
+				}
+				case TUPLE_TYPE_VALUE: {
+					enum_value->enum_.value = 8;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->tuple_type.members);
+					for (long int i = 0; i < arrlen(type.value->tuple_type.members); i++) {
+						Value_Data *type_value = type.value->tuple_type.members[i].value;
+						arrpush(items_value->array_view.values, type_value);
+					}
+					arrpush(data->struct_.values, items_value);
 					break;
 				}
 				default:
@@ -909,8 +938,8 @@ static Value evaluate_structure_access(State *state, Node *node) {
 			Struct_Type_Value structure_type = structure_access_data.structure_type.value->struct_type;
 			Struct_Value structure_value = evaluate_state(state, structure_access.parent).value->struct_;
 
-			for (long int i = 0; i < arrlen(structure_type.items); i++) {
-				if (streq(structure_type.items[i].identifier, structure_access.name)) {
+			for (long int i = 0; i < arrlen(structure_type.members); i++) {
+				if (streq(structure_type.node->struct_type.members[i].name, structure_access.name)) {
 					return (Value) { .value = structure_value.values[i] };
 				}
 			}

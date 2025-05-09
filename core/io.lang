@@ -95,7 +95,7 @@ def print_value = fn [T](t: T) {
 
 def print = fn [T](static fmt: []byte, args: T) {
 	var static type_info = type_info_of(T);
-	if static type_info is Struct |struct_| {
+	if static type_info is Tuple |tuple| {
 		var static argument_index = 0;
 		for static fmt |char| {
 			if static char == '%' {

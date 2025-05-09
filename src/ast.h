@@ -20,7 +20,7 @@ typedef struct {
 typedef struct {
 	char *name;
 	Node *function;
-} Op_Overload;
+} Operator_Overload;
 
 typedef struct {
 	Node *target;
@@ -238,7 +238,7 @@ typedef struct {
 
 typedef struct {
 	Structure_Member *members; // stb_ds
-	Op_Overload *op_overloads; // stb_ds
+	Operator_Overload *operator_overloads; // stb_ds
 } Struct_Type_Node;
 
 typedef struct {

@@ -4,12 +4,11 @@
 #include <string.h>
 
 #include "ast.h"
-#include "common.h"
+#include "evaluator.h"
 #include "parser.h"
 #include "stb/ds.h"
 #include "util.h"
-
-#include "evaluator.h"
+#include "value.h"
 
 void process_node_context(Context *context, Temporary_Context temporary_context, Node *node);
 
@@ -229,10 +228,10 @@ static int print_type(Value type, char *buffer) {
 		}
 		case STRUCT_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
-			for (long int i = 0; i < arrlen(type.value->struct_type.items); i++) {
-				buffer += sprintf(buffer, "%s:", type.value->struct_type.items[i].identifier);
-				buffer += print_type(type.value->struct_type.items[i].type, buffer);
-				if (i < arrlen(type.value->struct_type.items) - 1) {
+			for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
+				buffer += sprintf(buffer, "%s:", type.value->struct_type.node->struct_type.members[i].name);
+				buffer += print_type(type.value->struct_type.members[i], buffer);
+				if (i < arrlen(type.value->struct_type.members) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -267,7 +266,7 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "enum{");
 			for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
 				buffer += sprintf(buffer, "%s", type.value->enum_type.items[i]);
-				if (i < arrlen(type.value->struct_type.items) - 1) {
+				if (i < arrlen(type.value->struct_type.members) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
 			}
@@ -1380,14 +1379,17 @@ static void process_structure(Context *context, Node *node) {
 
 	Value wanted_type = context->temporary_context.wanted_type;
 
-	Value result_type = wanted_type.value == NULL ? create_value(STRUCT_TYPE_VALUE) : wanted_type;
+	Value result_type = wanted_type.value == NULL ? create_value(TUPLE_TYPE_VALUE) : wanted_type;
 	for (long int i = 0; i < arrlen(structure.values); i++) {
 		Value item_wanted_type = {};
 		if (wanted_type.value != NULL) {
 			switch (wanted_type.value->tag) {
 				case STRUCT_TYPE_VALUE:
 					// TODO: support specific item initialization
-					item_wanted_type = wanted_type.value->struct_type.items[i].type;
+					item_wanted_type = wanted_type.value->struct_type.members[i];
+					break;
+				case TUPLE_TYPE_VALUE:
+					item_wanted_type = wanted_type.value->tuple_type.members[i];
 					break;
 				case ARRAY_TYPE_VALUE:
 					item_wanted_type = wanted_type.value->array_type.inner;
@@ -1419,16 +1421,7 @@ static void process_structure(Context *context, Node *node) {
 		process_node_context(context, temporary_context, structure.values[i].node);
 
 		if (wanted_type.value == NULL) {
-			char *buffer = malloc(8);
-			memset(buffer, 0, 8);
-			buffer[0] = '_';
-			sprintf(buffer + 1, "%i", (int) i);
-
-			Struct_Item_Value item_value = {
-				.identifier = buffer,
-				.type = get_type(context, structure.values[i].node)
-			};
-			arrpush(result_type.value->struct_type.items, item_value);
+			arrpush(result_type.value->tuple_type.members, get_type(context, structure.values[i].node));
 		}
 	}
 
@@ -1640,18 +1633,28 @@ static void process_structure_access(Context *context, Node *node) {
 		structure_type = structure_type.value->pointer_type.inner;
 	}
 
-	if (structure_type.value->tag != STRUCT_TYPE_VALUE && structure_type.value->tag != UNION_TYPE_VALUE && structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+	if (structure_type.value->tag != STRUCT_TYPE_VALUE && structure_type.value->tag != TUPLE_TYPE_VALUE && structure_type.value->tag != UNION_TYPE_VALUE && structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(structure_type, given_string);
-		handle_semantic_error(node->location, "Expected structure or union or string, but got %s", given_string);
+		handle_semantic_error(node->location, "Expected structure or tuple or union or string, but got %s", given_string);
 	}
 
 	Value item_type = {};
 	switch (structure_type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
-			for (long int i = 0; i < arrlen(structure_type.value->struct_type.items); i++) {
-				if (strcmp(structure_type.value->struct_type.items[i].identifier, structure_access.name) == 0) {
-					item_type = structure_type.value->struct_type.items[i].type;
+			for (long int i = 0; i < arrlen(structure_type.value->struct_type.members); i++) {
+				if (strcmp(structure_type.value->struct_type.node->struct_type.members[i].name, structure_access.name) == 0) {
+					item_type = structure_type.value->struct_type.members[i];
+				}
+			}
+			break;
+		}
+		case TUPLE_TYPE_VALUE: {
+			for (long int i = 0; i < arrlen(structure_type.value->tuple_type.members); i++) {
+				char name[21] = {};
+				sprintf(name, "_%li", i);
+				if (strcmp(name, structure_access.name) == 0) {
+					item_type = structure_type.value->tuple_type.members[i];
 				}
 			}
 			break;
@@ -1726,7 +1729,7 @@ static void process_array_access(Context *context, Node *node) {
 
 	Custom_Operator_Function custom_operator_function = {};
 	if (array_type.value->pointer_type.inner.value->tag == STRUCT_TYPE_VALUE) {
-		Op_Overload *operators = array_type.value->pointer_type.inner.value->struct_type.node->struct_type.op_overloads;
+		Operator_Overload *operators = array_type.value->pointer_type.inner.value->struct_type.node->struct_type.operator_overloads;
 		for (long int i = 0; i < arrlen(operators); i++) {
 			if (strcmp(operators[i].name, "[]") == 0) {
 				custom_operator_function = (Custom_Operator_Function) {

@@ -518,11 +518,11 @@ static Node *parse_struct_type(Lexer *lexer) {
 
 	 		Node *function = parse_expression(lexer);
 
-	 		Op_Overload operator_definition = {
+			Operator_Overload operator_definition = {
 	 			.name = operator,
 	 			.function = function
 	 		};
-	 		arrpush(struct_->struct_type.op_overloads, operator_definition);
+			arrpush(struct_->struct_type.operator_overloads, operator_definition);
 
 			lexer_consume_check(lexer, SEMICOLON);
 	 	}

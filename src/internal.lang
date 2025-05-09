@@ -44,5 +44,8 @@ def Type_Info = tagged_union {
 	},
 	Array_View: struct {
 		type: type
+	},
+	Tuple: struct {
+		members: []type
 	}
 };
