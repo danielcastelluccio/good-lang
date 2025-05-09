@@ -247,6 +247,8 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 }
 
 static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Value_Data *function_type, Node **arguments, State *state) {
+	assert(function_llvm_value != NULL);
+
 	LLVMValueRef *llvm_arguments = NULL;
 	long int j = 0;
 	for (long int i = 0; i < arrlen(arguments); i++) {
@@ -664,7 +666,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	switch (structure_type->tag) {
 		case STRUCT_TYPE_VALUE: {
 			for (long int i = 0; i < arrlen(structure_type->struct_type.items); i++) {
-				if (strcmp(structure_access.item, structure_type->struct_type.items[i].identifier) == 0) {
+				if (strcmp(structure_access.name, structure_type->struct_type.items[i].identifier) == 0) {
 					index = i;
 					break;
 				}
@@ -673,7 +675,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 		}
 		case UNION_TYPE_VALUE: {
 			for (long int i = 0; i < arrlen(structure_type->union_type.items); i++) {
-				if (strcmp(structure_access.item, structure_type->union_type.items[i].identifier) == 0) {
+				if (strcmp(structure_access.name, structure_type->union_type.items[i].identifier) == 0) {
 					index = i;
 					break;
 				}
@@ -681,9 +683,9 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 			break;
 		}
 		case ARRAY_VIEW_TYPE_VALUE: {
-			if (strcmp(structure_access.item, "len") == 0) {
+			if (strcmp(structure_access.name, "len") == 0) {
 				index = 0;
-			} else if (strcmp(structure_access.item, "ptr") == 0) {
+			} else if (strcmp(structure_access.name, "ptr") == 0) {
 				index = 1;
 			} else {
 				assert(false);
@@ -694,7 +696,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 			assert(false);
 	}
 
-	LLVMValueRef structure_llvm_value = generate_node(structure_access.structure, state);
+	LLVMValueRef structure_llvm_value = generate_node(structure_access.parent, state);
 
 	if (data.pointer_access) {
 		LLVMValueRef element_pointer = NULL;
@@ -739,12 +741,12 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 
 	Value_Data *array_type = array_access_data.array_type.value;
 
-	LLVMValueRef array_llvm_value = generate_node(array_access.array, state);
+	LLVMValueRef array_llvm_value = generate_node(array_access.parent, state);
 	LLVMValueRef element_pointer = NULL;
 
 	if (array_access_data.custom_operator_function.function != NULL) {
 		Node **arguments = NULL;
-		arrpush(arguments, array_access.array);
+		arrpush(arguments, array_access.parent);
 		arrpush(arguments, array_access.index);
 
 		Custom_Operator_Function operator = array_access_data.custom_operator_function;
@@ -811,62 +813,62 @@ static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValu
 	}
 }
 
-static LLVMValueRef generate_binary_operator(Node *node, State *state) {
-	assert(node->kind == BINARY_OPERATOR_NODE);
-	Binary_Operator_Node binary_operator = node->binary_operator;
+static LLVMValueRef generate_binary_op(Node *node, State *state) {
+	assert(node->kind == BINARY_OP_NODE);
+	Binary_Op_Node binary_operator = node->binary_op;
 	Binary_Operator_Data binary_operator_data = get_data(&state->context, node)->binary_operator;
 
 	LLVMValueRef left_value = generate_node(binary_operator.left, state);
 	LLVMValueRef right_value = generate_node(binary_operator.right, state);
 
 	switch (binary_operator.operator) {
-		case OPERATOR_EQUALS:
+		case OP_EQUALS:
 			return values_equal(binary_operator_data.type.value, left_value, right_value, state);
-		case OPERATOR_NOT_EQUALS:
+		case OP_NOT_EQUALS:
 			return LLVMBuildNot(state->llvm_builder, values_equal(binary_operator_data.type.value, left_value, right_value, state), "");
-		case OPERATOR_LESS:
+		case OP_LESS:
 			if (is_type_signed(binary_operator_data.type.value)) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntSLT, left_value, right_value, "");
 			} else {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntULT, left_value, right_value, "");
 			}
-		case OPERATOR_LESS_EQUALS:
+		case OP_LESS_EQUALS:
 			if (is_type_signed(binary_operator_data.type.value)) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntSLE, left_value, right_value, "");
 			} else {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntULE, left_value, right_value, "");
 			}
-		case OPERATOR_GREATER:
+		case OP_GREATER:
 			if (is_type_signed(binary_operator_data.type.value)) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntSGT, left_value, right_value, "");
 			} else {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntUGT, left_value, right_value, "");
 			}
-		case OPERATOR_GREATER_EQUALS:
+		case OP_GREATER_EQUALS:
 			if (is_type_signed(binary_operator_data.type.value)) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntSGE, left_value, right_value, "");
 			} else {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntUGE, left_value, right_value, "");
 			}
-		case OPERATOR_ADD:
+		case OP_ADD:
 			if (is_type_float(binary_operator_data.type.value)) {
 				return LLVMBuildFAdd(state->llvm_builder, left_value, right_value, "");
 			} else {
 				return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
 			}
-		case OPERATOR_SUBTRACT:
+		case OP_SUBTRACT:
 			if (is_type_float(binary_operator_data.type.value)) {
 				return LLVMBuildFSub(state->llvm_builder, left_value, right_value, "");
 			} else {
 				return LLVMBuildSub(state->llvm_builder, left_value, right_value, "");
 			}
-		case OPERATOR_MULTIPLY:
+		case OP_MULTIPLY:
 			if (is_type_float(binary_operator_data.type.value)) {
 				return LLVMBuildFMul(state->llvm_builder, left_value, right_value, "");
 			} else {
 				return LLVMBuildMul(state->llvm_builder, left_value, right_value, "");
 			}
-		case OPERATOR_DIVIDE:
+		case OP_DIVIDE:
 			if (is_type_float(binary_operator_data.type.value)) {
 				return LLVMBuildFDiv(state->llvm_builder, left_value, right_value, "");
 			} else {
@@ -920,7 +922,7 @@ static LLVMValueRef generate_assign(Node *node, State *state) {
 	assert(node->kind == ASSIGN_NODE);
 	Assign_Node assign = node->assign;
 
-	return generate_node(assign.container, state);
+	return generate_node(assign.target, state);
 }
 
 static LLVMValueRef generate_variable(Node *node, State *state) {
@@ -1062,7 +1064,7 @@ static LLVMValueRef generate_switch(Node *node, State *state) {
 		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(switch_data.type.value, state), "");
 	}
 
-	LLVMValueRef switched_value = generate_node(switch_.value, state);
+	LLVMValueRef switched_value = generate_node(switch_.condition, state);
 
 	bool added_else_block = false;
 	LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
@@ -1078,8 +1080,8 @@ static LLVMValueRef generate_switch(Node *node, State *state) {
 			LLVMBuildStore(state->llvm_builder, case_value, value);
 		}
 
-		if (switch_case.check != NULL) {
-			LLVMAddCase(switch_llvm_value, generate_node(switch_case.check, state), case_block);
+		if (switch_case.value != NULL) {
+			LLVMAddCase(switch_llvm_value, generate_node(switch_case.value, state), case_block);
 			if (!switch_data.cases_returned[i]) LLVMBuildBr(state->llvm_builder, done_block);
 		} else {
 			LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
@@ -1260,8 +1262,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_structure_access(node, state);
 		case ARRAY_ACCESS_NODE:
 			return generate_array_access(node, state);
-		case BINARY_OPERATOR_NODE:
-			return generate_binary_operator(node, state);
+		case BINARY_OP_NODE:
+			return generate_binary_op(node, state);
 		case RETURN_NODE:
 			return generate_return(node, state);
 		case ASSIGN_NODE:
@@ -1292,8 +1294,12 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	size_t saved_static_argument_id = state->context.static_id;
 	state->context.static_id = function.static_id;
 
+	if (function.type->function_type.incomplete) {
+		return NULL;
+	}
+
 	Function_Data function_data = get_data(&state->context, function.node)->function;
-	if (function_data.compile_only || function.type->function_type.incomplete) {
+	if (function_data.compile_only) {
 		return NULL;
 	}
 

@@ -223,21 +223,21 @@ static Value evaluate_struct_type(State *state, Node *node) {
 	arrpush(state->context->scopes, scope);
 
 	struct_value_data->struct_type.items = NULL;
-	for (long int i = 0; i < arrlen(struct_type.items); i++) {
+	for (long int i = 0; i < arrlen(struct_type.members); i++) {
 		Struct_Item_Value item = {
-			.identifier = struct_type.items[i].identifier,
-			.type = evaluate_state(state, struct_type.items[i].type)
+			.identifier = struct_type.members[i].name,
+			.type = evaluate_state(state, struct_type.members[i].type)
 		};
 		arrpush(struct_value_data->struct_type.items, item);
 	}
 
 	struct_value_data->struct_type.arguments = function_arguments;
 
-	for (long int i = 0; i < arrlen(struct_type.operators); i++) {
-		process_node(state->context, struct_type.operators[i].function);
+	for (long int i = 0; i < arrlen(struct_type.op_overloads); i++) {
+		process_node(state->context, struct_type.op_overloads[i].function);
 		Operator_Value_Definition item = {
-			.operator = struct_type.operators[i].operator,
-			.function = evaluate_state(state, struct_type.operators[i].function)
+			.operator = struct_type.op_overloads[i].name,
+			.function = evaluate_state(state, struct_type.op_overloads[i].function)
 		};
 		arrpush(struct_value.value->struct_type.operators, item);
 	}
@@ -252,10 +252,10 @@ static Value evaluate_union_type(State *state, Node *node) {
 
 	Value_Data *union_value = value_new(UNION_TYPE_VALUE);
 	union_value->union_type.items = NULL;
-	for (long int i = 0; i < arrlen(union_type.items); i++) {
+	for (long int i = 0; i < arrlen(union_type.members); i++) {
 		Union_Item_Value item = {
-			.identifier = union_type.items[i].identifier,
-			.type = evaluate_state(state, union_type.items[i].type)
+			.identifier = union_type.members[i].name,
+			.type = evaluate_state(state, union_type.members[i].type)
 		};
 		arrpush(union_value->union_type.items, item);
 	}
@@ -271,13 +271,13 @@ static Value evaluate_tagged_union_type(State *state, Node *node) {
 	tagged_union_value->tagged_union_type.items = NULL;
 	Value_Data *enum_value = value_new(ENUM_TYPE_VALUE);
 	tagged_union_value->tagged_union_type.enum_ = enum_value;
-	for (long int i = 0; i < arrlen(tagged_union_type.items); i++) {
+	for (long int i = 0; i < arrlen(tagged_union_type.members); i++) {
 		Tagged_Union_Item_Value item = {
-			.identifier = tagged_union_type.items[i].identifier,
-			.type = evaluate_state(state, tagged_union_type.items[i].type)
+			.identifier = tagged_union_type.members[i].name,
+			.type = evaluate_state(state, tagged_union_type.members[i].type)
 		};
 		arrpush(tagged_union_value->tagged_union_type.items, item);
-		arrpush(enum_value->enum_type.items, tagged_union_type.items[i].identifier);
+		arrpush(enum_value->enum_type.items, tagged_union_type.members[i].name);
 	}
 
 	return create_value_data(tagged_union_value, node);
@@ -319,7 +319,7 @@ static Value evaluate_module_type(State *state, Node *node) {
 }
 
 static Value evaluate_pointer(State *state, Node *node) {
-	Pointer_Node pointer = node->pointer;
+	Pointer_Type_Node pointer = node->pointer_type;
 
 	Value_Data *pointer_type_value = value_new(POINTER_TYPE_VALUE);
 	if (pointer.inner) {
@@ -329,7 +329,7 @@ static Value evaluate_pointer(State *state, Node *node) {
 }
 
 static Value evaluate_optional(State *state, Node *node) {
-	Optional_Node optional = node->optional;
+	Optional_Type_Node optional = node->optional_type;
 
 	Value_Data *optional_type_value = value_new(OPTIONAL_TYPE_VALUE);
 	optional_type_value->optional_type.inner = evaluate_state(state, optional.inner);
@@ -337,7 +337,7 @@ static Value evaluate_optional(State *state, Node *node) {
 }
 
 static Value evaluate_result(State *state, Node *node) {
-	Result_Node result = node->result;
+	Result_Type_Node result = node->result_type;
 
 	Value_Data *result_type_value = value_new(RESULT_TYPE_VALUE);
 	if (result.value != NULL) {
@@ -759,14 +759,14 @@ static Value evaluate_call(State *state, Node *node) {
 	return create_value_data(result, node);
 }
 
-static Value evaluate_binary_operator(State *state, Node *node) {
-	Binary_Operator_Node binary_operator = node->binary_operator;
+static Value evaluate_binary_op(State *state, Node *node) {
+	Binary_Op_Node binary_operator = node->binary_op;
 
 	Value left_value = evaluate_state(state, binary_operator.left);
 	Value right_value = evaluate_state(state, binary_operator.right);
 
 	switch (binary_operator.operator) {
-		case OPERATOR_EQUALS: {
+		case OP_EQUALS: {
 			if (value_equal(left_value.value, right_value.value)) {
 				Value_Data *true_value = value_new(BOOLEAN_VALUE);
 				true_value->boolean.value = true;
@@ -777,7 +777,7 @@ static Value evaluate_binary_operator(State *state, Node *node) {
 				return create_value_data(false_value, node);
 			}
 		}
-		case OPERATOR_LESS: {
+		case OP_LESS: {
 			if (left_value.value->integer.value < right_value.value->integer.value) {
 				Value_Data *true_value = value_new(BOOLEAN_VALUE);
 				true_value->boolean.value = true;
@@ -788,10 +788,10 @@ static Value evaluate_binary_operator(State *state, Node *node) {
 				return create_value_data(false_value, node);
 			}
 		}
-		case OPERATOR_ADD: {
+		case OP_ADD: {
 			return create_integer(left_value.value->integer.value + right_value.value->integer.value);
 		}
-		case OPERATOR_SUBTRACT: {
+		case OP_SUBTRACT: {
 			return create_integer(left_value.value->integer.value - right_value.value->integer.value);
 		}
 		default:
@@ -907,21 +907,21 @@ static Value evaluate_structure_access(State *state, Node *node) {
 	switch (structure_access_data.structure_type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
 			Struct_Type_Value structure_type = structure_access_data.structure_type.value->struct_type;
-			Struct_Value structure_value = evaluate_state(state, structure_access.structure).value->struct_;
+			Struct_Value structure_value = evaluate_state(state, structure_access.parent).value->struct_;
 
 			for (long int i = 0; i < arrlen(structure_type.items); i++) {
-				if (streq(structure_type.items[i].identifier, structure_access.item)) {
+				if (streq(structure_type.items[i].identifier, structure_access.name)) {
 					return (Value) { .value = structure_value.values[i] };
 				}
 			}
 			break;
 		}
 		case ARRAY_VIEW_TYPE_VALUE: {
-			Array_View_Value array_view_value = evaluate_state(state, structure_access.structure).value->array_view;
+			Array_View_Value array_view_value = evaluate_state(state, structure_access.parent).value->array_view;
 
-			if (streq(structure_access.item, "ptr")) {
+			if (streq(structure_access.name, "ptr")) {
 				assert(false);
-			} else if (streq(structure_access.item, "len")) {
+			} else if (streq(structure_access.name, "len")) {
 				return (Value) { .value = create_integer(array_view_value.length).value };
 			} else {
 				assert(false);
@@ -938,13 +938,13 @@ static Value evaluate_switch(State *state, Node *node) {
 	Switch_Node switch_ = node->switch_;
 	Node_Data *data = get_data(state->context, node);
 
-	Value value = evaluate_state(state, switch_.value);
+	Value value = evaluate_state(state, switch_.condition);
 
 	for (long int i = 0; i < arrlen(switch_.cases); i++) {
 		Switch_Case switch_case = switch_.cases[i];
 
-		Value case_value = switch_case.check == NULL ? (Value) {} : evaluate_state(state, switch_case.check);
-		if (switch_case.check == NULL || value_equal(case_value.value, value.value->tagged_union.tag)) {
+		Value case_value = switch_case.value == NULL ? (Value) {} : evaluate_state(state, switch_case.value);
+		if (switch_case.value == NULL || value_equal(case_value.value, value.value->tagged_union.tag)) {
 			if (case_value.value != NULL) {
 				hmput(state->switchs, data, (Value) { .value = value.value->tagged_union.data });
 			}
@@ -1025,7 +1025,7 @@ static Value evaluate_is(State *state, Node *node) {
 
 static Value evaluate_assign(State *state, Node *node) {
 	Assign_Node assign = node->assign;
-	return evaluate_state(state, assign.container);
+	return evaluate_state(state, assign.target);
 }
 
 static Value evaluate_cast(State *state, Node *node) {
@@ -1061,7 +1061,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case CHARACTER_NODE:         return evaluate_character(state, node);
 		case BOOLEAN_NODE:           return evaluate_boolean(state, node);
 		case CALL_NODE:              return evaluate_call(state, node);
-		case BINARY_OPERATOR_NODE:   return evaluate_binary_operator(state, node);
+		case BINARY_OP_NODE:         return evaluate_binary_op(state, node);
 		case BLOCK_NODE:             return evaluate_block(state, node);
 		case RETURN_NODE:            return evaluate_return(state, node);
 		case STRUCTURE_NODE:         return evaluate_structure(state, node);

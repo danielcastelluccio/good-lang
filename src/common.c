@@ -12,7 +12,7 @@ Value_Data *value_new(Value_Tag tag) {
 	return value;
 }
 
-Node_Data *node_data_new(Node_Kind kind) {
+Node_Data *data_new(Node_Kind kind) {
 	Node_Data *data = malloc(sizeof(Node_Data));
 	memset(data, 0, sizeof(Node_Data));
 	data->kind = kind;
@@ -20,77 +20,61 @@ Node_Data *node_data_new(Node_Kind kind) {
 }
 
 Value get_type(Context *context, Node *node) {
-	Node_Types *node_types = hmget(context->node_types, context->static_id);
-	if (node_types == NULL) {
-		node_types = malloc(sizeof(Node_Types *));
-		*node_types = NULL;
-		hmput(context->node_types, context->static_id, node_types);
+	Node_Types *types = hmget(context->types, context->static_id);
+	if (types == NULL) {
+		types = malloc(sizeof(Node_Types *));
+		*types = NULL;
+		hmput(context->types, context->static_id, types);
 	}
-
-	Value result = hmget(*node_types, node);
-	if (result.value == NULL && context->static_id != 0) {
-		size_t saved_static_argument_id = context->static_id;
-		context->static_id = 0;
-		result = get_type(context, node);
-		context->static_id = saved_static_argument_id;
-	}
-	return result;
+	return hmget(*types, node);
 }
 
 void set_type(Context *context, Node *node, Value type) {
-	Node_Types *node_types = hmget(context->node_types, context->static_id);
-	if (node_types == NULL) {
-		node_types = malloc(sizeof(Node_Types *));
-		*node_types = NULL;
-		hmput(context->node_types, context->static_id, node_types);
+	Node_Types *types = hmget(context->types, context->static_id);
+	if (types == NULL) {
+		types = malloc(sizeof(Node_Types *));
+		*types = NULL;
+		hmput(context->types, context->static_id, types);
 	}
-	hmput(*node_types, node, type);
+	hmput(*types, node, type);
 }
 
 Node_Data *get_data(Context *context, Node *node) {
-	Node_Datas *node_datas = hmget(context->node_datas, context->static_id);
-	if (node_datas == NULL) {
-		node_datas = malloc(sizeof(Node_Datas *));
-		*node_datas = NULL;
-		hmput(context->node_datas, context->static_id, node_datas);
+	Node_Datas *datas = hmget(context->datas, context->static_id);
+	if (datas == NULL) {
+		datas = malloc(sizeof(Node_Datas *));
+		*datas = NULL;
+		hmput(context->datas, context->static_id, datas);
 	}
-
-	Node_Data *result = hmget(*node_datas, node);
-	if (result == NULL && context->static_id != 0) {
-		size_t saved_static_argument_id = context->static_id;
-		context->static_id = 0;
-		result = get_data(context, node);
-		context->static_id = saved_static_argument_id;
-	}
-	return result;
+	return hmget(*datas, node);
 }
 
 void set_data(Context *context, Node *node, Node_Data *value) {
-	Node_Datas *node_datas = hmget(context->node_datas, context->static_id);
-	if (node_datas == NULL) {
-		node_datas = malloc(sizeof(Node_Datas *));
-		*node_datas = NULL;
-		hmput(context->node_datas, context->static_id, node_datas);
+	Node_Datas *datas = hmget(context->datas, context->static_id);
+	if (datas == NULL) {
+		datas = malloc(sizeof(Node_Datas *));
+		*datas = NULL;
+		hmput(context->datas, context->static_id, datas);
 	}
-	hmput(*node_datas, node, value);
+	hmput(*datas, node, value);
 }
 
 void reset_node(Context *context, Node *node) {
-	Node_Types *node_types = hmget(context->node_types, context->static_id);
-	if (node_types == NULL) {
-		node_types = malloc(sizeof(Node_Types *));
-		*node_types = NULL;
-		hmput(context->node_types, context->static_id, node_types);
+	Node_Types *types = hmget(context->types, context->static_id);
+	if (types == NULL) {
+		types = malloc(sizeof(Node_Types *));
+		*types = NULL;
+		hmput(context->types, context->static_id, types);
 	}
-	(void) hmdel(*node_types, node);
+	(void) hmdel(*types, node);
 
-	Node_Datas *node_datas = hmget(context->node_datas, context->static_id);
-	if (node_datas == NULL) {
-		node_datas = malloc(sizeof(Node_Datas *));
-		*node_datas = NULL;
-		hmput(context->node_datas, context->static_id, node_datas);
+	Node_Datas *datas = hmget(context->datas, context->static_id);
+	if (datas == NULL) {
+		datas = malloc(sizeof(Node_Datas *));
+		*datas = NULL;
+		hmput(context->datas, context->static_id, datas);
 	}
-	(void) hmdel(*node_datas, node);
+	(void) hmdel(*datas, node);
 }
 
 Value create_value(Value_Tag tag) {

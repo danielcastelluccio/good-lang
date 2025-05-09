@@ -194,22 +194,22 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(VERTICAL_BAR, lexer);
 			break;
 		case '(':
-			result = create_token(OPEN_PARENTHESIS, lexer);
+			result = create_token(PARENTHESIS_OPEN, lexer);
 			break;
 		case ')':
-			result = create_token(CLOSED_PARENTHESIS, lexer);
+			result = create_token(PARENTHESIS_CLOSED, lexer);
 			break;
 		case '{':
-			result = create_token(OPEN_CURLY_BRACE, lexer);
+			result = create_token(CURLY_BRACE_OPEN, lexer);
 			break;
 		case '}':
-			result = create_token(CLOSED_CURLY_BRACE, lexer);
+			result = create_token(CURLY_BRACE_CLOSED, lexer);
 			break;
 		case '[':
-			result = create_token(OPEN_BRACE, lexer);
+			result = create_token(BRACE_OPEN, lexer);
 			break;
 		case ']':
-			result = create_token(CLOSED_BRACE, lexer);
+			result = create_token(BRACE_CLOSED, lexer);
 			break;
 		case '<':
 			result = create_token(LESS, lexer);
@@ -224,7 +224,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 				break;
 			} else if (lexer->source[lexer->position] == '{') {
 				increment_position(lexer);
-				result = create_token(PERIOD_OPEN_CURLY_BRACE, lexer);
+				result = create_token(PERIOD_CURLY_BRACE_OPEN, lexer);
 				break;
 			}
 			result = create_token(PERIOD, lexer);
@@ -400,7 +400,7 @@ char *token_to_string(Token_Kind kind) {
 			return ".";
 		case PERIOD_PERIOD:
 			return "..";
-		case PERIOD_OPEN_CURLY_BRACE:
+		case PERIOD_CURLY_BRACE_OPEN:
 			return ".{";
 		case MINUS_GREATER:
 			return "->";
@@ -414,17 +414,17 @@ char *token_to_string(Token_Kind kind) {
 			return "=>";
 		case COLON_COLON:
 			return "::";
-		case OPEN_PARENTHESIS:
+		case PARENTHESIS_OPEN:
 			return "(";
-		case CLOSED_PARENTHESIS:
+		case PARENTHESIS_CLOSED:
 			return ")";
-		case OPEN_CURLY_BRACE:
+		case CURLY_BRACE_OPEN:
 			return "{";
-		case CLOSED_CURLY_BRACE:
+		case CURLY_BRACE_CLOSED:
 			return "}";
-		case OPEN_BRACE:
+		case BRACE_OPEN:
 			return "[";
-		case CLOSED_BRACE:
+		case BRACE_CLOSED:
 			return "]";
 		case END_OF_FILE:
 			return "Eof";

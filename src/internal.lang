@@ -24,16 +24,16 @@ def Type_Info = tagged_union {
 		signed: bool
 	},
 	Struct: struct {
-		items: []Struct_Item
+		members: []Struct_Item
 	},
 	Union: struct {
-		items: []Union_Item
+		members: []Union_Item
 	},
 	Tagged_Union: struct {
-		items: []Tagged_Union_Item
+		members: []Tagged_Union_Item
 	},
 	Enum: struct {
-		items: [][]byte
+		values: [][]byte
 	},
 	Optional: struct {
 		type: type

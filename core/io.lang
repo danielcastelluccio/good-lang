@@ -8,13 +8,13 @@ def print_value = fn [T](t: T) {
 		}
 		case Struct |struct_| {
 			_ = c::printf(".{\0");
-			for static struct_.items |item, i| {
-				var static name = item.name;
+			for static struct_.members |member, i| {
+				var static name = member.name;
 				_ = c::printf(" .%.*s = \0", name.len, name.ptr);
 
 				print_value(embed("t.", name));
 
- 				if static i < struct_.items.len - 1 {
+				if static i < struct_.members.len - 1 {
  					_ = c::printf(",\0");
  				} else {
  					_ = c::printf(" \0");
@@ -25,8 +25,8 @@ def print_value = fn [T](t: T) {
 		case Tagged_Union |tagged_union_| {
 			_ = c::printf(".{\0");
 
-			for static tagged_union_.items |item| {
-				var static name = item.name;
+			for static tagged_union_.members |member| {
+				var static name = member.name;
 				if t is embed(name) |value| {
 					_ = c::printf(" .%.*s = \0", name.len, name.ptr);
 					print_value(value);
@@ -37,9 +37,9 @@ def print_value = fn [T](t: T) {
 			_ = c::printf("}\0");
 		}
 		case Enum |enum_| {
-			for static enum_.items |name| {
-				if t == embed(name) {
-					_ = c::printf("%.*s\0", name.len, name.ptr);
+			for static enum_.values |value| {
+				if t == embed(value) {
+					_ = c::printf("%.*s\0", value.len, value.ptr);
 				};
 			};
 		}

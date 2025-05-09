@@ -6,12 +6,6 @@
 typedef struct Value_Data Value_Data;
 typedef struct Node_Data Node_Data;
 
-// typedef struct {
-// 	Value *type;
-// 	Node *source;
-// 	bool pointer;
-// } Value_Data;
-
 typedef struct {
 	Value_Data *value;
 	Node *node;
@@ -21,8 +15,6 @@ typedef struct {
 	Value value;
 	Value type;
 } Typed_Value;
-
-typedef Identifier_Type_Pair Static_Argument_Data;
 
 typedef struct {
 	Value type;
@@ -481,7 +473,7 @@ struct Node_Data {
 	};
 };
 
-Node_Data *node_data_new(Node_Kind kind);
+Node_Data *data_new(Node_Kind kind);
 
 typedef struct { Node *key; Value value; } *Node_Types;
 
@@ -522,8 +514,8 @@ typedef struct {
 } Temporary_Context;
 
 struct Context {
-	struct { size_t key; Node_Types *value; } *node_types; // stb_ds
-	struct { size_t key; Node_Datas *value; } *node_datas; // stb_ds
+	struct { size_t key; Node_Types *value; } *types; // stb_ds
+	struct { size_t key; Node_Datas *value; } *datas; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
 	struct { Node_Data *key; Value value; } *static_variables; // stb_ds
 	bool returned;
