@@ -65,32 +65,62 @@ static void increment_position(Lexer *lexer) {
 }
 
 static bool is_keyword(char *identifier) {
-	if (strcmp(identifier, "fn") == 0) return true;
-	else if (strcmp(identifier, "def") == 0) return true;
-	else if (strcmp(identifier, "return") == 0) return true;
-	else if (strcmp(identifier, "extern") == 0) return true;
-	else if (strcmp(identifier, "internal") == 0) return true;
-	else if (strcmp(identifier, "var") == 0) return true;
-	else if (strcmp(identifier, "if") == 0) return true;
-	else if (strcmp(identifier, "while") == 0) return true;
-	else if (strcmp(identifier, "for") == 0) return true;
-	else if (strcmp(identifier, "else") == 0) return true;
-	else if (strcmp(identifier, "static") == 0) return true;
-	else if (strcmp(identifier, "mod") == 0) return true;
-	else if (strcmp(identifier, "struct") == 0) return true;
-	else if (strcmp(identifier, "union") == 0) return true;
-	else if (strcmp(identifier, "tagged_union") == 0) return true;
-	else if (strcmp(identifier, "enum") == 0) return true;
-	else if (strcmp(identifier, "run") == 0) return true;
-	else if (strcmp(identifier, "cast") == 0) return true;
-	else if (strcmp(identifier, "break") == 0) return true;
-	else if (strcmp(identifier, "switch") == 0) return true;
-	else if (strcmp(identifier, "case") == 0) return true;
-	else if (strcmp(identifier, "op") == 0) return true;
-	else if (strcmp(identifier, "is") == 0) return true;
-	else if (strcmp(identifier, "catch") == 0) return true;
-	else if (strcmp(identifier, "defer") == 0) return true;
-	else return false;
+	switch (identifier[0]) {
+		case 'b':
+			if (strcmp(identifier, "break") == 0) return true;
+			break;
+		case 'c':
+			if (strcmp(identifier, "cast") == 0) return true;
+			else if (strcmp(identifier, "case") == 0) return true;
+			else if (strcmp(identifier, "catch") == 0) return true;
+			break;
+		case 'd':
+			if (strcmp(identifier, "def") == 0) return true;
+			else if (strcmp(identifier, "defer") == 0) return true;
+			break;
+		case 'e':
+			if (strcmp(identifier, "extern") == 0) return true;
+			else if (strcmp(identifier, "else") == 0) return true;
+			else if (strcmp(identifier, "enum") == 0) return true;
+			break;
+		case 'f':
+			if (strcmp(identifier, "fn") == 0) return true;
+			else if (strcmp(identifier, "for") == 0) return true;
+			break;
+		case 'i':
+			if (strcmp(identifier, "if") == 0) return true;
+			else if (strcmp(identifier, "internal") == 0) return true;
+			else if (strcmp(identifier, "is") == 0) return true;
+			break;
+		case 'm':
+			if (strcmp(identifier, "mod") == 0) return true;
+			break;
+		case 'o':
+			if (strcmp(identifier, "op") == 0) return true;
+			break;
+		case 'r':
+			if (strcmp(identifier, "return") == 0) return true;
+			else if (strcmp(identifier, "run") == 0) return true;
+			break;
+		case 's':
+			if (strcmp(identifier, "static") == 0) return true;
+			else if (strcmp(identifier, "struct") == 0) return true;
+			else if (strcmp(identifier, "switch") == 0) return true;
+			break;
+		case 't':
+			if (strcmp(identifier, "tagged_union") == 0) return true;
+			break;
+		case 'u':
+			if (strcmp(identifier, "union") == 0) return true;
+			break;
+		case 'v':
+			if (strcmp(identifier, "var") == 0) return true;
+			break;
+		case 'w':
+			if (strcmp(identifier, "while") == 0) return true;
+			break;
+	}
+	return false;
 }
 
 static bool is_comment(Lexer *lexer) {
