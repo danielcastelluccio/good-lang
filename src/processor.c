@@ -1816,6 +1816,10 @@ static void process_variable(Context *context, Node *node) {
 		Value value_type = get_type(context, variable.value);
 		if (type.value == NULL) {
 			type = value_type;
+
+			if (value_type.value == NULL) {
+				handle_semantic_error(node->location, "Expected value");
+			}
 		} else if (!type_assignable(type.value, value_type.value)) {
 			handle_type_error(node, type, value_type);
 		}

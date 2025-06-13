@@ -80,14 +80,15 @@ static LLVMTypeRef create_llvm_function_literal_type(Value_Data *value, State *s
 }
 
 static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
-	if (value == NULL) {
-		return LLVMStructType(NULL, 0, false);
-	}
-
 	switch (value->tag) {
 		case POINTER_TYPE_VALUE: {
 			Pointer_Type_Value pointer = value->pointer_type;
-			return LLVMPointerType(create_llvm_type(pointer.inner.value, state), 0);
+			LLVMTypeRef inner_type = LLVMVoidType();
+			if (pointer.inner.value != NULL) {
+				inner_type = create_llvm_type(pointer.inner.value, state);
+			}
+
+			return LLVMPointerType(inner_type, 0);
 		}
 		case ARRAY_TYPE_VALUE: {
 			Array_Type_Value array = value->array_type;
