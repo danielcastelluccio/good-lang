@@ -44,7 +44,7 @@ def List = fn (static T: type): type {
 		op [] = fn (list: ^self, index: uint): ^T {
 			&list.items[index]
 		};
-	}
+	};
 };
 
 def new = fn (static T: type, allocator: allocate::Allocator): List(T) {

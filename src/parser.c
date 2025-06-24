@@ -62,7 +62,7 @@ static Node *parse_separated_statement(Lexer *lexer) {
 }
 
 static Node *parse_separated_statement_or_nothing(Lexer *lexer) {
-	if (lexer_peek(lexer).kind == CURLY_BRACE_CLOSED || lexer_peek(lexer).kind == PARENTHESIS_CLOSED || lexer_peek(lexer).kind == SEMICOLON) {
+	if (lexer_peek(lexer).kind == CURLY_BRACE_CLOSED || lexer_peek(lexer).kind == PARENTHESIS_CLOSED || lexer_peek(lexer).kind == SEMICOLON || lexer_peek(lexer).kind == EQUALS) {
 		return NULL;
 	}
 
@@ -771,6 +771,17 @@ static Node *parse_if(Lexer *lexer) {
 	return if_;
 }
 
+static Node *parse_internal(Lexer *lexer) {
+	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+
+	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
+	internal->internal.kind = INTERNAL_EXPRESSION;
+
+	arrpush(internal->internal.inputs, parse_expression(lexer));
+
+	return internal;
+}
+
 static Node *parse_while(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
@@ -1066,16 +1077,11 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 
 	bool no_body = false;
 	char *extern_name = NULL;
-	char *internal_name = NULL;
 	Node *body = NULL;
 	if (lexer_peek_check_keyword(lexer, "extern")) {
 		no_body = true;
 		lexer_consume(lexer);
 		extern_name = lexer_consume_check(lexer, STRING).string;
-	} else if (lexer_peek_check_keyword(lexer, "internal")) {
-		no_body = true;
-		lexer_consume(lexer);
-		internal_name = lexer_consume_check(lexer, STRING).string;
 	} else {
 		body = parse_separated_statement_or_nothing(lexer);
 	}
@@ -1085,7 +1091,6 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		function->function.function_type = function_type;
 		function->function.body = body;
 		function->function.extern_name = extern_name;
-		function->function.internal_name = internal_name;
 		return function;
 	} else {
 		return function_type;
@@ -1158,6 +1163,7 @@ static Node *parse_expression(Lexer *lexer) {
 					break;
 				case 'i':
 					if (streq(value, "if")) result = parse_if(lexer);
+					else if (streq(value, "internal")) result = parse_internal(lexer);
 					break;
 				case 'm':
 					if (streq(value, "mod")) result = parse_module_or_module_type(lexer);

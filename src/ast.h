@@ -132,7 +132,6 @@ typedef struct {
 	Node *function_type;
 	Node *body;
 	char *extern_name;
-	char *internal_name;
 } Function_Node;
 
 typedef struct {
@@ -177,7 +176,8 @@ typedef struct {
 		INTERNAL_C_INT_SIZE,
 		INTERNAL_C_LONG_SIZE,
 		INTERNAL_PRINT,
-		INTERNAL_EMBED
+		INTERNAL_EMBED,
+		INTERNAL_EXPRESSION
 	} kind;
 	Node **inputs; // stb_ds
 } Internal_Node;

@@ -497,10 +497,6 @@ static Value evaluate_call(State *state, Node *node) {
 		arrpush(arguments, evaluate_state(state, call.arguments[i]));
 	}
 
-	if (function.value->tag != FUNCTION_VALUE) {
-		assert(false);
-	}
-
 	Value_Data *result = NULL;
 
 	size_t saved_static_argument_id = state->context->static_id;
@@ -509,14 +505,8 @@ static Value evaluate_call(State *state, Node *node) {
 	Value *saved_function_arguments = function_arguments;
 	function_arguments = arguments;
 
-	Function_Value function_value = function.value->function;
-
-	if (function_value.node->function.extern_name != NULL) {
-		handle_evaluate_error(node->location, "Cannot run extern function at compile time");
-	}
-
-	if (function_value.node->function.internal_name != NULL) {
-		char *internal_name = function_value.node->function.internal_name;
+	if (function.value->tag == INTERNAL_VALUE) {
+		char *internal_name = function.value->internal.identifier;
 
 		if (streq(internal_name, "size_of")) {
 			Value_Data *value = value_new(INTEGER_VALUE);
@@ -756,10 +746,16 @@ static Value evaluate_call(State *state, Node *node) {
 
 			result->tagged_union.tag = enum_value;
 			result->tagged_union.data = data;
-		} else {
-			assert(false);
 		}
 	} else {
+		assert(function.value->tag == FUNCTION_VALUE);
+
+		Function_Value function_value = function.value->function;
+
+		if (function_value.node->function.extern_name != NULL) {
+			handle_evaluate_error(node->location, "Cannot run extern function at compile time");
+		}
+
 		Variable_Datas saved_variables = state->variables;
 		Switch_Datas saved_switchs = state->switchs;
 		For_Datas saved_fors = state->fors;
@@ -907,6 +903,18 @@ static Value evaluate_internal(State *state, Node *node) {
 		return (Value) {};
 	} else if (internal.kind == INTERNAL_EMBED) {
 		return evaluate_state(state, internal_data.node);
+	} else if (internal.kind == INTERNAL_EXPRESSION) {
+		Value value = evaluate(state->context, internal.inputs[0]);
+		char *internal_name = malloc(value.value->array_view.length + 1);
+		internal_name[value.value->array_view.length] = '\0';
+
+		for (size_t i = 0; i < value.value->array_view.length; i++) {
+			internal_name[i] = value.value->array_view.values[i]->byte.value;
+		}
+
+		Value result = create_value(INTERNAL_VALUE);
+		result.value->internal.identifier = internal_name;
+		return result;
 	} else {
 		return internal_data.value;
 	}

@@ -543,6 +543,70 @@ static Value *get_initial_argument_types(Context *context, Value function_type, 
 	return argument_types;
 }
 
+static bool process_function_type(Context *context, Node *node, bool given_static_arguments) {
+	Function_Type_Node function_type = node->function_type;
+
+	bool static_argument = false;
+	for (long int i = 0; i < arrlen(function_type.arguments); i++) {
+		if (function_type.arguments[i].static_) {
+			static_argument = true;
+		}
+	}
+
+	if (static_argument && !given_static_arguments) {
+		Value function_type_value = {};
+		function_type_value.value = value_new(FUNCTION_TYPE_VALUE);
+		function_type_value.value->function_type.incomplete = true;
+		function_type_value.value->function_type.node = node;
+		Node_Data *function_type_data = data_new(FUNCTION_TYPE_NODE);
+		function_type_data->function_type.value = function_type_value;
+		set_data(context, node, function_type_data);
+
+		return static_argument;
+	}
+
+	Function_Argument_Value *argument_type_values = NULL;
+	for (long int i = 0; i < arrlen(function_type.arguments); i++) {
+		Function_Argument_Value argument = {};
+		if (function_type.arguments[i].inferred) {
+			argument = (Function_Argument_Value) {
+				.identifier = function_type.arguments[i].identifier,
+				.static_ = function_type.arguments[i].static_,
+				.inferred = true
+			};
+		} else {
+			process_node(context, function_type.arguments[i].type);
+			argument = (Function_Argument_Value) {
+				.identifier = function_type.arguments[i].identifier,
+				.type = evaluate(context, function_type.arguments[i].type),
+				.static_ = function_type.arguments[i].static_
+			};
+		}
+
+		arrpush(argument_type_values, argument);
+	}
+
+	Value return_type_value = {};
+	if (function_type.return_ != NULL) {
+		process_node(context, function_type.return_);
+		return_type_value = evaluate(context, function_type.return_);
+	}
+
+	Value_Data *function_type_value = value_new(FUNCTION_TYPE_VALUE);
+	function_type_value->function_type.arguments = argument_type_values;
+	function_type_value->function_type.return_type = return_type_value;
+	function_type_value->function_type.variadic = function_type.variadic;
+	function_type_value->function_type.node = node;
+
+	Node_Data *data = data_new(FUNCTION_TYPE_NODE);
+	data->function_type.value.value = function_type_value;
+	set_data(context, node, data);
+
+	set_type(context, node, create_value(TYPE_TYPE_VALUE));
+
+	return static_argument;
+}
+
 static void process_function(Context *context, Node *node, bool given_static_arguments) {
 	Function_Node function = node->function;
 
@@ -552,25 +616,11 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	context->compile_only = false;
 	context->returned = false;
 
-	bool static_argument = false;
-	for (long int i = 0; i < arrlen(function.function_type->function_type.arguments); i++) {
-		if (function.function_type->function_type.arguments[i].static_) {
-			static_argument = true;
-		}
-	}
+	bool static_argument = process_function_type(context, function.function_type, given_static_arguments);
 
-	Value function_type_value = {};
-	function_type_value.value = value_new(FUNCTION_TYPE_VALUE);
-	function_type_value.value->function_type.incomplete = true;
-	function_type_value.value->function_type.node = function.function_type;
-	set_type(context, node, function_type_value);
-	Node_Data *function_type_data = data_new(FUNCTION_TYPE_NODE);
-	function_type_data->function_type.value = function_type_value;
-	set_data(context, function.function_type, function_type_data);
+	set_type(context, node, get_data(context, function.function_type)->function_type.value);
 
 	if (!static_argument || given_static_arguments) {
-		process_node(context, function.function_type);
-
 		Node_Data *function_type_data = get_data(context, function.function_type);
 
 		Value function_type_value = function_type_data->function_type.value;
@@ -773,12 +823,37 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 				shput(arrlast(context->scopes).static_bindings, static_arguments[i].identifier, static_arguments[i].value);
 			}
 
-			process_function(context, function_value.value->function.node, true);
+			if (function_value.value->tag == FUNCTION_VALUE) {
+				process_function(context, function_value.value->function.node, true);
 
-			context->compile_only = compile_only_parent;
+				context->compile_only = compile_only_parent;
 
-			*function_type = get_type(context, function_value.value->function.node);
-			function_value = evaluate(context, function_value.value->function.node);
+				*function_type = get_type(context, function_value.value->function.node);
+				function_value = evaluate(context, function_value.value->function.node);
+			} else if (function_value.value->tag == INTERNAL_VALUE) {
+				if (streq(function_value.value->internal.identifier, "size_of")) {
+					*function_type = create_value(FUNCTION_TYPE_VALUE);
+					function_type->value->function_type.incomplete = false;
+					function_type->value->function_type.variadic = false;
+					function_type->value->function_type.arguments = NULL;
+
+					Function_Argument_Value argument1 = {
+						.static_ = true,
+						.inferred = true
+					};
+					arrpush(function_type->value->function_type.arguments, argument1);
+					Function_Argument_Value argument2 = {
+						.type = create_value(TYPE_TYPE_VALUE)
+					};
+					arrpush(function_type->value->function_type.arguments, argument2);
+
+					function_type->value->function_type.return_type = static_arguments[0].value.value;
+				} else {
+					assert(false);
+				}
+			} else {
+				assert(false);
+			}
 
 			context->static_id = saved_static_id;
 
@@ -801,6 +876,7 @@ static Value process_call_generic(Context *context, Node *node, Node *function, 
 		handle_semantic_error(node->location, "Expected function pointer, but got %s", given_string);
 	}
 
+	assert(!function_type->value->function_type.incomplete);
 	long int real_argument_count = 0;
 	for (long int i = 0; i < arrlen(function_type->value->function_type.arguments); i++) {
 		if (!function_type->value->function_type.arguments[i].inferred) real_argument_count++;
@@ -1232,6 +1308,12 @@ static void process_internal(Context *context, Node *node) {
 		}
 		case INTERNAL_PRINT: {
 			process_node(context, internal.inputs[0]);
+			break;
+		}
+		case INTERNAL_EXPRESSION: {
+			process_node(context, internal.inputs[0]);
+
+			set_type(context, node, context->temporary_context.wanted_type);
 			break;
 		}
 	}
@@ -2383,49 +2465,6 @@ static void process_binary_op(Context *context, Node *node) {
 	set_type(context, node, result_type);
 }
 
-static void process_function_type(Context *context, Node *node) {
-	Function_Type_Node function_type = node->function_type;
-
-	Function_Argument_Value *argument_type_values = NULL;
-	for (long int i = 0; i < arrlen(function_type.arguments); i++) {
-		Function_Argument_Value argument = {};
-		if (function_type.arguments[i].inferred) {
-			argument = (Function_Argument_Value) {
-				.identifier = function_type.arguments[i].identifier,
-				.static_ = function_type.arguments[i].static_,
-				.inferred = true
-			};
-		} else {
-			process_node(context, function_type.arguments[i].type);
-			argument = (Function_Argument_Value) {
-				.identifier = function_type.arguments[i].identifier,
-				.type = evaluate(context, function_type.arguments[i].type),
-				.static_ = function_type.arguments[i].static_
-			};
-		}
-
-		arrpush(argument_type_values, argument);
-	}
-
-	Value return_type_value = {};
-	if (function_type.return_ != NULL) {
-		process_node(context, function_type.return_);
-		return_type_value = evaluate(context, function_type.return_);
-	}
-
-	Value_Data *function_type_value = value_new(FUNCTION_TYPE_VALUE);
-	function_type_value->function_type.arguments = argument_type_values;
-	function_type_value->function_type.return_type = return_type_value;
-	function_type_value->function_type.variadic = function_type.variadic;
-	function_type_value->function_type.node = node;
-
-	Node_Data *data = data_new(FUNCTION_TYPE_NODE);
-	data->function_type.value.value = function_type_value;
-	set_data(context, node, data);
-
-	set_type(context, node, create_value(TYPE_TYPE_VALUE));
-}
-
 static void process_pointer(Context *context, Node *node) {
 	Pointer_Type_Node pointer = node->pointer_type;
 	if (pointer.inner != NULL) {
@@ -2596,7 +2635,7 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		}
 		case FUNCTION_TYPE_NODE: {
-			process_function_type(context, node);
+			process_function_type(context, node, false);
 			break;
 		}
 		case POINTER_NODE: {
