@@ -752,10 +752,6 @@ static Value evaluate_call(State *state, Node *node) {
 
 		Function_Value function_value = function.value->function;
 
-		if (function_value.node->function.extern_name != NULL) {
-			handle_evaluate_error(node->location, "Cannot run extern function at compile time");
-		}
-
 		Variable_Datas saved_variables = state->variables;
 		Switch_Datas saved_switchs = state->switchs;
 		For_Datas saved_fors = state->fors;
@@ -1077,6 +1073,14 @@ static Value evaluate_cast(State *state, Node *node) {
 	}
 }
 
+static Value evaluate_extern(State *state, Node *node) {
+	Extern_Node extern_ = node->extern_;
+	Value value = create_value(EXTERN_VALUE);
+	value.value->extern_.name = extern_.name;
+	value.value->extern_.type = get_type(state->context, node);
+	return value;
+}
+
 static Value evaluate_state(State *state, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE:          return evaluate_function(state, node);
@@ -1111,6 +1115,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case IS_NODE:                return evaluate_is(state, node);
 		case ASSIGN_NODE:            return evaluate_assign(state, node);
 		case CAST_NODE:              return evaluate_cast(state, node);
+		case EXTERN_NODE:            return evaluate_extern(state, node);
 		default:                     assert(false);
 	}
 }

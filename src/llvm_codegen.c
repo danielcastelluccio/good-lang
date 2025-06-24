@@ -1371,9 +1371,17 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	state->context.static_id = saved_static_argument_id;
 	state->llvm_builder = saved_llvm_builder;
 
-	if (function.node->function.extern_name != NULL) {
-		LLVMSetValueName(llvm_function, function.node->function.extern_name);
-	}
+	return llvm_function;
+}
+
+static LLVMValueRef generate_extern(Value_Data *value, State *state) {
+	assert(value->tag == EXTERN_VALUE);
+	Extern_Value extern_ = value->extern_;
+
+	LLVMValueRef llvm_function = LLVMAddFunction(state->llvm_module, "", create_llvm_function_literal_type(extern_.type.value, state));
+	hmput(state->generated_cache, value, llvm_function);
+
+	LLVMSetValueName(llvm_function, extern_.name);
 
 	return llvm_function;
 }
@@ -1452,6 +1460,9 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 	switch (value->tag) {
 		case FUNCTION_VALUE:
 			result = generate_function(value, state);
+			break;
+		case EXTERN_VALUE:
+			result = generate_extern(value, state);
 			break;
 		case MODULE_VALUE:
 			generate_module(value, state);

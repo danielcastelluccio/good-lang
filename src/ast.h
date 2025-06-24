@@ -122,6 +122,10 @@ typedef struct {
 } Enum_Type_Node;
 
 typedef struct {
+	char *name;
+} Extern_Node;
+
+typedef struct {
 	Node *item;
 	Node *body;
 	char **bindings;
@@ -131,7 +135,6 @@ typedef struct {
 typedef struct {
 	Node *function_type;
 	Node *body;
-	char *extern_name;
 } Function_Node;
 
 typedef struct {
@@ -307,6 +310,7 @@ typedef enum {
 	DEOPTIONAL_NODE,
 	DEREFERENCE_NODE,
 	ENUM_TYPE_NODE,
+	EXTERN_NODE,
 	FOR_NODE,
 	FUNCTION_NODE,
 	FUNCTION_TYPE_NODE,
@@ -356,6 +360,7 @@ struct Node {
 		Deoptional_Node deoptional;
 		Dereference_Node dereference;
 		Enum_Type_Node enum_type;
+		Extern_Node extern_;
 		For_Node for_;
 		Function_Node function;
 		Function_Type_Node function_type;

@@ -1324,6 +1324,10 @@ static void process_internal(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_extern(Context *context, Node *node) {
+	set_type(context, node, context->temporary_context.wanted_type);
+}
+
 static void process_union_type(Context *context, Node *node) {
 	Union_Type_Node union_type = node->union_type;
 	for (long int i = 0; i < arrlen(union_type.members); i++) {
@@ -2684,6 +2688,10 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		}
 		case INTERNAL_NODE: {
 			process_internal(context, node);
+			break;
+		}
+		case EXTERN_NODE: {
+			process_extern(context, node);
 			break;
 		}
 		default:

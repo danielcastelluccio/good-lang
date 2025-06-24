@@ -46,7 +46,7 @@ static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
 	Token_Data token = lexer_peek(lexer);
-	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA || lexer_peek_check_keyword(lexer, "extern")) {
+	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA|| token.kind == EQUALS || lexer_peek_check_keyword(lexer, "extern")) {
 		return NULL;
 	}
 
@@ -655,6 +655,15 @@ static Node *parse_enum_type(Lexer *lexer) {
 	return enum_;
 }
 
+static Node *parse_extern(Lexer *lexer) {
+	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+
+	Node *extern_ = ast_new(EXTERN_NODE, first_token.location);
+	extern_->extern_.name = lexer_consume_check(lexer, STRING).string;
+
+	return extern_;
+}
+
 static Node *parse_define(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
 
@@ -1075,22 +1084,12 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		.variadic = variadic
 	};
 
-	bool no_body = false;
-	char *extern_name = NULL;
-	Node *body = NULL;
-	if (lexer_peek_check_keyword(lexer, "extern")) {
-		no_body = true;
-		lexer_consume(lexer);
-		extern_name = lexer_consume_check(lexer, STRING).string;
-	} else {
-		body = parse_separated_statement_or_nothing(lexer);
-	}
+	Node *body = parse_separated_statement_or_nothing(lexer);
 
-	if (body != NULL || no_body) {
+	if (body != NULL) {
 		Node *function = ast_new(FUNCTION_NODE, first_token.location);
 		function->function.function_type = function_type;
 		function->function.body = body;
-		function->function.extern_name = extern_name;
 		return function;
 	} else {
 		return function_type;
@@ -1156,6 +1155,7 @@ static Node *parse_expression(Lexer *lexer) {
 					break;
 				case 'e':
 					if (streq(value, "enum")) result = parse_enum_type(lexer);
+					else if (streq(value, "extern")) result = parse_extern(lexer);
 					break;
 				case 'f':
 					if (streq(value, "fn")) result = parse_function_or_function_type(lexer);
