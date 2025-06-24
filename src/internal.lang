@@ -52,8 +52,8 @@ def Type_Info = tagged_union {
 
 def Operating_System = enum {
 	LINUX,
-	WINDOWS,
-	MACOS
+	MACOS,
+	WINDOWS
 };
 
 def operating_system: Operating_System = internal "operating_system";

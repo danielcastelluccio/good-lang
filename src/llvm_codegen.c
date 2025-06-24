@@ -1450,6 +1450,24 @@ static LLVMValueRef generate_array_view(Value_Data *value, Value_Data *type, Sta
 	return struct_value;
 }
 
+static LLVMValueRef generate_internal_value(Value_Data *value, State *state) {
+	(void) state;
+
+	Internal_Value internal = value->internal;
+	if (streq(internal.identifier, "operating_system")) {
+		#if defined(__linux__)
+			return LLVMConstInt(LLVMInt64Type(), 0, false);
+		#elif defined(__APPLE__)
+			return LLVMConstInt(LLVMInt64Type(), 1, false);
+		#elif defined(_WIN32)
+			return LLVMConstInt(LLVMInt64Type(), 2, false);
+		#endif
+		return NULL;
+	} else {
+		assert(false);
+	}
+}
+
 static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -1481,6 +1499,9 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 			break;
 		case STRUCT_VALUE:
 			result = generate_struct(value, type, state);
+			break;
+		case INTERNAL_VALUE:
+			result = generate_internal_value(value, state);
 			break;
 		default:
 			break;
