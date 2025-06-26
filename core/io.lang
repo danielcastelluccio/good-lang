@@ -6,6 +6,9 @@ def print_value = fn [T](t: T) {
 		case Integer {
 			_ = c::printf("%li\0", t);
 		}
+		case Byte {
+			_ = c::printf("%i\0", t);
+		}
 		case Struct |struct_| {
 			_ = c::printf(".{\0");
 			for static struct_.members |member, i| {

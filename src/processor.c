@@ -1830,7 +1830,7 @@ static void process_array_access(Context *context, Node *node) {
 	if (custom_operator_function.function == NULL && array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE && array_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(array_type_original, given_string);
-		handle_semantic_error(node->location, "Expected array, but got %s", given_string);
+		handle_semantic_error(node->location, "Expected array or array view, but got %s", given_string);
 	}
 
 	Value item_type = {};
