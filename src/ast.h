@@ -22,10 +22,7 @@ typedef struct {
 	Node *function;
 } Operator_Overload;
 
-typedef struct {
-	Node *target;
-	Node *value;
-} Assign_Node;
+// Node Types
 
 typedef struct {
 	Node *parent;
@@ -40,6 +37,11 @@ typedef struct {
 typedef struct {
 	Node *inner;
 } Array_View_Type_Node;
+
+typedef struct {
+	Node *target;
+	Node *value;
+} Assign_Node;
 
 typedef enum {
 	OP_EQUALS,
@@ -79,15 +81,15 @@ typedef struct {
 } Cast_Node;
 
 typedef struct {
+	Node *function;
+	Node **arguments; // stb_ds
+} Call_Node;
+
+typedef struct {
 	Node *argument1;
 	char *method;
 	Node **arguments; // stb_ds
 } Call_Method_Node;
-
-typedef struct {
-	Node *function;
-	Node **arguments; // stb_ds
-} Call_Node;
 
 typedef struct {
 	char *value;
@@ -292,17 +294,17 @@ typedef struct {
 } While_Node;
 
 typedef enum {
-	ASSIGN_NODE,
 	ARRAY_ACCESS_NODE,
 	ARRAY_TYPE_NODE,
 	ARRAY_VIEW_TYPE_NODE,
+	ASSIGN_NODE,
 	BINARY_OP_NODE,
 	BLOCK_NODE,
 	BOOLEAN_NODE,
 	BREAK_NODE,
 	CAST_NODE,
-	CALL_METHOD_NODE,
 	CALL_NODE,
+	CALL_METHOD_NODE,
 	CHARACTER_NODE,
 	CATCH_NODE,
 	DEFER_NODE,
@@ -342,17 +344,17 @@ typedef enum {
 struct Node {
 	Node_Kind kind;
 	union {
-		Assign_Node assign;
 		Array_Access_Node array_access;
 		Array_Type_Node array_type;
 		Array_View_Type_Node array_view_type;
+		Assign_Node assign;
 		Binary_Op_Node binary_op;
 		Block_Node block;
 		Boolean_Node boolean;
 		Break_Node break_;
 		Cast_Node cast;
-		Call_Method_Node call_method;
 		Call_Node call;
+		Call_Method_Node call_method;
 		Character_Node character;
 		Catch_Node catch;
 		Defer_Node defer;
