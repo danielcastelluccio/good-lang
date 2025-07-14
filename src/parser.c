@@ -46,7 +46,7 @@ static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
 	Token_Data token = lexer_peek(lexer);
-	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA|| token.kind == EQUALS || lexer_peek_check_keyword(lexer, "extern")) {
+	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA || token.kind == EQUALS || token.kind == VERTICAL_BAR || lexer_peek_check_keyword(lexer, "extern")) {
 		return NULL;
 	}
 
@@ -302,6 +302,17 @@ static Node *parse_result(Lexer *lexer, Node *node) {
 	return result;
 }
 
+static Node *parse_range(Lexer *lexer, Node *start) {
+	Token_Data token = lexer_consume(lexer);
+
+	Node *end = parse_expression_or_nothing(lexer);
+
+	Node *range = ast_new(RANGE_NODE, token.location);
+	range->range.start = start;
+	range->range.end = end;
+
+	return range;
+}
 
 static Node *parse_is(Lexer *lexer, Node *node) {
 	Token_Data token = lexer_consume(lexer);
@@ -1275,6 +1286,9 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case EXCLAMATION:
 				result = parse_result(lexer, result);
+				break;
+			case PERIOD_PERIOD:
+				result = parse_range(lexer, result);
 				break;
 			case KEYWORD:
 				if (streq(next.string, "is")) {

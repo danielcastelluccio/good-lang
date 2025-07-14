@@ -1296,12 +1296,26 @@ static void process_for(Context *context, Node *node) {
 	for (long int i = 0; i < arrlen(for_.items); i++) {
 		process_node(context, for_.items[i]);
 		arrpush(item_types, get_type(context, for_.items[i]));
-		arrpush(element_types, item_types[i].value->array_view_type.inner);
+
+		switch (item_types[i].value->tag) {
+			case ARRAY_VIEW_TYPE_VALUE: {
+				arrpush(element_types, item_types[i].value->array_view_type.inner);
+				break;
+			}
+			case RANGE_TYPE_VALUE: {
+				arrpush(element_types, item_types[i].value->range_type.type);
+				break;
+			}
+			default:
+				assert(false);
+		}
 	}
 
 	Node_Data *data = data_new(FOR_NODE);
 	if (for_.static_) {
 		assert(arrlen(for_.items) == 1);
+		assert(item_types[0].value->tag == ARRAY_VIEW_TYPE_VALUE);
+
 		Value looped_value = evaluate(context, for_.items[0]);
 
 		size_t saved_static_id = context->static_id;
@@ -1980,6 +1994,29 @@ static void process_pointer(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
+static void process_range(Context *context, Node *node) {
+	Range_Node range = node->range;
+
+	Value wanted_type = {};
+	if (context->temporary_context.wanted_type.value != NULL && context->temporary_context.wanted_type.value->tag == RANGE_TYPE_VALUE) {
+		wanted_type = context->temporary_context.wanted_type.value->range_type.type;
+	}
+
+	Temporary_Context temporary_context = { .wanted_type = wanted_type };
+	process_node_context(context, temporary_context, range.start);
+
+	if (wanted_type.value == NULL) {
+		wanted_type = get_type(context, range.start);
+	}
+
+	if (range.end != NULL) {
+		temporary_context = (Temporary_Context) { .wanted_type = wanted_type };
+		process_node_context(context, temporary_context, range.end);
+	}
+
+	set_type(context, node, create_range_type(wanted_type));
+}
+
 static void process_reference(Context *context, Node *node) {
 	Reference_Node reference = node->reference;
 
@@ -2612,6 +2649,9 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		case POINTER_NODE:
 			process_pointer(context, node);
+			break;
+		case RANGE_NODE:
+			process_range(context, node);
 			break;
 		case REFERENCE_NODE:
 			process_reference(context, node);

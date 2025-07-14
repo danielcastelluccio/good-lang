@@ -51,6 +51,12 @@ Value create_float_type(size_t size) {
 	return float_type;
 }
 
+Value create_range_type(Value value) {
+	Value range_type = create_value(RANGE_TYPE_VALUE);
+	range_type.value->range_type.type = value;
+	return range_type;
+}
+
 Value create_integer(size_t value) {
 	Value integer = create_value(INTEGER_VALUE);
 	integer.value->integer.value = value;

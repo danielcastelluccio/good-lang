@@ -206,6 +206,15 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 				return LLVMStructType(items, 2, false);
 			}
 		}
+		case RANGE_TYPE_VALUE: {
+			Range_Type_Value range_type = value->range_type;
+
+			LLVMTypeRef inner_type = create_llvm_type(range_type.type.value, state);
+			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
+			items[0] = inner_type;
+			items[1] = inner_type;
+			return LLVMStructType(items, 2, false);
+		}
 		default:
 			assert(false);
 	}
@@ -331,7 +340,11 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			size_t index = identifier_data->identifier.binding.index;
 			if (node->kind == FOR_NODE) {
 				LLVMValueRef binding_llvm_value = hmget(state->fors, node_data).bindings[index];
-				return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
+				if (identifier_data->identifier.want_pointer || get_type(&state->context, node->for_.items[index]).value->tag == RANGE_TYPE_VALUE) {
+					return binding_llvm_value;
+				} else {
+					return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
+				}
 			} else if (node->kind == IF_NODE) {
 				LLVMValueRef binding_llvm_value = hmget(state->ifs, node_data).binding;
 				return binding_llvm_value;
@@ -1197,7 +1210,20 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 
 	LLVMValueRef min_len = LLVMConstInt(LLVMInt64Type(), -1, false);
 	for (long int i = 0; i < arrlen(for_.items); i++) {
-		LLVMValueRef len = LLVMBuildExtractValue(state->llvm_builder, items[i], 0, "");
+		LLVMValueRef len;
+		switch (for_data->for_.types[i].value->tag) {
+			case ARRAY_VIEW_TYPE_VALUE: {
+				len = LLVMBuildExtractValue(state->llvm_builder, items[i], 0, "");
+				break;
+			}
+			case RANGE_TYPE_VALUE: {
+				len = LLVMBuildExtractValue(state->llvm_builder, items[i], 1, "");
+				break;
+			}
+			default:
+				assert(false);
+		}
+
 		LLVMValueRef condition = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, len, min_len, "");
 		min_len = LLVMBuildSelect(state->llvm_builder, condition, len, min_len, "");
 	}
@@ -1213,15 +1239,29 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 
 	LLVMValueRef *bindings = NULL;
 	for (long int i = 0; i < arrlen(for_.items); i++) {
-		LLVMValueRef indices[2] = {
-			LLVMConstInt(LLVMInt64Type(), 0, false),
-			i_value
-		};
-		LLVMTypeRef element_type = create_llvm_type(for_data->for_.types[i].value->array_view_type.inner.value, state);
-		LLVMValueRef item_ptr = LLVMBuildExtractValue(state->llvm_builder, items[i], 1, "");
-		LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, "");
+		switch (for_data->for_.types[i].value->tag) {
+			case ARRAY_VIEW_TYPE_VALUE: {
+				LLVMValueRef indices[2] = {
+					LLVMConstInt(LLVMInt64Type(), 0, false),
+					i_value
+				};
+				LLVMTypeRef element_type = create_llvm_type(for_data->for_.types[i].value->array_view_type.inner.value, state);
+				LLVMValueRef item_ptr = LLVMBuildExtractValue(state->llvm_builder, items[i], 1, "");
+				LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, "");
 
-		arrpush(bindings, element);
+				arrpush(bindings, element);
+				break;
+			}
+			case RANGE_TYPE_VALUE: {
+				LLVMValueRef start = LLVMBuildExtractValue(state->llvm_builder, items[i], 0, "");
+				LLVMValueRef element = LLVMBuildAdd(state->llvm_builder, start, i_value, "");
+
+				arrpush(bindings, element);
+				break;
+			}
+			default:
+				assert(false);
+		}
 	}
 
 	For_Codegen_Data for_codegen_data = {
@@ -1237,6 +1277,27 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
 
 	return NULL;
+}
+
+static LLVMValueRef generate_range(Node *node, State *state) {
+	assert(node->kind == RANGE_NODE);
+	Range_Node range = node->range;
+	Value range_type = get_type(&state->context, node);
+	LLVMTypeRef range_type_llvm = create_llvm_type(range_type.value, state);
+
+	LLVMValueRef range_value = LLVMBuildAlloca(state->llvm_builder, range_type_llvm, "");
+
+	LLVMValueRef start_pointer = LLVMBuildStructGEP2(state->llvm_builder, range_type_llvm, range_value, 0, "");
+	LLVMBuildStore(state->llvm_builder, generate_node(range.start, state), start_pointer);
+
+	LLVMValueRef end_pointer = LLVMBuildStructGEP2(state->llvm_builder, range_type_llvm, range_value, 1, "");
+	if (range.end != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(range.end, state), end_pointer);
+	} else {
+		LLVMBuildStore(state->llvm_builder, LLVMConstInt(create_llvm_type(get_type(&state->context, range.start).value, state), 18446744073709551615ULL, false), end_pointer);
+	}
+
+	return LLVMBuildLoad2(state->llvm_builder, range_type_llvm, range_value, "");
 }
 
 static LLVMValueRef generate_internal(Node *node, State *state) {
@@ -1309,6 +1370,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_while(node, state);
 		case FOR_NODE:
 			return generate_for(node, state);
+		case RANGE_NODE:
+			return generate_range(node, state);
 		case INTERNAL_NODE:
 			return generate_internal(node, state);
 		default:

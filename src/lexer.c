@@ -336,7 +336,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 					increment_position(lexer);
 				}
 
-				if (lexer->source[lexer->position] == '.') {
+				if (lexer->source[lexer->position] == '.' && lexer->source[lexer->position + 1] != '.') {
 					increment_position(lexer);
 					while (is_numeric(lexer->source[lexer->position])) {
 						increment_position(lexer);

@@ -216,6 +216,11 @@ typedef struct {
 } Pointer_Type_Node;
 
 typedef struct {
+	Node *start;
+	Node *end;
+} Range_Node;
+
+typedef struct {
 	Node *node;
 } Reference_Node;
 
@@ -326,6 +331,7 @@ typedef enum {
 	NUMBER_NODE,
 	OPTIONAL_NODE,
 	POINTER_NODE,
+	RANGE_NODE,
 	REFERENCE_NODE,
 	RESULT_NODE,
 	RETURN_NODE,
@@ -374,6 +380,7 @@ struct Node {
 		Number_Node number;
 		Optional_Type_Node optional_type;
 		Pointer_Type_Node pointer_type;
+		Range_Node range;
 		Reference_Node reference;
 		Result_Type_Node result_type;
 		Return_Node return_;
