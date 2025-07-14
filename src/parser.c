@@ -816,7 +816,18 @@ static Node *parse_for(Lexer *lexer) {
 		for_->for_.static_ = true;
 	}
 
-	for_->for_.item = parse_expression(lexer);
+	for_->for_.items = NULL;
+	bool has_more = true;
+	while (has_more) {
+		arrpush(for_->for_.items, parse_expression(lexer));
+
+		if (lexer_peek(lexer).kind == COMMA) {
+			has_more = true;
+			lexer_consume(lexer);
+		} else {
+			has_more = false;
+		}
+	}
 
 	lexer_consume_check(lexer, VERTICAL_BAR);
 	while (true) {

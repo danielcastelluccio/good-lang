@@ -331,11 +331,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			size_t index = identifier_data->identifier.binding.index;
 			if (node->kind == FOR_NODE) {
 				LLVMValueRef binding_llvm_value = hmget(state->fors, node_data).bindings[index];
-				if (identifier_data->identifier.want_pointer || identifier_data->identifier.binding.index > 0) {
-					return binding_llvm_value;
-				} else {
-					return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
-				}
+				return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
 			} else if (node->kind == IF_NODE) {
 				LLVMValueRef binding_llvm_value = hmget(state->ifs, node_data).binding;
 				return binding_llvm_value;
@@ -1194,29 +1190,38 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
 
+	LLVMValueRef *items = NULL;
+	for (long int i = 0; i < arrlen(for_.items); i++) {
+		arrpush(items, generate_node(for_.items[i], state));
+	}
+
+	LLVMValueRef min_len = LLVMConstInt(LLVMInt64Type(), -1, false);
+	for (long int i = 0; i < arrlen(for_.items); i++) {
+		LLVMValueRef len = LLVMBuildExtractValue(state->llvm_builder, items[i], 0, "");
+		LLVMValueRef condition = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, len, min_len, "");
+		min_len = LLVMBuildSelect(state->llvm_builder, condition, len, min_len, "");
+	}
+
 	LLVMValueRef i = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
 	LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), i);
-	LLVMValueRef item = generate_node(for_.item, state);
-	LLVMValueRef item_len = LLVMBuildExtractValue(state->llvm_builder, item, 0, "");
-	LLVMValueRef item_ptr = LLVMBuildExtractValue(state->llvm_builder, item, 1, "");
 	LLVMBuildBr(state->llvm_builder, check_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
 	LLVMValueRef i_value = LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, "");
-	LLVMValueRef condition = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, i_value, item_len, "");
+	LLVMValueRef condition = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, i_value, min_len, "");
 	LLVMBuildCondBr(state->llvm_builder, condition, body_block, done_block);
 	LLVMPositionBuilderAtEnd(state->llvm_builder, body_block);
 
-	LLVMValueRef indices[2] = {
-		LLVMConstInt(LLVMInt64Type(), 0, false),
-		i_value
-	};
-	LLVMTypeRef element_type = create_llvm_type(for_data->for_.type.value->array_view_type.inner.value, state);
-	LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, "");
-
 	LLVMValueRef *bindings = NULL;
-	arrpush(bindings, element);
-	if (arrlen(for_.bindings) > 1) {
-		arrpush(bindings, i_value);
+	for (long int i = 0; i < arrlen(for_.items); i++) {
+		LLVMValueRef indices[2] = {
+			LLVMConstInt(LLVMInt64Type(), 0, false),
+			i_value
+		};
+		LLVMTypeRef element_type = create_llvm_type(for_data->for_.types[i].value->array_view_type.inner.value, state);
+		LLVMValueRef item_ptr = LLVMBuildExtractValue(state->llvm_builder, items[i], 1, "");
+		LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(element_type, 0), item_ptr, indices, 2, "");
+
+		arrpush(bindings, element);
 	}
 
 	For_Codegen_Data for_codegen_data = {
@@ -1658,7 +1663,7 @@ void build_llvm(Context context, Node *root, void *data) {
 	if (error != NULL) printf("%s", error);
 
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.o", LLVMObjectFile, NULL);
-	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.s", LLVMAssemblyFile, NULL);
+	// LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.s", LLVMAssemblyFile, NULL);
 
 	char *args[] = {
 		"gcc",

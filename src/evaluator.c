@@ -1005,7 +1005,8 @@ static Value evaluate_for(State *state, Node *node) {
 	For_Node for_ = node->for_;
 	Node_Data *data = get_data(state->context, node);
 
-	Value value = evaluate_state(state, for_.item);
+	assert(arrlen(for_.items) == 1);
+	Value value = evaluate_state(state, for_.items[0]);
 	for (size_t i = 0; i < value.value->array_view.length; i++) {
 		Value_Data *item_value = value.value->array_view.values[i];
 

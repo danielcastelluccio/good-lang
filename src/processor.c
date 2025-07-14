@@ -1291,14 +1291,18 @@ static void process_for(Context *context, Node *node) {
 
 	arrpush(context->scopes, (Scope) { .node = node });
 
-	process_node(context, for_.item);
-	Value item_type = get_type(context, for_.item);
-
-	Value element_type = item_type.value->array_view_type.inner;
+	Value *item_types = NULL;
+	Value *element_types = NULL;
+	for (long int i = 0; i < arrlen(for_.items); i++) {
+		process_node(context, for_.items[i]);
+		arrpush(item_types, get_type(context, for_.items[i]));
+		arrpush(element_types, item_types[i].value->array_view_type.inner);
+	}
 
 	Node_Data *data = data_new(FOR_NODE);
 	if (for_.static_) {
-		Value looped_value = evaluate(context, for_.item);
+		assert(arrlen(for_.items) == 1);
+		Value looped_value = evaluate(context, for_.items[0]);
 
 		size_t saved_static_id = context->static_id;
 		for (size_t i = 0; i < looped_value.value->array_view.length; i++) {
@@ -1308,7 +1312,7 @@ static void process_for(Context *context, Node *node) {
 
 			Typed_Value typed_value = {
 				.value = (Value) { .value = looped_value.value->array_view.values[i] },
-				.type = element_type
+				.type = element_types[0]
 			};
 			shput(arrlast(context->scopes).static_bindings, for_.bindings[0], typed_value);
 
@@ -1324,18 +1328,14 @@ static void process_for(Context *context, Node *node) {
 		}
 		context->static_id = saved_static_id;
 	} else {
-		Binding binding = {
-			.type = element_type,
-			.index = 0
-		};
-		shput(arrlast(context->scopes).bindings, for_.bindings[0], binding);
+		assert(arrlen(for_.items) == arrlen(for_.bindings));
 
-		if (arrlen(for_.bindings) > 1) {
-			binding = (Binding) {
-				.type = create_integer_type(false, context->codegen.default_integer_size),
-				.index = 1
+		for (long int i = 0; i < arrlen(for_.items); i++) {
+			Binding binding = {
+				.type = element_types[i],
+				.index = i
 			};
-			shput(arrlast(context->scopes).bindings, for_.bindings[1], binding);
+			shput(arrlast(context->scopes).bindings, for_.bindings[i], binding);
 		}
 
 		process_node(context, for_.body);
@@ -1343,7 +1343,7 @@ static void process_for(Context *context, Node *node) {
 		(void) arrpop(context->scopes);
 	}
 
-	data->for_.type = item_type;
+	data->for_.types = item_types;
 	set_data(context, node, data);
 }
 

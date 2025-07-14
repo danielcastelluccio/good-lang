@@ -206,7 +206,7 @@ typedef struct {
 } Return_Data;
 
 typedef struct {
-	Value type;
+	Value *types;
 	size_t *static_ids; // stb_ds
 } For_Data;
 

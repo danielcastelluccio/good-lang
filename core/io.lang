@@ -7,7 +7,7 @@ def print_value = fn [T](t: T) {
 			_ = c::printf("%li\0", t);
 		}
 		case Byte {
-			_ = c::printf("%i\0", t);
+			_ = c::printf("%hhu\0", t);
 		}
 		case Struct |struct_| {
 			_ = c::printf(".{\0");

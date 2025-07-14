@@ -128,7 +128,7 @@ typedef struct {
 } Extern_Node;
 
 typedef struct {
-	Node *item;
+	Node **items;
 	Node *body;
 	char **bindings;
 	bool static_;
