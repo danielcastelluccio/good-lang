@@ -1294,7 +1294,8 @@ static LLVMValueRef generate_range(Node *node, State *state) {
 	if (range.end != NULL) {
 		LLVMBuildStore(state->llvm_builder, generate_node(range.end, state), end_pointer);
 	} else {
-		LLVMBuildStore(state->llvm_builder, LLVMConstInt(create_llvm_type(get_type(&state->context, range.start).value, state), 18446744073709551615ULL, false), end_pointer);
+		LLVMTypeRef element_type_llvm = create_llvm_type(get_type(&state->context, range.start).value, state);
+		LLVMBuildStore(state->llvm_builder, LLVMConstInt(element_type_llvm, (1ULL << LLVMGetIntTypeWidth(element_type_llvm)) - 2, false), end_pointer);
 	}
 
 	return LLVMBuildLoad2(state->llvm_builder, range_type_llvm, range_value, "");
