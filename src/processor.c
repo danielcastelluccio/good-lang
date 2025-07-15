@@ -16,6 +16,17 @@ void process_node(Context *context, Node *node) {
 	process_node_context(context, (Temporary_Context) {}, node);
 }
 
+static void process_node_with_scopes(Context *context, Node *node, Scope *scopes) {
+	Scope *saved_scopes = context->scopes;
+	if (scopes != NULL) context->scopes = scopes;
+	arrpush(context->scopes, (Scope) { .node = node });
+
+	process_node(context, node);
+
+	(void) arrpop(context->scopes);
+	if (scopes != NULL) context->scopes = saved_scopes;
+}
+
 typedef struct {
 	union {
 		struct {
@@ -135,23 +146,6 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 	}
 
 	switch (type_node->kind) {
-		// case POINTER_NODE: {
-		// 	buffer += sprintf(buffer, "^");
-		// 	buffer += print_type_node(type_node->pointer.inner, false, buffer);
-		// 	break;
-		// }
-		// case STRUCT_TYPE_NODE: {
-		// 	buffer += sprintf(buffer, "struct{");
-		// 	for (long int i = 0; i < arrlen(type_node->struct_type.items); i++) {
-		// 		buffer += sprintf(buffer, "%s:", type_node->struct_type.items[i].identifier);
-		// 		buffer += print_type_node(type_node->struct_type.items[i].type, false, buffer);
-		// 		if (i < arrlen(type_node->struct_type.items) - 1) {
-		// 			buffer += sprintf(buffer, ",");
-		// 		}
-		// 	}
-		// 	buffer += sprintf(buffer, "}");
-		// 	break;
-		// }
 		case IDENTIFIER_NODE: {
 			buffer += sprintf(buffer, "%s", type_node->identifier.value);
 			break;
@@ -709,9 +703,6 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		function_argument_index++;
 	}
 
-	//if (function_value.value == NULL) {
-	//	function_value = function_value_in;
-	//}
 	return function_value;
 }
 
@@ -726,7 +717,20 @@ static void process_enforce_pointer(Context *context, Node *node) {
 
 		structure_pointer_type = get_type(context, node);
 	}
+}
 
+static void process_enforce_pointer_sometimes(Context *context, Node *node) {
+	process_node(context, node);
+
+	Value real_structure_type = get_type(context, node);
+	if ((context->temporary_context.assign_value != NULL || context->temporary_context.want_pointer) && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
+		reset_node(context, node);
+
+		Temporary_Context temporary_context = { .want_pointer = true };
+		process_node_context(context, temporary_context, node);
+
+		real_structure_type = get_type(context, node);
+	}
 }
 
 static void process_array_access(Context *context, Node *node) {
@@ -1139,30 +1143,18 @@ static void process_catch(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
-typedef struct {
-	Value value;
-	Value type;
-} Process_Define_Result;
-
-static Process_Define_Result process_define(Context *context, Node *node, Scope *scopes) {
+static void process_define(Context *context, Node *node) {
 	Define_Node define = node->define;
 
 	size_t saved_static_id = context->static_id;
 	context->static_id = 0;
 
-	Scope *saved_scopes = context->scopes;
-	if (scopes != NULL) context->scopes = scopes;
 	arrpush(context->scopes, (Scope) { .node = node });
 
-	Node_Data *cached_data = get_data(context, node);
-	if (cached_data != NULL) {
-		(void) arrpop(context->scopes);
-		if (scopes != NULL) context->scopes = saved_scopes;
+	Node_Data *data = get_data(context, node);
+	if (data != NULL) {
 		context->static_id = saved_static_id;
-		return (Process_Define_Result) {
-			.value = cached_data->define.typed_value.value,
-			.type = cached_data->define.typed_value.type
-		};
+		return;
 	}
 
 	Value wanted_type = {};
@@ -1177,46 +1169,16 @@ static Process_Define_Result process_define(Context *context, Node *node, Scope 
 	Value type = get_type(context, define.expression);
 	Value value = evaluate(context, define.expression);
 
-	Scope *copied_scopes = NULL;
-	for (long int i = 0; i < arrlen(context->scopes) - 1; i++) {
-		arrpush(copied_scopes, context->scopes[i]);
-	}
+	data = data_new(DEFINE_NODE);
+	set_data(context, node, data);
 
-	(void) arrpop(context->scopes);
-	if (scopes != NULL) context->scopes = saved_scopes;
-
-	Typed_Value typed_value = {
+	data->define.typed_value = (Typed_Value) {
 		.value = value,
 		.type = type
 	};
-
-	Node_Data *data;
-	if (cached_data != NULL) {
-		data = cached_data;
-	} else {
-		data = data_new(DEFINE_NODE);
-		set_data(context, node, data);
-	}
-
-	data->define.typed_value = typed_value;
 
 	context->static_id = saved_static_id;
-	return (Process_Define_Result) {
-		.value = value,
-		.type = type
-	};
-}
-
-static Process_Define_Result process_define_context(Context *context, Temporary_Context temporary_context, Node *node, Scope *scopes) {
-	Temporary_Context saved_temporary_context = context->temporary_context;
-	context->temporary_context = temporary_context;
-	bool compile_only_parent = context->compile_only;
-
-	Process_Define_Result process_define_result = process_define(context, node, scopes);
-	context->compile_only = compile_only_parent;
-
-	context->temporary_context = saved_temporary_context;
-	return process_define_result;
+	return;
 }
 
 static void process_deoptional(Context *context, Node *node) {
@@ -1554,9 +1516,13 @@ static void process_identifier(Context *context, Node *node) {
 	}
 
 	if (define_node != NULL) {
-		Process_Define_Result result = process_define_context(context, context->temporary_context, define_node, define_scopes);
-		type = result.type;
-		value = result.value;
+		process_node_with_scopes(context, define_node, define_scopes);
+		size_t saved_static_id = context->static_id;
+		context->static_id = 0;
+		Typed_Value typed_value = get_data(context, define_node)->define.typed_value;
+		context->static_id = saved_static_id;
+		type = typed_value.type;
+		value = typed_value.value;
 	}
 
 	if (lookup_result.tag == LOOKUP_RESULT_VARIABLE) {
@@ -2188,27 +2154,22 @@ static void process_structure(Context *context, Node *node) {
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
-	process_node(context, structure_access.parent);
+	process_enforce_pointer_sometimes(context, structure_access.parent);
 
-	Value real_structure_type = get_type(context, structure_access.parent);
-	if (context->temporary_context.assign_value != NULL && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, structure_access.parent);
+	Value raw_structure_type = get_type(context, structure_access.parent);
 
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, structure_access.parent);
-
-		real_structure_type = get_type(context, structure_access.parent);
-	}
-
-	Value structure_type = real_structure_type;
+	Value structure_type = raw_structure_type;
 	if (structure_type.value->tag == POINTER_TYPE_VALUE) {
 		structure_type = structure_type.value->pointer_type.inner;
 	}
 
-	if (structure_type.value->tag != STRUCT_TYPE_VALUE && structure_type.value->tag != TUPLE_TYPE_VALUE && structure_type.value->tag != UNION_TYPE_VALUE && structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+	if (structure_type.value->tag != STRUCT_TYPE_VALUE
+			&& structure_type.value->tag != TUPLE_TYPE_VALUE
+			&& structure_type.value->tag != UNION_TYPE_VALUE
+			&& structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(structure_type, given_string);
-		handle_semantic_error(node->location, "Expected structure or tuple or union or string, but got %s", given_string);
+		handle_semantic_error(node->location, "Expected structure or tuple or union or array view, but got %s", given_string);
 	}
 
 	Value item_type = {};
@@ -2217,6 +2178,7 @@ static void process_structure_access(Context *context, Node *node) {
 			for (long int i = 0; i < arrlen(structure_type.value->struct_type.members); i++) {
 				if (strcmp(structure_type.value->struct_type.node->struct_type.members[i].name, structure_access.name) == 0) {
 					item_type = structure_type.value->struct_type.members[i];
+					break;
 				}
 			}
 			break;
@@ -2227,6 +2189,7 @@ static void process_structure_access(Context *context, Node *node) {
 				sprintf(name, "_%li", i);
 				if (strcmp(name, structure_access.name) == 0) {
 					item_type = structure_type.value->tuple_type.members[i];
+					break;
 				}
 			}
 			break;
@@ -2235,6 +2198,7 @@ static void process_structure_access(Context *context, Node *node) {
 			for (long int i = 0; i < arrlen(structure_type.value->union_type.items); i++) {
 				if (strcmp(structure_type.value->union_type.items[i].identifier, structure_access.name) == 0) {
 					item_type = structure_type.value->union_type.items[i].type;
+					break;
 				}
 			}
 			break;
@@ -2244,8 +2208,6 @@ static void process_structure_access(Context *context, Node *node) {
 				item_type = create_integer_type(false, context->codegen.default_integer_size);
 			} else if (strcmp("ptr", structure_access.name) == 0) {
 				item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
-			} else {
-				assert(false);
 			}
 			break;
 		}
@@ -2253,11 +2215,15 @@ static void process_structure_access(Context *context, Node *node) {
 			assert(false);
 	}
 
+	if (item_type.value == NULL) {
+		handle_semantic_error(node->location, "Item '%s' not found", structure_access.name);
+	}
+
 	Node_Data *data = data_new(STRUCTURE_ACCESS_NODE);
 	data->structure_access.structure_type = structure_type;
 	data->structure_access.want_pointer = context->temporary_context.want_pointer;
 	data->structure_access.item_type = item_type;
-	data->structure_access.pointer_access = real_structure_type.value->tag == POINTER_TYPE_VALUE;
+	data->structure_access.pointer_access = raw_structure_type.value->tag == POINTER_TYPE_VALUE;
 
 	if (context->temporary_context.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
@@ -2597,7 +2563,7 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			process_catch(context, node);
 			break;
 		case DEFINE_NODE:
-			process_define(context, node, NULL);
+			process_define(context, node);
 			break;
 		case DEOPTIONAL_NODE:
 			process_deoptional(context, node);
