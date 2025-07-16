@@ -500,14 +500,35 @@ static Node *parse_call_method(Lexer *lexer, Node *argument1) {
 	return call_method;
 }
 
-static Node *parse_assign(Lexer *lexer, Node *structure) {
-	Token_Data first_token = lexer_consume(lexer);
+static Node *parse_assign(Lexer *lexer, Node *target) {
+	lexer_consume(lexer);
 
-	Node *assign = ast_new(ASSIGN_NODE, first_token.location);
-	assign->assign.target = structure;
-	assign->assign.value = parse_expression(lexer);
+	Node *assign_value = parse_expression(lexer);
 
-	return assign;
+	switch (target->kind) {
+		case STRUCTURE_ACCESS_NODE: {
+			target->structure_access.assign_value = assign_value;
+			return target;
+		}
+		case IDENTIFIER_NODE: {
+			target->identifier.assign_value = assign_value;
+			return target;
+		}
+		case ARRAY_ACCESS_NODE: {
+			target->array_access.assign_value = assign_value;
+			return target;
+		}
+		case DEOPTIONAL_NODE: {
+			target->deoptional.assign_value = assign_value;
+			return target;
+		}
+		case DEREFERENCE_NODE: {
+			target->dereference.assign_value = assign_value;
+			return target;
+		}
+		default:
+			assert(false);
+	}
 }
 
 static char *parse_operator(Lexer *lexer) {

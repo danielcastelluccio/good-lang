@@ -376,14 +376,15 @@ static Value evaluate_array_view_type(State *state, Node *node) {
 }
 
 static Value evaluate_identifier(State *state, Node *node) {
+	Identifier_Node identifier = node->identifier;
 	Identifier_Data identifier_data = get_data(state->context, node)->identifier;
 
 	switch (identifier_data.kind) {
 		case IDENTIFIER_VALUE:
 			return identifier_data.value;
 		case IDENTIFIER_STATIC_VARIABLE:
-			if (identifier_data.assign_value != NULL) {
-				return hmput(state->context->static_variables, identifier_data.static_variable.node_data, evaluate_state(state, identifier_data.assign_value));
+			if (identifier.assign_value != NULL) {
+				return hmput(state->context->static_variables, identifier_data.static_variable.node_data, evaluate_state(state, identifier.assign_value));
 			} else {
 				return hmget(state->context->static_variables, identifier_data.static_variable.node_data);
 			}
@@ -1062,11 +1063,6 @@ static Value evaluate_is(State *state, Node *node) {
 	}
 }
 
-static Value evaluate_assign(State *state, Node *node) {
-	Assign_Node assign = node->assign;
-	return evaluate_state(state, assign.target);
-}
-
 static Value evaluate_cast(State *state, Node *node) {
 	Cast_Node cast = node->cast;
 	Cast_Data cast_data = get_data(state->context, node)->cast;
@@ -1119,7 +1115,6 @@ static Value evaluate_state(State *state, Node *node) {
 		case FOR_NODE:               return evaluate_for(state, node);
 		case IF_NODE:                return evaluate_if(state, node);
 		case IS_NODE:                return evaluate_is(state, node);
-		case ASSIGN_NODE:            return evaluate_assign(state, node);
 		case CAST_NODE:              return evaluate_cast(state, node);
 		case EXTERN_NODE:            return evaluate_extern(state, node);
 		default:                     assert(false);

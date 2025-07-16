@@ -27,6 +27,7 @@ typedef struct {
 typedef struct {
 	Node *parent;
 	Node *index;
+	Node *assign_value;
 } Array_Access_Node;
 
 typedef struct {
@@ -37,11 +38,6 @@ typedef struct {
 typedef struct {
 	Node *inner;
 } Array_View_Type_Node;
-
-typedef struct {
-	Node *target;
-	Node *value;
-} Assign_Node;
 
 typedef enum {
 	OP_EQUALS,
@@ -113,10 +109,12 @@ typedef struct {
 
 typedef struct {
 	Node *node;
+	Node *assign_value;
 } Deoptional_Node;
 
 typedef struct {
 	Node *node;
+	Node *assign_value;
 } Dereference_Node;
 
 typedef struct {
@@ -156,6 +154,7 @@ typedef struct {
 typedef struct {
 	Node *module;
 	char *value;
+	Node *assign_value;
 } Identifier_Node;
 
 typedef struct {
@@ -264,6 +263,7 @@ typedef struct {
 typedef struct {
 	Node *parent;
 	char *name;
+	Node *assign_value;
 } Structure_Access_Node;
 
 typedef struct {
@@ -303,7 +303,6 @@ typedef enum {
 	ARRAY_ACCESS_NODE,
 	ARRAY_TYPE_NODE,
 	ARRAY_VIEW_TYPE_NODE,
-	ASSIGN_NODE,
 	BINARY_OP_NODE,
 	BLOCK_NODE,
 	BOOLEAN_NODE,
@@ -354,7 +353,6 @@ struct Node {
 		Array_Access_Node array_access;
 		Array_Type_Node array_type;
 		Array_View_Type_Node array_view_type;
-		Assign_Node assign;
 		Binary_Op_Node binary_op;
 		Block_Node block;
 		Boolean_Node boolean;

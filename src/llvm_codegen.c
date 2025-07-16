@@ -306,6 +306,7 @@ static LLVMValueRef generate_call_method(Node *node, State *state) {
 
 static LLVMValueRef generate_identifier(Node *node, State *state) {
 	assert(node->kind == IDENTIFIER_NODE);
+	Identifier_Node identifier = node->identifier;
 
 	Node_Data *identifier_data = get_data(&state->context, node);
 	switch (identifier_data->identifier.kind) {
@@ -313,8 +314,8 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			Node *variable = get_data(&state->context, node)->identifier.variable;
 			Node_Data *variable_data = get_data(&state->context, variable);
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable_data);
-			if (identifier_data->identifier.assign_value != NULL) {
-				LLVMBuildStore(state->llvm_builder, generate_node(identifier_data->identifier.assign_value, state), variable_llvm_value);
+			if (identifier.assign_value != NULL) {
+				LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
 				return NULL;
 			} else {
 				if (identifier_data->identifier.want_pointer) {
@@ -363,8 +364,8 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			return generate_value(hmget(state->context.static_variables, identifier_data->identifier.static_variable.node_data).value, identifier_data->identifier.type.value, state);
 		}
 		case IDENTIFIER_UNDERSCORE: {
-			if (identifier_data->identifier.assign_value != NULL) {
-				generate_node(identifier_data->identifier.assign_value, state);
+			if (identifier.assign_value != NULL) {
+				generate_node(identifier.assign_value, state);
 			}
 			return NULL;
 		}
@@ -556,8 +557,8 @@ static LLVMValueRef generate_dereference(Node *node, State *state) {
 	LLVMValueRef pointer_llvm_value = generate_node(dereference.node, state);
 
 	Dereference_Data dereference_data = get_data(&state->context, node)->dereference;
-	if (dereference_data.assign_value != NULL) {
-		LLVMBuildStore(state->llvm_builder, generate_node(dereference_data.assign_value, state), pointer_llvm_value);
+	if (dereference.assign_value != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(dereference.assign_value, state), pointer_llvm_value);
 		return NULL;
 	} else {
 		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(dereference_data.type.value, state), pointer_llvm_value, "");
@@ -572,14 +573,14 @@ static LLVMValueRef generate_deoptional(Node *node, State *state) {
 	Deoptional_Data deoptional_data = get_data(&state->context, node)->deoptional;
 	LLVMTypeRef optional_llvm_type = create_llvm_type(create_optional_type(deoptional_data.type).value, state);
 
-	if (deoptional_data.assign_value != NULL) {
+	if (deoptional.assign_value != NULL) {
 		if (deoptional_data.type.value->tag == POINTER_TYPE_VALUE) {
-			LLVMBuildStore(state->llvm_builder, generate_node(deoptional_data.assign_value, state), optional_llvm_value);
+			LLVMBuildStore(state->llvm_builder, generate_node(deoptional.assign_value, state), optional_llvm_value);
 		} else {
 			LLVMValueRef present_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 0, "");
 			LLVMValueRef value_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
 			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 1, false), present_ptr);
-			LLVMBuildStore(state->llvm_builder, generate_node(deoptional_data.assign_value, state), value_ptr);
+			LLVMBuildStore(state->llvm_builder, generate_node(deoptional.assign_value, state), value_ptr);
 		}
 		return NULL;
 	} else {
@@ -741,8 +742,8 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 			assert(false);
 		}
 
-		if (data.assign_value != NULL) {
-			LLVMBuildStore(state->llvm_builder, generate_node(data.assign_value, state), element_pointer);
+		if (structure_access.assign_value != NULL) {
+			LLVMBuildStore(state->llvm_builder, generate_node(structure_access.assign_value, state), element_pointer);
 			return NULL;
 		} else {
 			if (data.want_pointer) {
@@ -808,8 +809,8 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 		}
 	}
 
-	if (array_access_data.assign_value != NULL) {
-		LLVMBuildStore(state->llvm_builder, generate_node(array_access_data.assign_value, state), element_pointer);
+	if (array_access.assign_value != NULL) {
+		LLVMBuildStore(state->llvm_builder, generate_node(array_access.assign_value, state), element_pointer);
 		return NULL;
 	} else {
 		if (array_access_data.want_pointer) {
@@ -949,13 +950,6 @@ static LLVMValueRef generate_return(Node *node, State *state) {
 		}
 	}
 	return NULL;
-}
-
-static LLVMValueRef generate_assign(Node *node, State *state) {
-	assert(node->kind == ASSIGN_NODE);
-	Assign_Node assign = node->assign;
-
-	return generate_node(assign.target, state);
 }
 
 static LLVMValueRef generate_variable(Node *node, State *state) {
@@ -1357,8 +1351,6 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_binary_op(node, state);
 		case RETURN_NODE:
 			return generate_return(node, state);
-		case ASSIGN_NODE:
-			return generate_assign(node, state);
 		case VARIABLE_NODE:
 			return generate_variable(node, state);
 		case BREAK_NODE:

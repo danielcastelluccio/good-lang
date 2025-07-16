@@ -57,7 +57,6 @@ typedef struct {
 	};
 	Value type;
 	bool want_pointer;
-	Node *assign_value;
 } Identifier_Data;
 
 typedef struct {
@@ -152,7 +151,6 @@ typedef struct {
 
 typedef struct {
 	Value structure_type;
-	Node *assign_value;
 	Value item_type;
 	bool want_pointer;
 	bool pointer_access;
@@ -160,12 +158,10 @@ typedef struct {
 
 typedef struct {
 	Value type;
-	Node *assign_value;
 } Dereference_Data;
 
 typedef struct {
 	Value type;
-	Node *assign_value;
 } Deoptional_Data;
 
 typedef struct {
@@ -186,7 +182,6 @@ typedef struct {
 	Value array_type;
 	Value item_type;
 	Custom_Operator_Function custom_operator_function;
-	Node *assign_value;
 	bool want_pointer;
 } Array_Access_Data;
 
@@ -286,7 +281,6 @@ typedef struct {
 } Cached_File;
 
 typedef struct {
-	Node *assign_value;
 	Node *assign_node;
 	Value wanted_type;
 	bool want_pointer;
