@@ -389,13 +389,6 @@ static Value evaluate_identifier(State *state, Node *node) {
 			}
 		case IDENTIFIER_ARGUMENT:
 			return function_arguments[identifier_data.argument_index];
-		case IDENTIFIER_SELF:
-			for (long int i = arrlen(state->context->scopes) - 1; i >= 0; i--) {
-				if (state->context->scopes[i].current_type.value != NULL) {
-					return state->context->scopes[i].current_type;
-				}
-			}
-			break;
 		case IDENTIFIER_UNDERSCORE:
 			return create_value_data(NULL, node);
 		case IDENTIFIER_VARIABLE: {

@@ -56,11 +56,6 @@ typedef struct {
 	} tag;
 } Lookup_Result;
 
-typedef struct {
-	Node *node;
-	Scope *scope;
-} Lookup_Define_Result;
-
 static Lookup_Result lookup(Context *context, char *identifier) {
 	if (context->internal_root != NULL) {
 		Node *internal_block = context->internal_root->module.body;
@@ -463,6 +458,22 @@ static bool has_static_arguments(Node *function_type) {
 	return false;
 }
 
+static Custom_Operator_Function find_custom_operator(Value type) {
+	if (type.value->tag == STRUCT_TYPE_VALUE) {
+		Operator_Overload *operators = type.value->struct_type.node->struct_type.operator_overloads;
+		for (long int i = 0; i < arrlen(operators); i++) {
+			if (strcmp(operators[i].name, "[]") == 0) {
+				return (Custom_Operator_Function) {
+					.function = type.value->struct_type.operators[i].function.value,
+					.function_type = (Value) { .value = type.value->struct_type.operators[i].function.value->function.type },
+				};
+			}
+		}
+	}
+
+	return (Custom_Operator_Function) {};
+}
+
 static void process_function(Context *context, Node *node, bool given_static_arguments);
 
 static Value process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Node **arguments) {
@@ -752,24 +763,14 @@ static void process_array_access(Context *context, Node *node) {
 		array_type = get_type(context, array_access.parent);
 	}
 
-	Custom_Operator_Function custom_operator_function = {};
-	if (array_type.value->pointer_type.inner.value->tag == STRUCT_TYPE_VALUE) {
-		Operator_Overload *operators = array_type.value->pointer_type.inner.value->struct_type.node->struct_type.operator_overloads;
-		for (long int i = 0; i < arrlen(operators); i++) {
-			if (strcmp(operators[i].name, "[]") == 0) {
-				custom_operator_function = (Custom_Operator_Function) {
-					.function = array_type.value->pointer_type.inner.value->struct_type.operators[i].function.value,
-					.function_type = (Value) { .value = array_type.value->pointer_type.inner.value->struct_type.operators[i].function.value->function.type },
-				};
-				break;
-			}
-		}
-	}
+	Custom_Operator_Function custom_operator_function = find_custom_operator(array_type.value->pointer_type.inner);
 
-	if (custom_operator_function.function == NULL && array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE && array_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+	if (custom_operator_function.function == NULL
+			&& array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE
+			&& array_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(array_type_original, given_string);
-		handle_semantic_error(node->location, "Expected array or array view, but got %s", given_string);
+		handle_semantic_error(node->location, "Cannot perform array access operation on %s", given_string);
 	}
 
 	Value item_type = {};
@@ -1146,14 +1147,10 @@ static void process_catch(Context *context, Node *node) {
 static void process_define(Context *context, Node *node) {
 	Define_Node define = node->define;
 
-	size_t saved_static_id = context->static_id;
-	context->static_id = 0;
-
 	arrpush(context->scopes, (Scope) { .node = node });
 
 	Node_Data *data = get_data(context, node);
 	if (data != NULL) {
-		context->static_id = saved_static_id;
 		return;
 	}
 
@@ -1177,7 +1174,6 @@ static void process_define(Context *context, Node *node) {
 		.type = type
 	};
 
-	context->static_id = saved_static_id;
 	return;
 }
 
@@ -1449,6 +1445,8 @@ static void process_identifier(Context *context, Node *node) {
 	Node_Data *data = data_new(IDENTIFIER_NODE);
 	data->identifier.want_pointer = context->temporary_context.want_pointer;
 
+	Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
+
 	Value value = {};
 	Value type = {};
 	Node *define_node = NULL;
@@ -1467,10 +1465,7 @@ static void process_identifier(Context *context, Node *node) {
 				break;
 			}
 		}
-	}
-
-	Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
-	if (identifier.module == NULL) {
+	} else {
 		Value wanted_type = context->temporary_context.wanted_type;
 		if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
 			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
@@ -1483,10 +1478,7 @@ static void process_identifier(Context *context, Node *node) {
 		}
 
 		if (type.value == NULL) {
-			if (strcmp(identifier.value, "self") == 0) {
-				data->identifier.kind = IDENTIFIER_SELF;
-				type = create_value(TYPE_TYPE_VALUE);
-			} else if (strcmp(identifier.value, "_") == 0) {
+			if (strcmp(identifier.value, "_") == 0) {
 				data->identifier.kind = IDENTIFIER_UNDERSCORE;
 				type = create_value(NONE_VALUE);
 
@@ -1516,9 +1508,9 @@ static void process_identifier(Context *context, Node *node) {
 	}
 
 	if (define_node != NULL) {
-		process_node_with_scopes(context, define_node, define_scopes);
 		size_t saved_static_id = context->static_id;
 		context->static_id = 0;
+		process_node_with_scopes(context, define_node, define_scopes);
 		Typed_Value typed_value = get_data(context, define_node)->define.typed_value;
 		context->static_id = saved_static_id;
 		type = typed_value.type;
@@ -1865,6 +1857,16 @@ static void process_internal(Context *context, Node *node) {
 			set_type(context, node, context->temporary_context.wanted_type);
 			break;
 		}
+		case INTERNAL_SELF: {
+			for (long int i = arrlen(context->scopes) - 1; i >= 0; i--) {
+				if (context->scopes[i].current_type.value != NULL) {
+					value = context->scopes[i].current_type;
+				}
+			}
+
+			set_type(context, node, create_value(TYPE_TYPE_VALUE));
+			break;
+		}
 	}
 
 	Node_Data *data = data_new(INTERNAL_NODE);
@@ -2169,7 +2171,7 @@ static void process_structure_access(Context *context, Node *node) {
 			&& structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
 		char given_string[64] = {};
 		print_type_outer(structure_type, given_string);
-		handle_semantic_error(node->location, "Expected structure or tuple or union or array view, but got %s", given_string);
+		handle_semantic_error(node->location, "Cannot perform structure access operation on %s", given_string);
 	}
 
 	Value item_type = {};

@@ -143,131 +143,140 @@ static Node *parse_structure(Lexer *lexer) {
 static Node *parse_identifier(Lexer *lexer, Node *module) {
 	Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
 
-	switch (token.string[0]) {
-		case 'n':
-			if (streq(token.string, "null")) {
-				return ast_new(NULL_NODE, token.location);
-			}
-			break;
-		case 't':
-			if (streq(token.string, "true")) {
-				Node *boolean = ast_new(BOOLEAN_NODE, token.location);
-				boolean->boolean.value = true;
-				return boolean;
-			} else if (streq(token.string, "type")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_TYPE;
-				return internal;
-			} else if (streq(token.string, "type_of")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_TYPE_OF;
-
-				lexer_consume_check(lexer, PARENTHESIS_OPEN);
-				arrpush(internal->internal.inputs, parse_expression(lexer));
-				lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-
-				return internal;
-			}
-			break;
-		case 'f':
-			if (streq(token.string, "false")) {
-				Node *boolean = ast_new(BOOLEAN_NODE, token.location);
-				boolean->boolean.value = false;
-				return boolean;
-			} else if (streq(token.string, "flt64")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_FLT64;
-				return internal;
-			}
-			break;
-		case 'u':
-			if (streq(token.string, "uint")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_UINT;
-				return internal;
-			} else if (streq(token.string, "uint8")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_UINT8;
-				return internal;
-			}
-			break;
-		case 'b':
-			if (streq(token.string, "bool")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_BOOL;
-				return internal;
-			} else if (streq(token.string, "byte")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_BYTE;
-				return internal;
-			}
-			break;
-		case 'C':
-			if (streq(token.string, "C_CHAR_SIZE")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_C_CHAR_SIZE;
-				return internal;
-			} else if (streq(token.string, "C_SHORT_SIZE")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_C_SHORT_SIZE;
-				return internal;
-			} else if (streq(token.string, "C_INT_SIZE")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_C_INT_SIZE;
-				return internal;
-			} else if (streq(token.string, "C_LONG_SIZE")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_C_LONG_SIZE;
-				return internal;
-			}
-			break;
-		case 'i':
-			if (streq(token.string, "int")) {
-				if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
+	if (module == NULL) {
+		switch (token.string[0]) {
+			case 'b':
+				if (streq(token.string, "bool")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
-					internal->internal.kind = INTERNAL_INT;
+					internal->internal.kind = INTERNAL_BOOL;
+					return internal;
+				} else if (streq(token.string, "byte")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_BYTE;
+					return internal;
+				}
+				break;
+			case 'C':
+				if (streq(token.string, "C_CHAR_SIZE")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_C_CHAR_SIZE;
+					return internal;
+				} else if (streq(token.string, "C_SHORT_SIZE")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_C_SHORT_SIZE;
+					return internal;
+				} else if (streq(token.string, "C_INT_SIZE")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_C_INT_SIZE;
+					return internal;
+				} else if (streq(token.string, "C_LONG_SIZE")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_C_LONG_SIZE;
+					return internal;
+				}
+				break;
+			case 'e':
+				if (streq(token.string, "embed")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_EMBED;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
-					arrpush(internal->internal.inputs, parse_expression(lexer));
-					lexer_consume_check(lexer, COMMA);
+					while (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
+						arrpush(internal->internal.inputs, parse_expression(lexer));
+						if (lexer_peek(lexer).kind == COMMA) {
+							lexer_consume(lexer);
+						}
+					}
+					lexer_consume(lexer);
+
+					return internal;
+				}
+				break;
+			case 'f':
+				if (streq(token.string, "false")) {
+					Node *boolean = ast_new(BOOLEAN_NODE, token.location);
+					boolean->boolean.value = false;
+					return boolean;
+				} else if (streq(token.string, "flt64")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_FLT64;
+					return internal;
+				}
+				break;
+			case 'i':
+				if (streq(token.string, "int")) {
+					if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
+						Node *internal = ast_new(INTERNAL_NODE, token.location);
+						internal->internal.kind = INTERNAL_INT;
+
+						lexer_consume_check(lexer, PARENTHESIS_OPEN);
+						arrpush(internal->internal.inputs, parse_expression(lexer));
+						lexer_consume_check(lexer, COMMA);
+						arrpush(internal->internal.inputs, parse_expression(lexer));
+						lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+						return internal;
+					}
+				}
+				break;
+			case 'n':
+				if (streq(token.string, "null")) {
+					return ast_new(NULL_NODE, token.location);
+				}
+				break;
+			case 'p':
+				if (streq(token.string, "print")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_PRINT;
+
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
 					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
 					return internal;
 				}
-			}
-			break;
-		case 'e':
-			if (streq(token.string, "embed")) {
-				Node *internal = ast_new(INTERNAL_NODE, token.location);
-				internal->internal.kind = INTERNAL_EMBED;
-
-				lexer_consume_check(lexer, PARENTHESIS_OPEN);
-				while (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
-					arrpush(internal->internal.inputs, parse_expression(lexer));
-					if (lexer_peek(lexer).kind == COMMA) {
-						lexer_consume(lexer);
-					}
+				break;
+			case 's':
+				if (streq(token.string, "self")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_SELF;
+					return internal;
 				}
-				lexer_consume(lexer);
+				break;
+			case 't':
+				if (streq(token.string, "true")) {
+					Node *boolean = ast_new(BOOLEAN_NODE, token.location);
+					boolean->boolean.value = true;
+					return boolean;
+				} else if (streq(token.string, "type")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_TYPE;
+					return internal;
+				} else if (streq(token.string, "type_of")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_TYPE_OF;
 
-				return internal;
-			}
-			break;
-			// case 'p':
-			//     if (streq(token.string, "print")) {
-			//         Node *internal = ast_new(INTERNAL_NODE, token.location);
-			//         internal->internal.kind = INTERNAL_PRINT;
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					arrpush(internal->internal.inputs, parse_expression(lexer));
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
-			//         lexer_consume_check(lexer, OPEN_PARENTHESIS);
-			//         arrpush(internal->internal.inputs, parse_expression(lexer));
-			//         lexer_consume_check(lexer, CLOSED_PARENTHESIS);
-
-			//         return internal;
-			//     }
-			//     break;
-		default:
-			break;
+					return internal;
+				}
+				break;
+			case 'u':
+				if (streq(token.string, "uint")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_UINT;
+					return internal;
+				} else if (streq(token.string, "uint8")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_UINT8;
+					return internal;
+				}
+				break;
+			default:
+				break;
+		}
 	}
 
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
