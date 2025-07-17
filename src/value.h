@@ -14,6 +14,7 @@ typedef enum {
 	EXTERN_VALUE,
 	FLOAT_TYPE_VALUE,
 	FUNCTION_VALUE,
+	FUNCTION_STUB_VALUE,
 	FUNCTION_TYPE_VALUE,
 	INTEGER_VALUE,
 	INTEGER_TYPE_VALUE,
@@ -81,10 +82,14 @@ typedef struct {
 typedef struct {
 	Value_Data *type;
 	Node *body;
-	Scope *scopes;
 	size_t static_id;
 	Node *node;
 } Function_Value;
+
+typedef struct {
+	Node *node;
+	Scope *scopes;
+} Function_Stub_Value;
 
 typedef struct {
 	char *identifier;
@@ -97,7 +102,6 @@ typedef struct {
 	Function_Argument_Value *arguments; // stb_ds
 	Value return_type;
 	bool variadic;
-	bool incomplete;
 	Node *node;
 } Function_Type_Value;
 
@@ -115,7 +119,6 @@ typedef struct {
 	Node *node;
 	Value *arguments; // stb_ds
 	Operator_Value_Definition *operators; // stb_ds
-	bool incomplete;
 } Struct_Type_Value;
 
 typedef struct {
@@ -212,6 +215,7 @@ struct Value_Data {
 		Extern_Value extern_;
 		Float_Type_Value float_type;
 		Function_Value function;
+		Function_Stub_Value function_stub;
 		Function_Type_Value function_type;
 		Integer_Value integer;
 		Integer_Type_Value integer_type;

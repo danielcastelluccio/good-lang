@@ -1386,10 +1386,6 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 	size_t saved_static_argument_id = state->context.static_id;
 	state->context.static_id = function.static_id;
 
-	if (function.type->function_type.incomplete) {
-		return NULL;
-	}
-
 	Function_Data function_data = get_data(&state->context, function.node)->function;
 	if (function_data.compile_only) {
 		return NULL;

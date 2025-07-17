@@ -180,6 +180,20 @@ static Value evaluate_function(State *state, Node *node) {
 	Function_Node function = node->function;
 
 	Node_Data *function_type_data = get_data(state->context, function.function_type);
+	if (function_type_data == NULL) {
+		Value_Data *value = value_new(FUNCTION_STUB_VALUE);
+		value->function_stub.node = node;
+
+		Scope *scopes = NULL;
+		for (long int i = 0; i < arrlen(state->context->scopes); i++) {
+			arrpush(scopes, state->context->scopes[i]);
+		}
+
+		value->function_stub.scopes = scopes;
+
+		return create_value_data(value, node);
+	}
+
 	Value function_type_value = function_type_data->function_type.value;
 
 	Value_Data *function_value = value_new(FUNCTION_VALUE);
@@ -190,13 +204,6 @@ static Value evaluate_function(State *state, Node *node) {
 
 	function_value->function.static_id = state->context->static_id;
 	function_value->function.node = node;
-
-	Scope *scopes = NULL;
-	for (long int i = 0; i < arrlen(state->context->scopes); i++) {
-		arrpush(scopes, state->context->scopes[i]);
-	}
-
-	function_value->function.scopes = scopes;
 
 	return create_value_data(function_value, node);
 }
