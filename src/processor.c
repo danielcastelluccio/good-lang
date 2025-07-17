@@ -1,7 +1,9 @@
+#include <limits.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "ast.h"
 #include "evaluator.h"
@@ -25,6 +27,17 @@ static void process_node_with_scopes(Context *context, Node *node, Scope *scopes
 
 	(void) arrpop(context->scopes);
 	if (scopes != NULL) context->scopes = saved_scopes;
+}
+
+static Node *find_define(Block_Node block, char *identifier) {
+	for (long int i = 0; i < arrlen(block.statements); i++) {
+		Node *statement = block.statements[i];
+		if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
+			return statement;
+		}
+	}
+
+	return NULL;
 }
 
 typedef struct {
@@ -59,16 +72,15 @@ typedef struct {
 static Lookup_Result lookup(Context *context, char *identifier) {
 	if (context->internal_root != NULL) {
 		Node *internal_block = context->internal_root->module.body;
-		for (long int i = 0; i < arrlen(internal_block->block.statements); i++) {
-			Node *statement = internal_block->block.statements[arrlen(internal_block->block.statements) - i - 1];
-			if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
-				Scope *scope = malloc(sizeof(Scope));
-				*scope = (Scope) {
-					.node = internal_block
-				};
 
-				return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = { .node = statement, .scope = scope } };
-			}
+		Node *define = find_define(internal_block->block, identifier);
+		if (define != NULL) {
+			Scope *scope = malloc(sizeof(Scope));
+			*scope = (Scope) {
+				.node = internal_block
+			};
+
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = { .node = define, .scope = scope } };
 		}
 	}
 
@@ -113,14 +125,13 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 
 		Node *node = scope->node;
 		switch (node->kind) {
-			case BLOCK_NODE:
-				for (long int i = 0; i < arrlen(node->block.statements); i++) {
-					Node *statement = node->block.statements[i];
-					if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
-						return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE, .define = { .node = statement, .scope = scope } };
-					}
+			case BLOCK_NODE: {
+				Node *define = find_define(node->block, identifier);
+				if (define != NULL) {
+					return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE, .define = { .node = define, .scope = scope } };
 				}
 				break;
+			}
 			default:
 				break;
 		}
@@ -666,7 +677,6 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			} else if (function_value.value->tag == INTERNAL_VALUE) {
 				if (streq(function_value.value->internal.identifier, "size_of")) {
 					*function_type = create_value(FUNCTION_TYPE_VALUE);
-					function_type->value->function_type.incomplete = false;
 					function_type->value->function_type.variadic = false;
 					function_type->value->function_type.arguments = NULL;
 
@@ -762,6 +772,25 @@ static void process_enforce_pointer_sometimes(Context *context, Node *node, bool
 
 		real_structure_type = get_type(context, node);
 	}
+}
+
+Value get_cached_file(Context *context, char *path) {
+	for (long int i = 0; i < arrlen(context->cached_files); i++) {
+		if (strcmp(context->cached_files[i].path, path) == 0) {
+			return context->cached_files[i].value;
+		}
+	}
+
+	return (Value) {};
+}
+
+void add_cached_file(Context *context, char *path, Value value) {
+	Cached_File file = {
+		.path = path,
+		.value = value
+	};
+
+	arrpush(context->cached_files, file);
 }
 
 static void process_array_access(Context *context, Node *node) {
@@ -1843,6 +1872,271 @@ static void process_internal(Context *context, Node *node) {
 
 			set_type(context, node, create_value(TYPE_TYPE_VALUE));
 			break;
+		}
+		case INTERNAL_SIZE_OF: {
+			process_node(context, internal.inputs[0]);
+
+			Value type = evaluate(context, internal.inputs[0]);
+
+			value.value = value_new(INTEGER_VALUE);
+			value.value->integer.value = context->codegen.size_fn(type.value, context->codegen.data);
+
+			set_type(context, node, create_integer_type(false, context->codegen.default_integer_size));
+			break;
+		}
+		case INTERNAL_IMPORT: {
+			process_node(context, internal.inputs[0]);
+
+			Value string = evaluate(context, internal.inputs[0]);
+
+			char *source = malloc(string.value->array_view.length + 1);
+			source[string.value->array_view.length] = '\0';
+			for (size_t i = 0; i < string.value->array_view.length; i++) {
+				source[i] = string.value->array_view.values[i]->byte.value;
+			}
+
+			if (strcmp(source, "core") == 0) {
+				char *cwd = getcwd(NULL, PATH_MAX);
+				source = malloc(strlen(cwd) + 16);
+				strcpy(source, cwd);
+				strcat(source, "/core/core.lang");
+			} else {
+				size_t slash_index = 0;
+				for (size_t i = 0; i < strlen(node->location.path); i++) {
+					if (node->location.path[i] == '/') {
+						slash_index = i;
+					}
+				}
+
+				char *old_source = source;
+				source = malloc(slash_index + strlen(source) + 2);
+				strncpy(source, node->location.path, slash_index + 1);
+				source[slash_index + 1] = '\0';
+				strcat(source, old_source);
+			}
+
+			value = get_cached_file(context, source);
+			if (value.value == NULL) {
+				Node *file_node = parse_file(source);
+
+				Scope *saved_scopes = context->scopes;
+				context->scopes = NULL;
+				process_node(context, file_node);
+				value = evaluate(context, file_node);
+				context->scopes = saved_scopes;
+
+				add_cached_file(context, source, value);
+			}
+
+			set_type(context, node, create_value(MODULE_TYPE_VALUE));
+			break;
+		}
+		case INTERNAL_TYPE_INFO_OF: {
+			process_node(context, internal.inputs[0]);
+
+			Value type = evaluate(context, internal.inputs[0]);
+
+			value = create_value(TAGGED_UNION_VALUE);
+
+			Value_Data *enum_value = value_new(ENUM_VALUE);
+			Value_Data *data = NULL;
+			switch (type.value->tag) {
+				case INTEGER_TYPE_VALUE: {
+					enum_value->enum_.value = 0;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *size_value = create_integer(type.value->integer_type.size).value;
+					arrpush(data->struct_.values, size_value);
+
+					Value_Data *signed_value = create_boolean(type.value->integer_type.signed_).value;
+					arrpush(data->struct_.values, signed_value);
+					break;
+				}
+				case STRUCT_TYPE_VALUE: {
+					enum_value->enum_.value = 1;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->struct_type.members);
+					for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
+						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
+
+						char *name_string;
+						if (type.value->struct_type.node != NULL) {
+							name_string = type.value->struct_type.node->struct_type.members[i].name;
+						} else {
+							char *buffer = malloc(8);
+							memset(buffer, 0, 8);
+							buffer[0] = '_';
+							sprintf(buffer + 1, "%i", (int) i);
+							name_string = buffer;
+						}
+
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(struct_item_value->struct_.values, name_value);
+
+						Value_Data *type_value = type.value->struct_type.members[i].value;
+						arrpush(struct_item_value->struct_.values, type_value);
+
+						arrpush(items_value->array_view.values, struct_item_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case UNION_TYPE_VALUE: {
+					enum_value->enum_.value = 2;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->union_type.items);
+					for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
+						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
+
+						char *name_string = type.value->union_type.items[i].identifier;
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(struct_item_value->struct_.values, name_value);
+
+						Value_Data *type_value = type.value->union_type.items[i].type.value;
+						arrpush(struct_item_value->struct_.values, type_value);
+
+						arrpush(items_value->array_view.values, struct_item_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case TAGGED_UNION_TYPE_VALUE: {
+					enum_value->enum_.value = 3;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->tagged_union_type.items);
+					for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
+						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
+
+						char *name_string = type.value->tagged_union_type.items[i].identifier;
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(struct_item_value->struct_.values, name_value);
+
+						Value_Data *type_value = type.value->tagged_union_type.items[i].type.value;
+						arrpush(struct_item_value->struct_.values, type_value);
+
+						arrpush(items_value->array_view.values, struct_item_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case ENUM_TYPE_VALUE: {
+					enum_value->enum_.value = 4;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->enum_type.items);
+					for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
+						char *name_string = type.value->enum_type.items[i];
+						size_t name_string_length = strlen(name_string);
+
+						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
+						name_value->array_view.length = name_string_length;
+						for (size_t i = 0; i < name_string_length; i++) {
+							Value_Data *byte_value = value_new(BYTE_VALUE);
+							byte_value->byte.value = name_string[i];
+							arrpush(name_value->array_view.values, byte_value);
+						}
+						arrpush(items_value->array_view.values, name_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case OPTIONAL_TYPE_VALUE: {
+					enum_value->enum_.value = 5;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *type_value = type.value->optional_type.inner.value;
+					arrpush(data->struct_.values, type_value);
+					break;
+				}
+				case ARRAY_TYPE_VALUE: {
+					enum_value->enum_.value = 6;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *size_value = type.value->array_type.size.value;
+					arrpush(data->struct_.values, size_value);
+					Value_Data *type_value = type.value->array_type.inner.value;
+					arrpush(data->struct_.values, type_value);
+					break;
+				}
+				case ARRAY_VIEW_TYPE_VALUE: {
+					enum_value->enum_.value = 7;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *type_value = type.value->array_type.inner.value;
+					arrpush(data->struct_.values, type_value);
+					break;
+				}
+				case TUPLE_TYPE_VALUE: {
+					enum_value->enum_.value = 8;
+
+					data = value_new(STRUCT_VALUE);
+
+					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
+					items_value->array_view.length = arrlen(type.value->tuple_type.members);
+					for (long int i = 0; i < arrlen(type.value->tuple_type.members); i++) {
+						Value_Data *type_value = type.value->tuple_type.members[i].value;
+						arrpush(items_value->array_view.values, type_value);
+					}
+					arrpush(data->struct_.values, items_value);
+					break;
+				}
+				case BYTE_TYPE_VALUE: {
+					enum_value->enum_.value = 9;
+
+					data = value_new(STRUCT_VALUE);
+					break;
+				}
+				default:
+					assert(false);
+			}
+
+			value.value->tagged_union.tag = enum_value;
+			value.value->tagged_union.data = data;
+
+			size_t saved_static_id = context->static_id;
+			context->static_id = 0;
+			Value type_info_type = get_data(context, find_define(context->internal_root->module.body->block, "Type_Info"))->define.typed_value.value;
+			context->static_id = saved_static_id;
+			set_type(context, node, type_info_type);
 		}
 	}
 

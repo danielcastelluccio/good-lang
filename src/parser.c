@@ -217,6 +217,15 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 						return internal;
 					}
+				} else if (streq(token.string, "import")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_IMPORT;
+
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					arrpush(internal->internal.inputs, parse_expression(lexer));
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+					return internal;
 				}
 				break;
 			case 'n':
@@ -241,6 +250,15 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_SELF;
 					return internal;
+				} else if (streq(token.string, "size_of")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_SIZE_OF;
+
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					arrpush(internal->internal.inputs, parse_expression(lexer));
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+					return internal;
 				}
 				break;
 			case 't':
@@ -255,6 +273,15 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				} else if (streq(token.string, "type_of")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_TYPE_OF;
+
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					arrpush(internal->internal.inputs, parse_expression(lexer));
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+					return internal;
+				} else if (streq(token.string, "type_info_of")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_TYPE_INFO_OF;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));

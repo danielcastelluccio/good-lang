@@ -165,25 +165,6 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 	return value_equal_internal(type1, type2, true);
 }
 
-Value get_cached_file(Context *context, char *path) {
-	for (long int i = 0; i < arrlen(context->cached_files); i++) {
-		if (strcmp(context->cached_files[i].path, path) == 0) {
-			return context->cached_files[i].value;
-		}
-	}
-
-	return (Value) {};
-}
-
-void add_cached_file(Context *context, char *path, Value value) {
-	Cached_File file = {
-		.path = path,
-		.value = value
-	};
-
-	arrpush(context->cached_files, file);
-}
-
 #define handle_evaluate_error(/* Source_Location */ location, /* char * */ fmt, ...) { \
 	printf("%s:%zu:%zu: " fmt "\n", location.path, location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
 	exit(1); \
@@ -505,280 +486,30 @@ static Value evaluate_call(State *state, Node *node) {
 	Value *saved_function_arguments = function_arguments;
 	function_arguments = arguments;
 
-	if (function.value->tag == INTERNAL_VALUE) {
-		char *internal_name = function.value->internal.identifier;
+	assert(function.value->tag == FUNCTION_VALUE);
 
-		if (streq(internal_name, "size_of")) {
-			Value_Data *value = value_new(INTEGER_VALUE);
-			value->integer.value = state->context->codegen.size_fn(arguments[0].value, state->context->codegen.data);
-			result = value;
-		} else if (streq(internal_name, "import")) {
-			Value string = arguments[0];
-			char *source = malloc(string.value->array_view.length + 1);
-			source[string.value->array_view.length] = '\0';
-			for (size_t i = 0; i < string.value->array_view.length; i++) {
-				source[i] = string.value->array_view.values[i]->byte.value;
-			}
+	Function_Value function_value = function.value->function;
 
-			if (strcmp(source, "core") == 0) {
-				char *cwd = getcwd(NULL, PATH_MAX);
-				source = malloc(strlen(cwd) + 16);
-				strcpy(source, cwd);
-				strcat(source, "/core/core.lang");
-			} else {
-				size_t slash_index = 0;
-				for (size_t i = 0; i < strlen(node->location.path); i++) {
-					if (node->location.path[i] == '/') {
-						slash_index = i;
-					}
-				}
+	Variable_Datas saved_variables = state->variables;
+	Switch_Datas saved_switchs = state->switchs;
+	For_Datas saved_fors = state->fors;
 
-				char *old_source = source;
-				source = malloc(slash_index + strlen(source) + 2);
-				strncpy(source, node->location.path, slash_index + 1);
-				source[slash_index + 1] = '\0';
-				strcat(source, old_source);
-			}
+	state->variables = NULL;
+	state->switchs = NULL;
+	state->fors = NULL;
 
-			result = get_cached_file(state->context, source).value;
-			if (result == NULL) {
-				Node *file_node = parse_file(source);
-
-				Scope *saved_scopes = state->context->scopes;
-				state->context->scopes = NULL;
-				process_node(state->context, file_node);
-				Value value = evaluate_state(state, file_node);
-				state->context->scopes = saved_scopes;
-
-				add_cached_file(state->context, source, value);
-
-				result = value.value;
-			}
-		} else if (streq(internal_name, "type_info_of")) {
-			result = value_new(TAGGED_UNION_VALUE);
-
-			Value type = arguments[0];
-
-			Value_Data *enum_value = value_new(ENUM_VALUE);
-			Value_Data *data = NULL;
-			switch (type.value->tag) {
-				case INTEGER_TYPE_VALUE: {
-					enum_value->enum_.value = 0;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *size_value = create_integer(type.value->integer_type.size).value;
-					arrpush(data->struct_.values, size_value);
-
-					Value_Data *signed_value = create_boolean(type.value->integer_type.signed_).value;
-					arrpush(data->struct_.values, signed_value);
-					break;
-				}
-				case STRUCT_TYPE_VALUE: {
-					enum_value->enum_.value = 1;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->struct_type.members);
-					for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
-						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
-
-						char *name_string;
-						if (type.value->struct_type.node != NULL) {
-							name_string = type.value->struct_type.node->struct_type.members[i].name;
-						} else {
-							char *buffer = malloc(8);
-							memset(buffer, 0, 8);
-							buffer[0] = '_';
-							sprintf(buffer + 1, "%i", (int) i);
-							name_string = buffer;
-						}
-
-						size_t name_string_length = strlen(name_string);
-
-						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
-						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
-							arrpush(name_value->array_view.values, byte_value);
-						}
-						arrpush(struct_item_value->struct_.values, name_value);
-
-						Value_Data *type_value = type.value->struct_type.members[i].value;
-						arrpush(struct_item_value->struct_.values, type_value);
-
-						arrpush(items_value->array_view.values, struct_item_value);
-					}
-					arrpush(data->struct_.values, items_value);
-					break;
-				}
-				case UNION_TYPE_VALUE: {
-					enum_value->enum_.value = 2;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->union_type.items);
-					for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
-						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
-
-						char *name_string = type.value->union_type.items[i].identifier;
-						size_t name_string_length = strlen(name_string);
-
-						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
-						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
-							arrpush(name_value->array_view.values, byte_value);
-						}
-						arrpush(struct_item_value->struct_.values, name_value);
-
-						Value_Data *type_value = type.value->union_type.items[i].type.value;
-						arrpush(struct_item_value->struct_.values, type_value);
-
-						arrpush(items_value->array_view.values, struct_item_value);
-					}
-					arrpush(data->struct_.values, items_value);
-					break;
-				}
-				case TAGGED_UNION_TYPE_VALUE: {
-					enum_value->enum_.value = 3;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->tagged_union_type.items);
-					for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
-						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
-
-						char *name_string = type.value->tagged_union_type.items[i].identifier;
-						size_t name_string_length = strlen(name_string);
-
-						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
-						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
-							arrpush(name_value->array_view.values, byte_value);
-						}
-						arrpush(struct_item_value->struct_.values, name_value);
-
-						Value_Data *type_value = type.value->tagged_union_type.items[i].type.value;
-						arrpush(struct_item_value->struct_.values, type_value);
-
-						arrpush(items_value->array_view.values, struct_item_value);
-					}
-					arrpush(data->struct_.values, items_value);
-					break;
-				}
-				case ENUM_TYPE_VALUE: {
-					enum_value->enum_.value = 4;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->enum_type.items);
-					for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
-						char *name_string = type.value->enum_type.items[i];
-						size_t name_string_length = strlen(name_string);
-
-						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
-						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
-							arrpush(name_value->array_view.values, byte_value);
-						}
-						arrpush(items_value->array_view.values, name_value);
-					}
-					arrpush(data->struct_.values, items_value);
-					break;
-				}
-				case OPTIONAL_TYPE_VALUE: {
-					enum_value->enum_.value = 5;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *type_value = type.value->optional_type.inner.value;
-					arrpush(data->struct_.values, type_value);
-					break;
-				}
-				case ARRAY_TYPE_VALUE: {
-					enum_value->enum_.value = 6;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *size_value = type.value->array_type.size.value;
-					arrpush(data->struct_.values, size_value);
-					Value_Data *type_value = type.value->array_type.inner.value;
-					arrpush(data->struct_.values, type_value);
-					break;
-				}
-				case ARRAY_VIEW_TYPE_VALUE: {
-					enum_value->enum_.value = 7;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *type_value = type.value->array_type.inner.value;
-					arrpush(data->struct_.values, type_value);
-					break;
-				}
-				case TUPLE_TYPE_VALUE: {
-					enum_value->enum_.value = 8;
-
-					data = value_new(STRUCT_VALUE);
-
-					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->tuple_type.members);
-					for (long int i = 0; i < arrlen(type.value->tuple_type.members); i++) {
-						Value_Data *type_value = type.value->tuple_type.members[i].value;
-						arrpush(items_value->array_view.values, type_value);
-					}
-					arrpush(data->struct_.values, items_value);
-					break;
-				}
-				case BYTE_TYPE_VALUE: {
-					enum_value->enum_.value = 9;
-
-					data = value_new(STRUCT_VALUE);
-					break;
-				}
-				default:
-					assert(false);
-			}
-
-			result->tagged_union.tag = enum_value;
-			result->tagged_union.data = data;
-		}
+	jmp_buf prev_jmp;
+	memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+	if (!setjmp(jmp)) {
+		result = evaluate_state(state, function_value.body).value;
 	} else {
-		assert(function.value->tag == FUNCTION_VALUE);
-
-		Function_Value function_value = function.value->function;
-
-		Variable_Datas saved_variables = state->variables;
-		Switch_Datas saved_switchs = state->switchs;
-		For_Datas saved_fors = state->fors;
-
-		state->variables = NULL;
-		state->switchs = NULL;
-		state->fors = NULL;
-
-		jmp_buf prev_jmp;
-		memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-		if (!setjmp(jmp)) {
-			result = evaluate_state(state, function_value.body).value;
-		} else {
-			result = jmp_result.value;
-		}
-		memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
-
-		state->variables = saved_variables;
-		state->switchs = saved_switchs;
-		state->fors = saved_fors;
+		result = jmp_result.value;
 	}
+	memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
+
+	state->variables = saved_variables;
+	state->switchs = saved_switchs;
+	state->fors = saved_fors;
 
 	function_arguments = saved_function_arguments;
 	state->context->static_id = saved_static_argument_id;

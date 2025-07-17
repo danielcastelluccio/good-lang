@@ -1299,9 +1299,16 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 	assert(node->kind == INTERNAL_NODE);
 	Internal_Node internal = node->internal;
 	Internal_Data internal_data = get_data(&state->context, node)->internal;
+	Value type = get_type(&state->context, node);
 
-	assert(internal.kind == INTERNAL_EMBED);
-	return generate_node(internal_data.node, state);
+	switch (internal.kind) {
+		case INTERNAL_EMBED:
+			return generate_node(internal_data.node, state);
+		case INTERNAL_SIZE_OF:
+			return generate_value(internal_data.value.value, type.value, state);
+		default:
+			assert(false);
+	}
 }
 
 static LLVMValueRef generate_node(Node *node, State *state) {

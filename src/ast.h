@@ -182,7 +182,10 @@ typedef struct {
 		INTERNAL_PRINT,
 		INTERNAL_EMBED,
 		INTERNAL_EXPRESSION,
-		INTERNAL_SELF
+		INTERNAL_SELF,
+		INTERNAL_SIZE_OF,
+		INTERNAL_IMPORT,
+		INTERNAL_TYPE_INFO_OF
 	} kind;
 	Node **inputs; // stb_ds
 } Internal_Node;
