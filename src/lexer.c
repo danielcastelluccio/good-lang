@@ -49,14 +49,23 @@ static char *extract_string(char *source, size_t start, size_t end) {
 	return string;
 }
 
+static void extract_string_to_buffer(char *source, size_t start, size_t end, char *buffer, int buffer_len) {
+	(void) buffer_len;
+	size_t length = end - start;
+	buffer[length] = '\0';
+	memcpy(buffer, source + start, length);
+}
+
 static size_t extract_integer(char *source, size_t start, size_t end) {
-	char *extracted = extract_string(source, start, end);
-	return atoll(extracted);
+	char buffer[24];
+	extract_string_to_buffer(source, start, end, buffer, 24);
+	return atoll(buffer);
 }
 
 static double extract_decimal(char *source, size_t start, size_t end) {
-	char *extracted = extract_string(source, start, end);
-	return strtod(extracted, NULL);
+	char buffer[24];
+	extract_string_to_buffer(source, start, end, buffer, 24);
+	return strtod(buffer, NULL);
 }
 
 static void increment_position(Lexer *lexer) {
@@ -64,63 +73,69 @@ static void increment_position(Lexer *lexer) {
 	lexer->column++;
 }
 
-static bool is_keyword(char *identifier) {
+static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
+	char saved = source[end];
+	source[end] = '\0';
+
+	Token_Kind result = IDENTIFIER;
+	char *identifier = &source[start];
 	switch (identifier[0]) {
 		case 'b':
-			if (strcmp(identifier, "break") == 0) return true;
+			if (strcmp(identifier, "break") == 0) result = KEYWORD_BREAK;
 			break;
 		case 'c':
-			if (strcmp(identifier, "cast") == 0) return true;
-			else if (strcmp(identifier, "case") == 0) return true;
-			else if (strcmp(identifier, "catch") == 0) return true;
+			if (strcmp(identifier, "cast") == 0) result = KEYWORD_CAST;
+			else if (strcmp(identifier, "case") == 0) result = KEYWORD_CASE;
+			else if (strcmp(identifier, "catch") == 0) result = KEYWORD_CATCH;
 			break;
 		case 'd':
-			if (strcmp(identifier, "def") == 0) return true;
-			else if (strcmp(identifier, "defer") == 0) return true;
+			if (strcmp(identifier, "def") == 0) result = KEYWORD_DEF;
+			else if (strcmp(identifier, "defer") == 0) result = KEYWORD_DEFER;
 			break;
 		case 'e':
-			if (strcmp(identifier, "extern") == 0) return true;
-			else if (strcmp(identifier, "else") == 0) return true;
-			else if (strcmp(identifier, "enum") == 0) return true;
+			if (strcmp(identifier, "extern") == 0) result = KEYWORD_EXTERN;
+			else if (strcmp(identifier, "else") == 0) result = KEYWORD_ELSE;
+			else if (strcmp(identifier, "enum") == 0) result = KEYWORD_ENUM;
 			break;
 		case 'f':
-			if (strcmp(identifier, "fn") == 0) return true;
-			else if (strcmp(identifier, "for") == 0) return true;
+			if (strcmp(identifier, "fn") == 0) result = KEYWORD_FN;
+			else if (strcmp(identifier, "for") == 0) result = KEYWORD_FOR;
 			break;
 		case 'i':
-			if (strcmp(identifier, "if") == 0) return true;
-			else if (strcmp(identifier, "internal") == 0) return true;
-			else if (strcmp(identifier, "is") == 0) return true;
+			if (strcmp(identifier, "if") == 0) result = KEYWORD_IF;
+			else if (strcmp(identifier, "internal") == 0) result = KEYWORD_INTERNAL;
+			else if (strcmp(identifier, "is") == 0) result = KEYWORD_IS;
 			break;
 		case 'm':
-			if (strcmp(identifier, "mod") == 0) return true;
+			if (strcmp(identifier, "mod") == 0) result = KEYWORD_MOD;
 			break;
 		case 'o':
-			if (strcmp(identifier, "op") == 0) return true;
+			if (strcmp(identifier, "op") == 0) result = KEYWORD_OP;
 			break;
 		case 'r':
-			if (strcmp(identifier, "return") == 0) return true;
-			else if (strcmp(identifier, "run") == 0) return true;
+			if (strcmp(identifier, "return") == 0) result = KEYWORD_RETURN;
+			else if (strcmp(identifier, "run") == 0) result = KEYWORD_RUN;
 			break;
 		case 's':
-			if (strcmp(identifier, "static") == 0) return true;
-			else if (strcmp(identifier, "struct") == 0) return true;
-			else if (strcmp(identifier, "switch") == 0) return true;
+			if (strcmp(identifier, "static") == 0) result = KEYWORD_STATIC;
+			else if (strcmp(identifier, "struct") == 0) result = KEYWORD_STRUCT;
+			else if (strcmp(identifier, "switch") == 0) result = KEYWORD_SWITCH;
 			break;
 		case 't':
-			if (strcmp(identifier, "tagged_union") == 0) return true;
+			if (strcmp(identifier, "tagged_union") == 0) result = KEYWORD_TAGGED_UNION;
 			break;
 		case 'u':
-			if (strcmp(identifier, "union") == 0) return true;
+			if (strcmp(identifier, "union") == 0) result = KEYWORD_UNION;
 			break;
 		case 'v':
-			if (strcmp(identifier, "var") == 0) return true;
+			if (strcmp(identifier, "var") == 0) result = KEYWORD_VAR;
 			break;
 		case 'w':
-			if (strcmp(identifier, "while") == 0) return true;
+			if (strcmp(identifier, "while") == 0) result = KEYWORD_WHILE;
 			break;
 	}
-	return false;
+	source[end] = saved;
+	return result;
 }
 
 static bool is_comment(Lexer *lexer) {
@@ -317,15 +332,22 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 				}
 
 				size_t string_end = lexer->position;
-				char *extracted_string = extract_string(lexer->source, string_start, string_end);
 
-				Token_Kind kind = is_keyword(extracted_string) ? KEYWORD : IDENTIFIER;
+				Token_Kind kind = get_range_token_kind(lexer->source, string_start, string_end);
+				if (kind == IDENTIFIER) {
+					char *extracted_string = extract_string(lexer->source, string_start, string_end);
 
-				result = (Token_Data) {
-					.kind = kind,
-					.string = extracted_string,
-					.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
-				};
+					result = (Token_Data) {
+						.kind = IDENTIFIER,
+						.string = extracted_string,
+						.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+					};
+				} else {
+					result = (Token_Data) {
+						.kind = kind,
+						.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+					};
+				}
 				break;
 			} else if (is_numeric(character)) {
 				size_t number_start = lexer->position - 1;
@@ -380,8 +402,6 @@ char *token_to_string(Token_Kind kind) {
 	switch (kind) {
 		case IDENTIFIER:
 			return "Identifier";
-		case KEYWORD:
-			return "Keyword";
 		case STRING:
 			return "String";
 		case CHARACTER:
@@ -390,6 +410,56 @@ char *token_to_string(Token_Kind kind) {
 			return "Integer";
 		case DECIMAL:
 			return "Decimal";
+		case KEYWORD_BREAK:
+			return "break";
+		case KEYWORD_CAST:
+			return "cast";
+		case KEYWORD_CASE:
+			return "case";
+		case KEYWORD_CATCH:
+			return "catch";
+		case KEYWORD_DEF:
+			return "def";
+		case KEYWORD_DEFER:
+			return "defer";
+		case KEYWORD_EXTERN:
+			return "extern";
+		case KEYWORD_ELSE:
+			return "else";
+		case KEYWORD_ENUM:
+			return "enum";
+		case KEYWORD_FN:
+			return "fn";
+		case KEYWORD_FOR:
+			return "for";
+		case KEYWORD_IF:
+			return "if";
+		case KEYWORD_INTERNAL:
+			return "internal";
+		case KEYWORD_IS:
+			return "is";
+		case KEYWORD_MOD:
+			return "mod";
+		case KEYWORD_OP:
+			return "op";
+		case KEYWORD_RETURN:
+			return "return";
+		case KEYWORD_RUN:
+			return "run";
+		case KEYWORD_STATIC:
+			return "static";
+		case KEYWORD_STRUCT:
+			return "struct";
+		case KEYWORD_SWITCH:
+			return "switch";
+		case KEYWORD_TAGGED_UNION:
+			return "tagged_union";
+		case KEYWORD_UNION:
+			return "union";
+		case KEYWORD_VAR:
+			return "var";
+		case KEYWORD_WHILE:
+			return "while";
 		case COLON:
 			return ":";
 		case SEMICOLON:

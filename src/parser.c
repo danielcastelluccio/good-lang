@@ -27,9 +27,9 @@ static Token_Data lexer_consume(Lexer *lexer) {
 	return lexer_next(lexer, true);
 }
 
-static bool lexer_peek_check_keyword(Lexer *lexer, char *keyword) {
+static bool lexer_peek_check(Lexer *lexer, Token_Kind kind) {
 	Token_Data next = lexer_peek(lexer);
-	return next.kind == KEYWORD && streq(next.string, keyword);
+	return next.kind == kind;
 }
 
 static Token_Data lexer_consume_check(Lexer *lexer, Token_Kind kind) {
@@ -46,7 +46,7 @@ static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
 	Token_Data token = lexer_peek(lexer);
-	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA || token.kind == EQUALS || token.kind == VERTICAL_BAR || lexer_peek_check_keyword(lexer, "extern")) {
+	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA || token.kind == EQUALS || token.kind == VERTICAL_BAR || token.kind == KEYWORD_EXTERN) {
 		return NULL;
 	}
 
@@ -563,23 +563,21 @@ static char *parse_operator(Lexer *lexer) {
 	switch (operator_token.kind) {
 		case IDENTIFIER:
 			return operator_token.string;
-			break;
 		case BRACE_OPEN:
 			lexer_consume_check(lexer, BRACE_CLOSED);
 			return "[]";
-			break;
 		default:
 			assert(false);
 	}
 }
 
 static Node *parse_struct_type(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
-	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED && lexer_peek(lexer).kind != KEYWORD && !lexer_peek_check_keyword(lexer, "op")) {
+	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED && !lexer_peek_check(lexer, KEYWORD_OP)) {
 		while (true) {
 			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 			lexer_consume_check(lexer, COLON);
@@ -605,9 +603,9 @@ static Node *parse_struct_type(Lexer *lexer) {
 		}
 	}
 
-	if (lexer_peek_check_keyword(lexer, "op")) {
+	if (lexer_peek_check(lexer, KEYWORD_OP)) {
 		while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-			lexer_consume_check(lexer, KEYWORD);
+			lexer_consume_check(lexer, KEYWORD_OP);
 
 			char *operator = parse_operator(lexer);
 
@@ -631,7 +629,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 }
 
 static Node *parse_union_type(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *union_ = ast_new(UNION_TYPE_NODE, first_token.location);
 
@@ -664,7 +662,7 @@ static Node *parse_union_type(Lexer *lexer) {
 }
 
 static Node *parse_tagged_union_type(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *tagged_union = ast_new(TAGGED_UNION_TYPE_NODE, first_token.location);
 
@@ -697,7 +695,7 @@ static Node *parse_tagged_union_type(Lexer *lexer) {
 }
 
 static Node *parse_enum_type(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *enum_ = ast_new(ENUM_TYPE_NODE, first_token.location);
 
@@ -724,7 +722,7 @@ static Node *parse_enum_type(Lexer *lexer) {
 }
 
 static Node *parse_extern(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *extern_ = ast_new(EXTERN_NODE, first_token.location);
 	extern_->extern_.name = lexer_consume_check(lexer, STRING).string;
@@ -733,7 +731,7 @@ static Node *parse_extern(Lexer *lexer) {
 }
 
 static Node *parse_define(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 
@@ -753,7 +751,7 @@ static Node *parse_define(Lexer *lexer) {
 }
 
 static Node *parse_return(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
 	return_->return_.type = RETURN_STANDARD;
@@ -775,11 +773,11 @@ static Node *parse_return(Lexer *lexer) {
 }
 
 static Node *parse_variable(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *variable = ast_new(VARIABLE_NODE, first_token.location);
 
-	if (lexer_peek_check_keyword(lexer, "static")) {
+	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
 		lexer_consume(lexer);
 		variable->variable.static_ = true;
 	}
@@ -800,7 +798,7 @@ static Node *parse_variable(Lexer *lexer) {
 }
 
 static Node *parse_break(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *break_ = ast_new(BREAK_NODE, first_token.location);
 	break_->break_.value = parse_expression_or_nothing(lexer);
@@ -809,12 +807,12 @@ static Node *parse_break(Lexer *lexer) {
 }
 
 static Node *parse_if(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *if_ = ast_new(IF_NODE, first_token.location);
 
-	if (lexer_peek_check_keyword(lexer, "static")) {
-		lexer_consume_check(lexer, KEYWORD);
+	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+		lexer_consume(lexer);
 		if_->if_.static_ = true;
 	}
 
@@ -841,15 +839,15 @@ static Node *parse_if(Lexer *lexer) {
 
 	if_->if_.if_body = parse_separated_statement(lexer);
 
-	if (lexer_peek_check_keyword(lexer, "else")) {
-		lexer_consume_check(lexer, KEYWORD);
+	if (lexer_peek_check(lexer, KEYWORD_ELSE)) {
+		lexer_consume(lexer);
 		if_->if_.else_body = parse_statement(lexer);
 	}
 	return if_;
 }
 
 static Node *parse_internal(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
 	internal->internal.kind = INTERNAL_EXPRESSION;
@@ -860,14 +858,14 @@ static Node *parse_internal(Lexer *lexer) {
 }
 
 static Node *parse_while(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
 
 	while_->while_.condition = parse_expression(lexer);
 	while_->while_.body = parse_separated_statement(lexer);
 
-	if (lexer_peek_check_keyword(lexer, "else")) {
-		lexer_consume_check(lexer, KEYWORD);
+	if (lexer_peek_check(lexer, KEYWORD_ELSE)) {
+		lexer_consume(lexer);
 		while_->while_.else_body = parse_statement(lexer);
 	}
 
@@ -875,11 +873,11 @@ static Node *parse_while(Lexer *lexer) {
 }
 
 static Node *parse_for(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *for_ = ast_new(FOR_NODE, first_token.location);
 
-	if (lexer_peek_check_keyword(lexer, "static")) {
+	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
 		lexer_consume(lexer);
 		for_->for_.static_ = true;
 	}
@@ -919,11 +917,11 @@ static Node *parse_for(Lexer *lexer) {
 }
 
 static Node *parse_switch(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
 
-	if (lexer_peek_check_keyword(lexer, "static")) {
-		lexer_consume_check(lexer, KEYWORD);
+	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+		lexer_consume(lexer);
 		switch_->switch_.static_ = true;
 	}
 
@@ -931,8 +929,8 @@ static Node *parse_switch(Lexer *lexer) {
 
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 
-	while (lexer_peek_check_keyword(lexer, "case")) {
-		lexer_consume_check(lexer, KEYWORD);
+	while (lexer_peek_check(lexer, KEYWORD_CASE)) {
+		lexer_consume(lexer);
 		Node *check = parse_expression(lexer);
 
 		char *binding = NULL;
@@ -1033,7 +1031,7 @@ static Node *parse_array_or_array_view_type(Lexer *lexer) {
 }
 
 static Node *parse_module_or_module_type(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 
 	if (lexer_peek(lexer).kind != CURLY_BRACE_OPEN) {
 		return ast_new(MODULE_TYPE_NODE, first_token.location);
@@ -1046,14 +1044,14 @@ static Node *parse_module_or_module_type(Lexer *lexer) {
 }
 
 static Node *parse_run(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 	Node *run = ast_new(RUN_NODE, first_token.location);
 	run->run.node = parse_statement(lexer);
 	return run;
 }
 
 static Node *parse_cast(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 	Node *cast = ast_new(CAST_NODE, first_token.location);
 	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
 		lexer_consume(lexer);
@@ -1065,14 +1063,14 @@ static Node *parse_cast(Lexer *lexer) {
 }
 
 static Node *parse_defer(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 	Node *defer = ast_new(DEFER_NODE, first_token.location);
 	defer->defer.node = parse_expression(lexer);
 	return defer;
 }
 
 static Node *parse_function_or_function_type(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD);
+	Token_Data first_token = lexer_consume(lexer);
 	
 	Function_Argument *arguments = NULL;
 
@@ -1120,8 +1118,8 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 				variadic = true;
 			} else {
 				bool static_ = false;
-				if (lexer_peek_check_keyword(lexer, "static")) {
-					lexer_consume_check(lexer, KEYWORD);
+				if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+					lexer_consume(lexer);
 					static_ = true;
 				}
 
@@ -1219,60 +1217,80 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_identifier(lexer, NULL);
 			break;
 		}
-		case KEYWORD: {
-			char *value = token.string;
-			switch (value[0]) {
-				case 'b':
-					if (streq(value, "break")) result = parse_break(lexer);
-					break;
-				case 'c':
-					if (streq(value, "cast")) result = parse_cast(lexer);
-					break;
-				case 'd':
-					if (streq(value, "def")) result = parse_define(lexer);
-					else if (streq(value, "defer")) result = parse_defer(lexer);
-					break;
-				case 'e':
-					if (streq(value, "enum")) result = parse_enum_type(lexer);
-					else if (streq(value, "extern")) result = parse_extern(lexer);
-					break;
-				case 'f':
-					if (streq(value, "fn")) result = parse_function_or_function_type(lexer);
-					else if (streq(value, "for")) result = parse_for(lexer);
-					break;
-				case 'i':
-					if (streq(value, "if")) result = parse_if(lexer);
-					else if (streq(value, "internal")) result = parse_internal(lexer);
-					break;
-				case 'm':
-					if (streq(value, "mod")) result = parse_module_or_module_type(lexer);
-					break;
-				case 'r':
-					if (streq(value, "run")) result = parse_run(lexer);
-					else if (streq(value, "return")) result = parse_return(lexer);
-					break;
-				case 's':
-					if (streq(value, "struct")) result = parse_struct_type(lexer);
-					else if (streq(value, "switch")) result = parse_switch(lexer);
-					break;
-				case 't':
-					if (streq(value, "tagged_union")) result = parse_tagged_union_type(lexer);
-					break;
-				case 'u':
-					if (streq(value, "union")) result = parse_union_type(lexer);
-					break;
-				case 'v':
-					if (streq(value, "var")) result = parse_variable(lexer);
-					break;
-				case 'w':
-					if (streq(value, "while")) result = parse_while(lexer);
-					break;
-			}
-
-			if (result == NULL) {
-				printf("Unhandled keyword '%s'\n", value);
-				exit(1);
-			}
+		case KEYWORD_BREAK: {
+			result = parse_break(lexer);
+			break;
+		}
+		case KEYWORD_CAST: {
+			result = parse_cast(lexer);
+			break;
+		}
+		case KEYWORD_DEF: {
+			result = parse_define(lexer);
+			break;
+		}
+		case KEYWORD_DEFER: {
+			result = parse_defer(lexer);
+			break;
+		}
+		case KEYWORD_ENUM: {
+			result = parse_enum_type(lexer);
+			break;
+		}
+		case KEYWORD_EXTERN: {
+			result = parse_extern(lexer);
+			break;
+		}
+		case KEYWORD_FN: {
+			result = parse_function_or_function_type(lexer);
+			break;
+		}
+		case KEYWORD_FOR: {
+			result = parse_for(lexer);
+			break;
+		}
+		case KEYWORD_IF: {
+			result = parse_if(lexer);
+			break;
+		}
+		case KEYWORD_INTERNAL: {
+			result = parse_internal(lexer);
+			break;
+		}
+		case KEYWORD_MOD: {
+			result = parse_module_or_module_type(lexer);
+			break;
+		}
+		case KEYWORD_RETURN: {
+			result = parse_return(lexer);
+			break;
+		}
+		case KEYWORD_RUN: {
+			result = parse_run(lexer);
+			break;
+		}
+		case KEYWORD_STRUCT: {
+			result = parse_struct_type(lexer);
+			break;
+		}
+		case KEYWORD_SWITCH: {
+			result = parse_switch(lexer);
+			break;
+		}
+		case KEYWORD_TAGGED_UNION: {
+			result = parse_tagged_union_type(lexer);
+			break;
+		}
+		case KEYWORD_UNION: {
+			result = parse_union_type(lexer);
+			break;
+		}
+		case KEYWORD_VAR: {
+			result = parse_variable(lexer);
+			break;
+		}
+		case KEYWORD_WHILE: {
+			result = parse_while(lexer);
 			break;
 		}
 		case CURLY_BRACE_OPEN: {
@@ -1347,14 +1365,11 @@ static Node *parse_expression(Lexer *lexer) {
 			case PERIOD_PERIOD:
 				result = parse_range(lexer, result);
 				break;
-			case KEYWORD:
-				if (streq(next.string, "is")) {
-					result = parse_is(lexer, result);
-				} else if (streq(next.string, "catch")) {
-					result = parse_catch(lexer, result);
-				} else {
-					operating = false;
-				}
+			case KEYWORD_IS:
+				result = parse_is(lexer, result);
+				break;
+			case KEYWORD_CATCH:
+				result = parse_catch(lexer, result);
 				break;
 			default:
 				operating = false;
@@ -1397,6 +1412,8 @@ Node *parse_file(char *path) {
 
 	char *contents = malloc(length);
 	fread(contents, length, 1, file);
+
+	fclose(file);
 
 	return parse_source(contents, length, path);
 }
