@@ -27,10 +27,10 @@ typedef struct {
 } Variable_Definition;
 
 typedef struct {
-	struct { char *key; Variable_Definition value; } *variables; // stb_ds
-	struct { char *key; Binding value; } *bindings; // stb_ds
-	struct { char *key; Typed_Value value; } *static_bindings; // stb_ds
-	struct { char *key; Variable_Definition value; } *static_variables; // stb_ds
+	struct { size_t key; Variable_Definition value; } *variables; // stb_ds
+	struct { size_t key; Binding value; } *bindings; // stb_ds
+	struct { size_t key; Typed_Value value; } *static_bindings; // stb_ds
+	struct { size_t key; Variable_Definition value; } *static_variables; // stb_ds
 	Node *node;
 	Value node_type;
 	Value current_type;
@@ -65,8 +65,7 @@ typedef struct {
 
 typedef struct {
 	Value type;
-	char *value;
-	size_t length;
+	String_View value;
 } String_Data;
 
 typedef struct {

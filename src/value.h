@@ -67,11 +67,11 @@ typedef struct {
 } Enum_Value;
 
 typedef struct {
-	char **items; // stb_ds
+	String_View *items; // stb_ds
 } Enum_Type_Value;
 
 typedef struct {
-	char *name;
+	String_View name;
 	Value type;
 } Extern_Value;
 
@@ -92,7 +92,7 @@ typedef struct {
 } Function_Stub_Value;
 
 typedef struct {
-	char *identifier;
+	String_View identifier;
 	Value type;
 	bool static_;
 	bool inferred;
@@ -110,7 +110,7 @@ typedef struct {
 } Integer_Value;
 
 typedef struct {
-	char *operator;
+	String_View operator;
 	Value function;
 } Operator_Value_Definition;
 
@@ -122,7 +122,7 @@ typedef struct {
 } Struct_Type_Value;
 
 typedef struct {
-	char *identifier;
+	String_View identifier;
 	Value type;
 } Union_Item_Value;
 typedef struct {
@@ -130,7 +130,7 @@ typedef struct {
 } Union_Type_Value;
 
 typedef struct {
-	char *identifier;
+	String_View identifier;
 	Value type;
 } Tagged_Union_Item_Value;
 

@@ -76,7 +76,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			if (arrlen(value1->struct_type.members) != arrlen(value2->struct_type.members)) return false;
 
 			for (long int i = 0; i < arrlen(value1->struct_type.members); i++) {
-				if (strcmp(value1->struct_type.node->struct_type.members[i].name, value2->struct_type.node->struct_type.members[i].name) != 0) return false;
+				if (!sv_eq(value1->struct_type.node->struct_type.members[i].name, value2->struct_type.node->struct_type.members[i].name)) return false;
 				if (!value_equal_internal(value1->struct_type.members[i].value, value2->struct_type.members[i].value, typechecking)) return false;
 			}
 
@@ -95,7 +95,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			if (arrlen(value1->union_type.items) != arrlen(value2->union_type.items)) return false;
 
 			for (long int i = 0; i < arrlen(value1->union_type.items); i++) {
-				if (strcmp(value1->union_type.items[i].identifier, value2->union_type.items[i].identifier) != 0) return false;
+				if (!sv_eq(value1->union_type.items[i].identifier, value2->union_type.items[i].identifier)) return false;
 				if (!value_equal_internal(value1->union_type.items[i].type.value, value2->union_type.items[i].type.value, typechecking)) return false;
 			}
 
@@ -105,7 +105,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			if (arrlen(value1->tagged_union_type.items) != arrlen(value2->tagged_union_type.items)) return false;
 
 			for (long int i = 0; i < arrlen(value1->tagged_union_type.items); i++) {
-				if (strcmp(value1->tagged_union_type.items[i].identifier, value2->tagged_union_type.items[i].identifier) != 0) return false;
+				if (!sv_eq(value1->tagged_union_type.items[i].identifier, value2->tagged_union_type.items[i].identifier)) return false;
 				if (!value_equal_internal(value1->tagged_union_type.items[i].type.value, value2->tagged_union_type.items[i].type.value, typechecking)) return false;
 			}
 
@@ -115,7 +115,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			if (arrlen(value1->enum_type.items) != arrlen(value2->enum_type.items)) return false;
 
 			for (long int i = 0; i < arrlen(value1->enum_type.items); i++) {
-				if (strcmp(value1->enum_type.items[i], value2->enum_type.items[i]) != 0) return false;
+				if (!sv_eq(value1->enum_type.items[i], value2->enum_type.items[i])) return false;
 			}
 
 			return true;
@@ -123,7 +123,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 		case FUNCTION_TYPE_VALUE: {
 			if (arrlen(value1->function_type.arguments) != arrlen(value2->function_type.arguments)) return false;
 			for (long int i = 0; i < arrlen(value1->function_type.arguments); i++) {
-				if (strcmp(value1->function_type.arguments[i].identifier, value2->function_type.arguments[i].identifier) != 0) return false;
+				if (!sv_eq(value1->function_type.arguments[i].identifier, value2->function_type.arguments[i].identifier)) return false;
 				if (!value_equal_internal(value1->function_type.arguments[i].type.value, value2->function_type.arguments[i].type.value, typechecking)) return false;
 			}
 
@@ -406,15 +406,15 @@ static Value evaluate_identifier(State *state, Node *node) {
 
 static Value evaluate_string(State *state, Node *node) {
 	String_Data string_data = get_data(state->context, node)->string;
-	char *string_value = string_data.value;
-	size_t string_length = string_data.length;
+	String_View string_value = string_data.value;
+	size_t string_length = string_value.len;
 
 	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
 		Value_Data *string = value_new(ARRAY_VIEW_VALUE);
 		string->array_view.length = string_length;
 		for (size_t i = 0; i < string_length; i++) {
 			Value_Data *byte_value = value_new(BYTE_VALUE);
-			byte_value->byte.value = string_value[i];
+			byte_value->byte.value = string_value.ptr[i];
 			arrpush(string->array_view.values, byte_value);
 		}
 
@@ -456,7 +456,7 @@ static Value evaluate_character(State *state, Node *node) {
 	(void) state;
 	Character_Node character = node->character;
 	Value_Data *value = value_new(BYTE_VALUE);
-	value->byte.value = character.value[0];
+	value->byte.value = character.value.ptr[0];
 	return create_value_data(value, node);
 }
 
@@ -687,7 +687,7 @@ static Value evaluate_structure_access(State *state, Node *node) {
 			Struct_Value structure_value = evaluate_state(state, structure_access.parent).value->struct_;
 
 			for (long int i = 0; i < arrlen(structure_type.members); i++) {
-				if (streq(structure_type.node->struct_type.members[i].name, structure_access.name)) {
+				if (sv_eq(structure_type.node->struct_type.members[i].name, structure_access.name)) {
 					return (Value) { .value = structure_value.values[i] };
 				}
 			}
@@ -696,9 +696,9 @@ static Value evaluate_structure_access(State *state, Node *node) {
 		case ARRAY_VIEW_TYPE_VALUE: {
 			Array_View_Value array_view_value = evaluate_state(state, structure_access.parent).value->array_view;
 
-			if (streq(structure_access.name, "ptr")) {
+			if (sv_eq_cstr(structure_access.name, "ptr")) {
 				assert(false);
-			} else if (streq(structure_access.name, "len")) {
+			} else if (sv_eq_cstr(structure_access.name, "len")) {
 				return (Value) { .value = create_integer(array_view_value.length).value };
 			} else {
 				assert(false);

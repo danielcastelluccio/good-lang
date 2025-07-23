@@ -1,4 +1,5 @@
 #include "common.h"
+#include "string_view.h"
 
 typedef enum {
 	CHARACTER,
@@ -75,7 +76,7 @@ typedef struct {
 	Token_Kind kind;
 	Source_Location location;
 	union {
-		char *string;
+		String_View string;
 		long integer;
 		double decimal;
 	};

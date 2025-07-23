@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "string_view.h"
+
 typedef struct {
 	char *path;
 	size_t row;
@@ -13,12 +15,12 @@ typedef struct {
 typedef struct Node Node;
 
 typedef struct {
-	char *name;
+	String_View name;
 	Node *type;
 } Structure_Member;
 
 typedef struct {
-	char *name;
+	String_View name;
 	Node *function;
 } Operator_Overload;
 
@@ -83,17 +85,17 @@ typedef struct {
 
 typedef struct {
 	Node *argument1;
-	char *method;
+	String_View method;
 	Node **arguments; // stb_ds
 } Call_Method_Node;
 
 typedef struct {
-	char *value;
+	String_View value;
 } Character_Node;
 
 typedef struct {
 	Node *value;
-	char *binding;
+	String_View binding;
 	Node *error;
 } Catch_Node;
 
@@ -102,7 +104,7 @@ typedef struct {
 } Defer_Node;
 
 typedef struct {
-	char *identifier;
+	String_View identifier;
 	Node *type;
 	Node *expression;
 } Define_Node;
@@ -118,17 +120,17 @@ typedef struct {
 } Dereference_Node;
 
 typedef struct {
-	char **items; // stb_ds
+	String_View *items; // stb_ds
 } Enum_Type_Node;
 
 typedef struct {
-	char *name;
+	String_View name;
 } Extern_Node;
 
 typedef struct {
 	Node **items;
 	Node *body;
-	char **bindings;
+	String_View *bindings;
 	bool static_;
 } For_Node;
 
@@ -138,7 +140,7 @@ typedef struct {
 } Function_Node;
 
 typedef struct {
-	char *identifier;
+	String_View identifier;
 	Node *type;
 	bool static_;
 	bool inferred;
@@ -153,7 +155,7 @@ typedef struct {
 
 typedef struct {
 	Node *module;
-	char *value;
+	String_View value;
 	Node *assign_value;
 } Identifier_Node;
 
@@ -162,7 +164,7 @@ typedef struct {
 	Node *if_body;
 	Node *else_body;
 	bool static_;
-	char **bindings;
+	String_View *bindings;
 } If_Node;
 
 typedef struct {
@@ -246,7 +248,7 @@ typedef struct {
 } Run_Node;
 
 typedef struct {
-	char *value;
+	String_View value;
 } String_Node;
 
 typedef struct {
@@ -255,7 +257,7 @@ typedef struct {
 } Struct_Type_Node;
 
 typedef struct {
-	char *identifier;
+	String_View identifier;
 	Node *node;
 } Structure_Member_Value;
 
@@ -265,14 +267,14 @@ typedef struct {
 
 typedef struct {
 	Node *parent;
-	char *name;
+	String_View name;
 	Node *assign_value;
 } Structure_Access_Node;
 
 typedef struct {
 	Node *value;
 	Node *body;
-	char *binding;
+	String_View binding;
 } Switch_Case;
 
 typedef struct {
@@ -290,7 +292,7 @@ typedef struct {
 } Union_Type_Node;
 
 typedef struct {
-	char *name;
+	String_View name;
 	Node *type;
 	Node *value;
 	bool static_;

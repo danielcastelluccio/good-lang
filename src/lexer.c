@@ -41,12 +41,11 @@ static Token_Data create_token(Token_Kind kind, Lexer *lexer) {
 	return (Token_Data) { .kind = kind, .location = { .path = lexer->path, .row = lexer->row, .column = lexer->column - 1 } };
 }
 
-static char *extract_string(char *source, size_t start, size_t end) {
-	size_t length = end - start;
-	char *string = malloc(length + 1);
-	string[length] = '\0';
-	memcpy(string, source + start, length);
-	return string;
+static String_View extract_string(char *source, size_t start, size_t end) {
+	return (String_View) {
+		.ptr = &source[start],
+		.len = end - start
+	};
 }
 
 static void extract_string_to_buffer(char *source, size_t start, size_t end, char *buffer, int buffer_len) {
@@ -335,7 +334,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 
 				Token_Kind kind = get_range_token_kind(lexer->source, string_start, string_end);
 				if (kind == IDENTIFIER) {
-					char *extracted_string = extract_string(lexer->source, string_start, string_end);
+					String_View extracted_string = extract_string(lexer->source, string_start, string_end);
 
 					result = (Token_Data) {
 						.kind = IDENTIFIER,

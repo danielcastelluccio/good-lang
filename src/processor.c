@@ -29,10 +29,10 @@ static void process_node_with_scopes(Context *context, Node *node, Scope *scopes
 	if (scopes != NULL) context->scopes = saved_scopes;
 }
 
-static Node *find_define(Block_Node block, char *identifier) {
+static Node *find_define(Block_Node block, String_View identifier) {
 	for (long int i = 0; i < arrlen(block.statements); i++) {
 		Node *statement = block.statements[i];
-		if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier) == 0) {
+		if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
 			return statement;
 		}
 	}
@@ -69,7 +69,7 @@ typedef struct {
 	} tag;
 } Lookup_Result;
 
-static Lookup_Result lookup(Context *context, char *identifier) {
+static Lookup_Result lookup(Context *context, String_View identifier) {
 	if (context->internal_root != NULL) {
 		Node *internal_block = context->internal_root->module.body;
 
@@ -88,12 +88,12 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
 
-		Variable_Definition variable = shget(scope->variables, identifier);
+		Variable_Definition variable = hmget(scope->variables, sv_hash(identifier));
 		if (variable.node != NULL) {
 			return (Lookup_Result) { .tag = LOOKUP_RESULT_VARIABLE, .variable = variable.node, .type = variable.node_data->variable.type };
 		}
 
-		Binding binding = shget(scope->bindings, identifier);
+		Binding binding = hmget(scope->bindings, sv_hash(identifier));
 		if (binding.type.value != NULL) {
 			return (Lookup_Result) { .tag = LOOKUP_RESULT_BINDING, .binding = { .node = scope->node, .index = binding.index }, .type = binding.type };
 		}
@@ -105,7 +105,7 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			long int j = 0;
 			for (long int i = 0; i < arrlen(current_function_type->function_type.arguments); i++) {
 				if (!current_function_type->function_type.arguments[i].static_) {
-					if (strcmp(current_function_type->function_type.arguments[i].identifier, identifier) == 0) {
+					if (sv_eq(current_function_type->function_type.arguments[i].identifier, identifier)) {
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_ARGUMENT, .argument = j, .type = scope->node_type.value->function_type.arguments[i].type };
 					}
 					j++;
@@ -113,12 +113,12 @@ static Lookup_Result lookup(Context *context, char *identifier) {
 			}
 		}
 
-		Typed_Value value = shget(scope->static_bindings, identifier);
+		Typed_Value value = hmget(scope->static_bindings, sv_hash(identifier));
 		if (value.type.value != NULL) {
 			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_BINDING, .static_binding = value.value, .type = value.type };
 		}
 
-		variable = shget(scope->static_variables, identifier);
+		variable = hmget(scope->static_variables, sv_hash(identifier));
 		if (variable.node != NULL) {
 			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = (Variable_Definition) { .node = variable.node, .node_data = variable.node_data }, .type = variable.node_data->variable.type };
 		}
@@ -153,7 +153,7 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 
 	switch (type_node->kind) {
 		case IDENTIFIER_NODE: {
-			buffer += sprintf(buffer, "%s", type_node->identifier.value);
+			buffer += sprintf(buffer, "%.*s", (int) type_node->identifier.value.len, type_node->identifier.value.ptr);
 			break;
 		}
 		case CALL_NODE: {
@@ -229,7 +229,8 @@ static int print_type(Value type, char *buffer) {
 		case STRUCT_TYPE_VALUE: {
 			buffer += sprintf(buffer, "struct{");
 			for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
-				buffer += sprintf(buffer, "%s:", type.value->struct_type.node->struct_type.members[i].name);
+				String_View name = type.value->struct_type.node->struct_type.members[i].name;
+				buffer += sprintf(buffer, "%.*s:", (int) name.len, name.ptr);
 				buffer += print_type(type.value->struct_type.members[i], buffer);
 				if (i < arrlen(type.value->struct_type.members) - 1) {
 					buffer += sprintf(buffer, ",");
@@ -241,7 +242,8 @@ static int print_type(Value type, char *buffer) {
 		case UNION_TYPE_VALUE: {
 			buffer += sprintf(buffer, "union{");
 			for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
-				buffer += sprintf(buffer, "%s:", type.value->union_type.items[i].identifier);
+				String_View name = type.value->union_type.items[i].identifier;
+				buffer += sprintf(buffer, "%.*s:", (int) name.len, name.ptr);
 				buffer += print_type(type.value->union_type.items[i].type, buffer);
 				if (i < arrlen(type.value->union_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
@@ -253,7 +255,8 @@ static int print_type(Value type, char *buffer) {
 		case TAGGED_UNION_TYPE_VALUE: {
 			buffer += sprintf(buffer, "tagged_union{");
 			for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
-				buffer += sprintf(buffer, "%s:", type.value->tagged_union_type.items[i].identifier);
+				String_View name = type.value->tagged_union_type.items[i].identifier;
+				buffer += sprintf(buffer, "%.*s:", (int) name.len, name.ptr);
 				buffer += print_type(type.value->tagged_union_type.items[i].type, buffer);
 				if (i < arrlen(type.value->tagged_union_type.items) - 1) {
 					buffer += sprintf(buffer, ",");
@@ -265,7 +268,8 @@ static int print_type(Value type, char *buffer) {
 		case ENUM_TYPE_VALUE: {
 			buffer += sprintf(buffer, "enum{");
 			for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
-				buffer += sprintf(buffer, "%s", type.value->enum_type.items[i]);
+				String_View item = type.value->enum_type.items[i];
+				buffer += sprintf(buffer, "%.*s", (int) item.len, item.ptr);
 				if (i < arrlen(type.value->struct_type.members) - 1) {
 					buffer += sprintf(buffer, ",");
 				}
@@ -340,17 +344,16 @@ static void handle_mismatched_type_error(Node *node, Value type1, Value type2) {
 	handle_semantic_error(node->location, message, type1_string, type2_string); \
 }
 
-typedef struct { char *string; size_t length; } Expanded_String;
-static Expanded_String expand_escapes(char *string) {
-	size_t original_length = strlen(string);
+static String_View expand_escapes(String_View sv) {
+	size_t original_length = sv.len;
 	char *new_string = malloc(original_length);
 	memset(new_string, 0, original_length);
 
 	size_t original_index = 0;
 	size_t new_index = 0;
 	while (original_index < original_length) {
-		if (string[original_index] == '\\') {
-			switch (string[original_index + 1]) {
+		if (sv.ptr[original_index] == '\\') {
+			switch (sv.ptr[original_index + 1]) {
 				case 'n':
 					new_string[new_index] = '\n';
 					break;
@@ -363,17 +366,17 @@ static Expanded_String expand_escapes(char *string) {
 			new_index += 1;
 			original_index += 2;
 		} else {
-			new_string[new_index] = string[original_index];
+			new_string[new_index] = sv.ptr[original_index];
 			original_index += 1;
 			new_index += 1;
 		}
 	}
 
-	return (Expanded_String) { .string = new_string, .length = new_index };
+	return (String_View) { .ptr = new_string, .len = new_index };
 }
 
-typedef struct { char *key; Typed_Value value; } *Pattern_Match_Result;
-static bool pattern_match(Node *node, Value value, Context *context, char **inferred_arguments, Pattern_Match_Result *match_result) {
+typedef struct { size_t key; Typed_Value value; } *Pattern_Match_Result;
+static bool pattern_match(Node *node, Value value, Context *context, String_View *inferred_arguments, Pattern_Match_Result *match_result) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (value.value->tag == POINTER_TYPE_VALUE) {
@@ -400,8 +403,8 @@ static bool pattern_match(Node *node, Value value, Context *context, char **infe
 		}
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
-				if (strcmp(inferred_arguments[i], node->identifier.value) == 0) {
-					Typed_Value previous_value = shget(*match_result, inferred_arguments[i]);
+				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
+					Typed_Value previous_value = hmget(*match_result, sv_hash(inferred_arguments[i]));
 					if (previous_value.value.value != NULL) {
 						if (!value_equal(previous_value.value.value, value.value)) {
 							return false;
@@ -412,7 +415,7 @@ static bool pattern_match(Node *node, Value value, Context *context, char **infe
 						.value = value,
 						.type = create_value(TYPE_TYPE_VALUE)
 					};
-					shput(*match_result, inferred_arguments[i], typed_value);
+					hmput(*match_result, sv_hash(inferred_arguments[i]), typed_value);
 					break;
 				}
 			}
@@ -425,7 +428,7 @@ static bool pattern_match(Node *node, Value value, Context *context, char **infe
 	return true;
 }
 
-static bool uses_inferred_arguments(Node *node, char **inferred_arguments) {
+static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (node->pointer_type.inner == NULL) return false;
@@ -444,7 +447,7 @@ static bool uses_inferred_arguments(Node *node, char **inferred_arguments) {
 		}
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
-				if (strcmp(inferred_arguments[i], node->identifier.value) == 0) {
+				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
 					return true;
 				}
 			}
@@ -469,7 +472,7 @@ static void process_initial_argument_types(Context *context, Value_Data *functio
 			assert(false);
 	}
 
-	char **inferred_arguments = NULL;
+	String_View *inferred_arguments = NULL;
 	if (function_type_node != NULL) {
 		Function_Argument *function_node_arguments = function_type_node->function_type.arguments;
 
@@ -494,11 +497,11 @@ static void process_initial_argument_types(Context *context, Value_Data *functio
 	}
 }
 
-static Custom_Operator_Function find_custom_operator(Value type, char *operator) {
+static Custom_Operator_Function find_custom_operator(Value type, String_View operator) {
 	if (type.value->tag == STRUCT_TYPE_VALUE) {
 		Operator_Overload *operators = type.value->struct_type.node->struct_type.operator_overloads;
 		for (long int i = 0; i < arrlen(operators); i++) {
-			if (strcmp(operators[i].name, operator) == 0) {
+			if (sv_eq(operators[i].name, operator)) {
 				Value_Data *function = type.value->struct_type.operators[i].function.value;
 				Value_Data *function_type = NULL;
 				switch (function->tag) {
@@ -526,11 +529,11 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 
 static Value process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Node **arguments) {
 	typedef struct {
-		char *identifier;
+		String_View identifier;
 		Typed_Value value;
 	} Static_Argument_Value;
 
-	char **inferred_arguments = NULL;
+	String_View *inferred_arguments = NULL;
 
 	if (function_value.value != NULL && function_value.value->tag == FUNCTION_STUB_VALUE) {
 		Node *function_type_node = function_value.value->function_stub.node->function.function_type;
@@ -603,7 +606,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		for (long int k = 0; k < arrlen(function_node_arguments); k++) {
 			if (!function_node_arguments[k].inferred) continue;
 
-			Typed_Value typed_value = shget(result, function_node_arguments[k].identifier);
+			Typed_Value typed_value = hmget(result, sv_hash(function_node_arguments[k].identifier));
 			if (typed_value.value.value == NULL && function_node_arguments[k].default_value != NULL) {
 				typed_value.type = get_type(context, function_node_arguments[k].default_value);
 				typed_value.value = evaluate(context, function_node_arguments[k].default_value);
@@ -625,16 +628,16 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			handle_semantic_error(node->location, "Pattern matching failed");
 		}
 
-		struct { char *key; Typed_Value value; } *static_arguments_map = NULL;;
+		struct { size_t key; Typed_Value value; } *static_arguments_map = NULL;;
 		for (long int i = 0; i < arrlen(static_arguments); i++) {
-			shput(static_arguments_map, static_arguments[i].identifier, static_arguments[i].value);
+			hmput(static_arguments_map, sv_hash(static_arguments[i].identifier), static_arguments[i].value);
 		}
 
 		Value *static_argument_values = NULL;
 		for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
 			Function_Argument argument = function_type_node->function_type.arguments[i];
 			if (argument.static_) {
-				arrpush(static_argument_values, shget(static_arguments_map, argument.identifier).value);
+				arrpush(static_argument_values, hmget(static_arguments_map, sv_hash(argument.identifier)).value);
 			}
 		}
 
@@ -677,7 +680,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			arrpush(context->scopes, (Scope) { .node = node });
 
 			for (long int i = 0; i < arrlen(static_arguments); i++) {
-				shput(arrlast(context->scopes).static_bindings, static_arguments[i].identifier, static_arguments[i].value);
+				hmput(arrlast(context->scopes).static_bindings, sv_hash(static_arguments[i].identifier), static_arguments[i].value);
 			}
 
 			if (function_value.value->tag == FUNCTION_STUB_VALUE) {
@@ -807,7 +810,7 @@ static void process_array_access(Context *context, Node *node) {
 
 	assert(array_type.value->tag == POINTER_TYPE_VALUE);
 
-	Custom_Operator_Function custom_operator_function = find_custom_operator(array_type.value->pointer_type.inner, "[]");
+	Custom_Operator_Function custom_operator_function = find_custom_operator(array_type.value->pointer_type.inner, cstr_to_sv("[]"));
 
 	if (custom_operator_function.function == NULL
 			&& array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE
@@ -1098,7 +1101,7 @@ static void process_call_method(Context *context, Node *node) {
 
 	Custom_Operator_Function custom_operator_function = find_custom_operator(argument1_type.value->pointer_type.inner, call_method.method);
 	if (custom_operator_function.function == NULL) {
-		handle_semantic_error(node->location, "Method '%s' not found", call_method.method);
+		handle_semantic_error(node->location, "Method '%.*s' not found", (int) call_method.method.len, call_method.method.ptr);
 	}
 
 	process_initial_argument_types(context, custom_operator_function.function, arguments);
@@ -1114,13 +1117,13 @@ static void process_call_method(Context *context, Node *node) {
 static void process_character(Context *context, Node *node) {
 	Character_Node character = node->character;
 
-	Expanded_String new_string = expand_escapes(character.value);
-	if (new_string.length != 1) {
+	String_View new_string = expand_escapes(character.value);
+	if (new_string.len != 1) {
 		handle_semantic_error(node->location, "Expected only one character");
 	}
 
 	Node_Data *data = data_new(CHARACTER_NODE);
-	data->character.value = new_string.string[0];
+	data->character.value = new_string.ptr[0];
 	set_data(context, node, data);
 	set_type(context, node, create_value(BYTE_TYPE_VALUE));
 }
@@ -1134,13 +1137,13 @@ static void process_catch(Context *context, Node *node) {
 
 	bool saved_returned = context->returned;
 	arrpush(context->scopes, (Scope) { .node = node });
-	if (catch.binding != NULL) {
+	if (catch.binding.ptr != NULL) {
 		Binding binding = {
 			.type = result_type.value->result_type.error,
 			.index = 0
 		};
 
-		shput(arrlast(context->scopes).bindings, catch.binding, binding);
+		hmput(arrlast(context->scopes).bindings, sv_hash(catch.binding), binding);
 	}
 	process_node(context, catch.error);
 	(void) arrpop(context->scopes);
@@ -1289,14 +1292,14 @@ static void process_for(Context *context, Node *node) {
 				.value = (Value) { .value = looped_value.value->array_view.values[i] },
 				.type = element_types[0]
 			};
-			shput(arrlast(context->scopes).static_bindings, for_.bindings[0], typed_value);
+			hmput(arrlast(context->scopes).static_bindings, sv_hash(for_.bindings[0]), typed_value);
 
 			if (arrlen(for_.bindings) > 1) {
 				Typed_Value typed_value = {
 					.value = create_integer(i),
 					.type = create_integer_type(false, context->codegen.default_integer_size)
 				};
-				shput(arrlast(context->scopes).static_bindings, for_.bindings[1], typed_value);
+				hmput(arrlast(context->scopes).static_bindings, sv_hash(for_.bindings[1]), typed_value);
 			}
 
 			process_node(context, for_.body);
@@ -1310,7 +1313,7 @@ static void process_for(Context *context, Node *node) {
 				.type = element_types[i],
 				.index = i
 			};
-			shput(arrlast(context->scopes).bindings, for_.bindings[i], binding);
+			hmput(arrlast(context->scopes).bindings, sv_hash(for_.bindings[i]), binding);
 		}
 
 		process_node(context, for_.body);
@@ -1453,7 +1456,7 @@ static void process_identifier(Context *context, Node *node) {
 		Value module_value = evaluate(context, identifier.module);
 		for (long int i = 0; i < arrlen(module_value.value->module.body->block.statements); i++) {
 			Node *statement = module_value.value->module.body->block.statements[i];
-			if (statement->kind == DEFINE_NODE && strcmp(statement->define.identifier, identifier.value) == 0) {
+			if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier.value)) {
 				define_node = statement;
 
 				for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
@@ -1466,7 +1469,7 @@ static void process_identifier(Context *context, Node *node) {
 		Value wanted_type = context->temporary_context.wanted_type;
 		if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
 			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
-				if (strcmp(identifier.value, wanted_type.value->enum_type.items[i]) == 0) {
+				if (sv_eq(identifier.value, wanted_type.value->enum_type.items[i])) {
 					value.value = value_new(ENUM_VALUE);
 					value.value->enum_.value = i;
 					type = context->temporary_context.wanted_type;
@@ -1475,7 +1478,7 @@ static void process_identifier(Context *context, Node *node) {
 		}
 
 		if (type.value == NULL) {
-			if (strcmp(identifier.value, "_") == 0) {
+			if (sv_eq_cstr(identifier.value, "_")) {
 				data->identifier.kind = IDENTIFIER_UNDERSCORE;
 				type = create_value(NONE_VALUE);
 
@@ -1582,9 +1585,7 @@ static void process_identifier(Context *context, Node *node) {
 	}
 
 	if (type.value == NULL) {
-		printf("%s\n", context->scopes[1].node->location.path);
-		assert(false);
-		handle_semantic_error(node->location, "Identifier '%s' not found", identifier.value);
+		handle_semantic_error(node->location, "Identifier '%.*s' not found", (int) identifier.value.len, identifier.value.ptr);
 	}
 
 	if (value.value != NULL) {
@@ -1634,7 +1635,7 @@ static void process_if(Context *context, Node *node) {
 					.value = (Value) { .value = evaluated.value->optional.value },
 					.type = condition_type.value->optional_type.inner
 				};
-				shput(arrlast(context->scopes).static_bindings, if_.bindings[0], typed_value);
+				hmput(arrlast(context->scopes).static_bindings, sv_hash(if_.bindings[0]), typed_value);
 			}
 
 			process_node_context(context, temporary_context, if_.if_body);
@@ -1654,7 +1655,7 @@ static void process_if(Context *context, Node *node) {
 				.index = 0
 			};
 
-			shput(arrlast(context->scopes).bindings, if_.bindings[0], binding);
+			hmput(arrlast(context->scopes).bindings, sv_hash(if_.bindings[0]), binding);
 		}
 		process_node(context, if_.if_body);
 		(void) arrpop(context->scopes);
@@ -1950,7 +1951,7 @@ static void process_internal(Context *context, Node *node) {
 					for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 
-						char *name_string;
+						String_View name_string;
 						if (type.value->struct_type.node != NULL) {
 							name_string = type.value->struct_type.node->struct_type.members[i].name;
 						} else {
@@ -1958,16 +1959,16 @@ static void process_internal(Context *context, Node *node) {
 							memset(buffer, 0, 8);
 							buffer[0] = '_';
 							sprintf(buffer + 1, "%i", (int) i);
-							name_string = buffer;
+							name_string = cstr_to_sv(buffer);
 						}
 
-						size_t name_string_length = strlen(name_string);
+						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = name_string_length;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
+							byte_value->byte.value = name_string.ptr[i];
 							arrpush(name_value->array_view.values, byte_value);
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
@@ -1990,14 +1991,14 @@ static void process_internal(Context *context, Node *node) {
 					for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 
-						char *name_string = type.value->union_type.items[i].identifier;
-						size_t name_string_length = strlen(name_string);
+						String_View name_string = type.value->union_type.items[i].identifier;
+						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = name_string_length;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
+							byte_value->byte.value = name_string.ptr[i];
 							arrpush(name_value->array_view.values, byte_value);
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
@@ -2020,14 +2021,14 @@ static void process_internal(Context *context, Node *node) {
 					for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 
-						char *name_string = type.value->tagged_union_type.items[i].identifier;
-						size_t name_string_length = strlen(name_string);
+						String_View name_string = type.value->tagged_union_type.items[i].identifier;
+						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = name_string_length;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
+							byte_value->byte.value = name_string.ptr[i];
 							arrpush(name_value->array_view.values, byte_value);
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
@@ -2048,14 +2049,14 @@ static void process_internal(Context *context, Node *node) {
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->enum_type.items);
 					for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
-						char *name_string = type.value->enum_type.items[i];
-						size_t name_string_length = strlen(name_string);
+						String_View name_string = type.value->enum_type.items[i];
+						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = name_string_length;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string[i];
+							byte_value->byte.value = name_string.ptr[i];
 							arrpush(name_value->array_view.values, byte_value);
 						}
 						arrpush(items_value->array_view.values, name_value);
@@ -2121,7 +2122,7 @@ static void process_internal(Context *context, Node *node) {
 
 			size_t saved_static_id = context->static_id;
 			context->static_id = 0;
-			Value type_info_type = get_data(context, find_define(context->internal_root->module.body->block, "Type_Info"))->define.typed_value.value;
+			Value type_info_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Type_Info")))->define.typed_value.value;
 			context->static_id = saved_static_id;
 			set_type(context, node, type_info_type);
 		}
@@ -2321,7 +2322,7 @@ static void process_run(Context *context, Node *node) {
 static void process_string(Context *context, Node *node) {
 	String_Node string = node->string;
 
-	Expanded_String new_string = expand_escapes(string.value);
+	String_View new_string = expand_escapes(string.value);
 
 	Value type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
@@ -2336,8 +2337,7 @@ static void process_string(Context *context, Node *node) {
 
 	Node_Data *data = data_new(STRING_NODE);
 	data->string.type = type;
-	data->string.value = new_string.string;
-	data->string.length = new_string.length;
+	data->string.value = new_string;
 	set_data(context, node, data);
 	set_type(context, node, type);
 }
@@ -2374,7 +2374,7 @@ static void process_structure(Context *context, Node *node) {
 					break;
 				case TAGGED_UNION_TYPE_VALUE:
 					for (long int j = 0; j < arrlen(wanted_type.value->tagged_union_type.items); j++) {
-						if (streq(wanted_type.value->tagged_union_type.items[j].identifier, structure.values[i].identifier)) {
+						if (sv_eq(wanted_type.value->tagged_union_type.items[j].identifier, structure.values[i].identifier)) {
 							item_wanted_type = wanted_type.value->tagged_union_type.items[j].type;
 							break;
 						}
@@ -2383,7 +2383,7 @@ static void process_structure(Context *context, Node *node) {
 					break;
 				case UNION_TYPE_VALUE:
 					for (long int j = 0; j < arrlen(wanted_type.value->union_type.items); j++) {
-						if (streq(wanted_type.value->union_type.items[j].identifier, structure.values[i].identifier)) {
+						if (sv_eq(wanted_type.value->union_type.items[j].identifier, structure.values[i].identifier)) {
 							item_wanted_type = wanted_type.value->union_type.items[j].type;
 							break;
 						}
@@ -2432,7 +2432,7 @@ static void process_structure_access(Context *context, Node *node) {
 	switch (structure_type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
 			for (long int i = 0; i < arrlen(structure_type.value->struct_type.members); i++) {
-				if (strcmp(structure_type.value->struct_type.node->struct_type.members[i].name, structure_access.name) == 0) {
+				if (sv_eq(structure_type.value->struct_type.node->struct_type.members[i].name, structure_access.name)) {
 					item_type = structure_type.value->struct_type.members[i];
 					break;
 				}
@@ -2443,7 +2443,7 @@ static void process_structure_access(Context *context, Node *node) {
 			for (long int i = 0; i < arrlen(structure_type.value->tuple_type.members); i++) {
 				char name[21] = {};
 				sprintf(name, "_%li", i);
-				if (strcmp(name, structure_access.name) == 0) {
+				if (sv_eq_cstr(structure_access.name, name)) {
 					item_type = structure_type.value->tuple_type.members[i];
 					break;
 				}
@@ -2452,7 +2452,7 @@ static void process_structure_access(Context *context, Node *node) {
 		}
 		case UNION_TYPE_VALUE: {
 			for (long int i = 0; i < arrlen(structure_type.value->union_type.items); i++) {
-				if (strcmp(structure_type.value->union_type.items[i].identifier, structure_access.name) == 0) {
+				if (sv_eq(structure_type.value->union_type.items[i].identifier, structure_access.name)) {
 					item_type = structure_type.value->union_type.items[i].type;
 					break;
 				}
@@ -2460,9 +2460,9 @@ static void process_structure_access(Context *context, Node *node) {
 			break;
 		}
 		case ARRAY_VIEW_TYPE_VALUE: {
-			if (strcmp("len", structure_access.name) == 0) {
+			if (sv_eq_cstr(structure_access.name, "len")) {
 				item_type = create_integer_type(false, context->codegen.default_integer_size);
-			} else if (strcmp("ptr", structure_access.name) == 0) {
+			} else if (sv_eq_cstr(structure_access.name, "ptr")) {
 				item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
 			}
 			break;
@@ -2472,7 +2472,7 @@ static void process_structure_access(Context *context, Node *node) {
 	}
 
 	if (item_type.value == NULL) {
-		handle_semantic_error(node->location, "Item '%s' not found", structure_access.name);
+		handle_semantic_error(node->location, "Item '%.*s' not found", (int) structure_access.name.len, structure_access.name.ptr);
 	}
 
 	Node_Data *data = data_new(STRUCTURE_ACCESS_NODE);
@@ -2553,12 +2553,12 @@ static void process_switch(Context *context, Node *node) {
 
 		if (data->switch_.static_case >= 0) {
 			Switch_Case switch_case = switch_.cases[data->switch_.static_case];
-			if (switched_value->tag == TAGGED_UNION_VALUE && switch_case.binding != NULL) {
+			if (switched_value->tag == TAGGED_UNION_VALUE && switch_case.binding.ptr != NULL) {
 				Typed_Value typed_value = {
 					.value = (Value) { .value = switched_value->tagged_union.data },
 					.type = type.value->tagged_union_type.items[switched_enum_value->enum_.value].type
 				};
-				shput(arrlast(context->scopes).static_bindings, switch_case.binding, typed_value);
+				hmput(arrlast(context->scopes).static_bindings, sv_hash(switch_case.binding), typed_value);
 			}
 
 			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
@@ -2588,12 +2588,12 @@ static void process_switch(Context *context, Node *node) {
 
 			arrpush(context->scopes, (Scope) { .node = node });
 
-			if (switch_case.binding != NULL) {
+			if (switch_case.binding.ptr != NULL) {
 				Binding binding = {
 					.type = binding_type,
 					.index = 0
 				};
-				shput(arrlast(context->scopes).bindings, switch_case.binding, binding);
+				hmput(arrlast(context->scopes).bindings, sv_hash(switch_case.binding), binding);
 			}
 
 			bool saved_previous_returned = context->returned;
@@ -2705,11 +2705,11 @@ static void process_variable(Context *context, Node *node) {
 		.node_data = data
 	};
 	if (variable.static_) {
-		shput(arrlast(context->scopes).static_variables, variable.name, variable_definition);
+		hmput(arrlast(context->scopes).static_variables, sv_hash(variable.name), variable_definition);
 		Value value = evaluate(context, variable.value);
 		hmput(context->static_variables, data, value);
 	} else {
-		shput(arrlast(context->scopes).variables, variable.name, variable_definition);
+		hmput(arrlast(context->scopes).variables, sv_hash(variable.name), variable_definition);
 	}
 
 	data->variable.type = type;
