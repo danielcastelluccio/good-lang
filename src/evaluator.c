@@ -165,8 +165,8 @@ bool type_assignable(Value_Data *type1, Value_Data *type2) {
 	return value_equal_internal(type1, type2, true);
 }
 
-#define handle_evaluate_error(/* Source_Location */ location, /* char * */ fmt, ...) { \
-	printf("%s:%zu:%zu: " fmt "\n", location.path, location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
+#define handle_evaluate_error(/* State * */ state, /* Source_Location */ location, /* char * */ fmt, ...) { \
+	printf("%s:%u:%u: " fmt "\n", state->context->data->source_files[location.path_ref], location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
 	exit(1); \
 }
 
@@ -397,7 +397,7 @@ static Value evaluate_identifier(State *state, Node *node) {
 			break;
 		}
 		default:
-			handle_evaluate_error(node->location, "Cannot evaluate identifier at compile time");
+			handle_evaluate_error(state, node->location, "Cannot evaluate identifier at compile time");
 			break;
 	}
 

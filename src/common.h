@@ -287,6 +287,10 @@ typedef struct {
 	Value call_wanted_type;
 } Temporary_Context;
 
+typedef struct {
+	char **source_files; // stb_ds
+} Data;
+
 struct Context {
 	struct { size_t key; Node_Types *value; } *types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *datas; // stb_ds
@@ -301,6 +305,7 @@ struct Context {
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
 	Node *internal_root;
+	Data *data;
 };
 
 Value get_type(Context *context, Node *node);

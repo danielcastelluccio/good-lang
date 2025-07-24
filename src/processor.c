@@ -140,8 +140,8 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 	return (Lookup_Result) { .tag = LOOKUP_RESULT_FAIL };
 }
 
-#define handle_semantic_error(/* Source_Location */ location, /* char * */ fmt, ...) { \
-	printf("%s:%zu:%zu: " fmt "\n", location.path, location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
+#define handle_semantic_error(/* Context * */ context, /* Source_Location */ location, /* char * */ fmt, ...) { \
+	printf("%s:%u:%u: " fmt "\n", context->data->source_files[location.path_ref], location.row, location.column __VA_OPT__(,) __VA_ARGS__); \
 	exit(1); \
 }
 
@@ -314,26 +314,26 @@ static int print_type_outer(Value type, char *buffer) {
 	return buffer - buffer_start;
 }
 
-static void handle_expected_type_error(Node *node, Value wanted, Value given) {
+static void handle_expected_type_error(Context *context, Node *node, Value wanted, Value given) {
 	char wanted_string[64] = {};
 	print_type_outer(wanted, wanted_string);
 	char given_string[64] = {};
 	print_type_outer(given, given_string);
-	handle_semantic_error(node->location, "Expected %s, but got %s", wanted_string, given_string);
+	handle_semantic_error(context, node->location, "Expected %s, but got %s", wanted_string, given_string);
 }
 
-static void handle_mismatched_type_error(Node *node, Value type1, Value type2) {
+static void handle_mismatched_type_error(Context *context, Node *node, Value type1, Value type2) {
 	char type1_string[64] = {};
 	print_type_outer(type1, type1_string);
 	char type2_string[64] = {};
 	print_type_outer(type2, type2_string);
-	handle_semantic_error(node->location, "Mismatched types %s and %s", type1_string, type2_string);
+	handle_semantic_error(context, node->location, "Mismatched types %s and %s", type1_string, type2_string);
 }
 
 #define handle_type_error(/* Node * */ node, /* char * */ message, /* Value */ type) { \
 	char type_string[64] = {}; \
 	print_type_outer(type, type_string); \
-	handle_semantic_error(node->location, message, type_string); \
+	handle_semantic_error(context, node->location, message, type_string); \
 }
 
 #define handle_2type_error(/* Node * */ node, /* char * */ message, /* Value */ type1, /* Value */ type2) { \
@@ -341,7 +341,7 @@ static void handle_mismatched_type_error(Node *node, Value type1, Value type2) {
 	print_type_outer(type1, type1_string); \
 	char type2_string[64] = {}; \
 	print_type_outer(type2, type2_string); \
-	handle_semantic_error(node->location, message, type1_string, type2_string); \
+	handle_semantic_error(context, node->location, message, type1_string, type2_string); \
 }
 
 static String_View expand_escapes(String_View sv) {
@@ -625,7 +625,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		}
 
 		if (pattern_match_fail) {
-			handle_semantic_error(node->location, "Pattern matching failed");
+			handle_semantic_error(context, node->location, "Pattern matching failed");
 		}
 
 		struct { size_t key; Typed_Value value; } *static_arguments_map = NULL;;
@@ -717,7 +717,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		if (!function_type->value->function_type.arguments[i].inferred) real_argument_count++;
 	}
 	if (arrlen(arguments) != real_argument_count && !function_type->value->function_type.variadic) {
-		handle_semantic_error(node->location, "Expected %li arguments, but got %li arguments", real_argument_count, arrlen(arguments));
+		handle_semantic_error(context, node->location, "Expected %li arguments, but got %li arguments", real_argument_count, arrlen(arguments));
 	}
 
 	Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
@@ -735,7 +735,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		Value type = get_type(context, arguments[argument_index]);
 
 		if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
-			handle_expected_type_error(node, wanted_type, type);
+			handle_expected_type_error(context, node, wanted_type, type);
 		}
 		function_argument_index++;
 	}
@@ -855,7 +855,7 @@ static void process_array_access(Context *context, Node *node) {
 
 		Value value_type = get_type(context, array_access.assign_value);
 		if (!type_assignable(item_type.value, value_type.value)) {
-			handle_expected_type_error(node, item_type, value_type);
+			handle_expected_type_error(context, node, item_type, value_type);
 		}
 	} else {
 		if (data->array_access.want_pointer) {
@@ -902,7 +902,7 @@ static void process_binary_op(Context *context, Node *node) {
 	Value left_type = get_type(context, binary_operator.left);
 	Value right_type = get_type(context, binary_operator.right);
 	if (!type_assignable(left_type.value, right_type.value)) {
-		handle_mismatched_type_error(node, left_type, right_type);
+		handle_mismatched_type_error(context, node, left_type, right_type);
 	}
 
 	Value type = left_type;
@@ -992,7 +992,7 @@ static void process_break(Context *context, Node *node) {
 	}
 
 	if (while_ == NULL) {
-		handle_semantic_error(node->location, "No surrounding while");
+		handle_semantic_error(context, node->location, "No surrounding while");
 	}
 
 	While_Data while_data = get_data(context, while_)->while_;
@@ -1006,15 +1006,15 @@ static void process_break(Context *context, Node *node) {
 	if (while_data.has_type) {
 		if (type.value != NULL) {
 			if (while_data.type.value == NULL) {
-				handle_semantic_error(node->location, "Expected no value");
+				handle_semantic_error(context, node->location, "Expected no value");
 			} else if (!value_equal(type.value, while_data.type.value)) {
-				handle_mismatched_type_error(node, type, while_data.type);
+				handle_mismatched_type_error(context, node, type, while_data.type);
 			}
 		}
 
 		if (while_data.type.value != NULL) {
 			if (type.value == NULL) {
-				handle_semantic_error(node->location, "Expected value");
+				handle_semantic_error(context, node->location, "Expected value");
 			}
 		}
 	}
@@ -1101,7 +1101,7 @@ static void process_call_method(Context *context, Node *node) {
 
 	Custom_Operator_Function custom_operator_function = find_custom_operator(argument1_type.value->pointer_type.inner, call_method.method);
 	if (custom_operator_function.function == NULL) {
-		handle_semantic_error(node->location, "Method '%.*s' not found", (int) call_method.method.len, call_method.method.ptr);
+		handle_semantic_error(context, node->location, "Method '%.*s' not found", (int) call_method.method.len, call_method.method.ptr);
 	}
 
 	process_initial_argument_types(context, custom_operator_function.function, arguments);
@@ -1119,7 +1119,7 @@ static void process_character(Context *context, Node *node) {
 
 	String_View new_string = expand_escapes(character.value);
 	if (new_string.len != 1) {
-		handle_semantic_error(node->location, "Expected only one character");
+		handle_semantic_error(context, node->location, "Expected only one character");
 	}
 
 	Node_Data *data = data_new(CHARACTER_NODE);
@@ -1208,7 +1208,7 @@ static void process_deoptional(Context *context, Node *node) {
 
 		Value value_type = get_type(context, deoptional.assign_value);
 		if (!type_assignable(inner_type.value, value_type.value)) {
-			handle_expected_type_error(node, inner_type, value_type);
+			handle_expected_type_error(context, node, inner_type, value_type);
 		}
 	} else {
 		set_type(context, node, inner_type);
@@ -1234,7 +1234,7 @@ static void process_dereference(Context *context, Node *node) {
 
 		Value value_type = get_type(context, dereference.assign_value);
 		if (!type_assignable(inner_type.value, value_type.value)) {
-			handle_expected_type_error(node, inner_type, value_type);
+			handle_expected_type_error(context, node, inner_type, value_type);
 		}
 	} else {
 		set_type(context, node, inner_type);
@@ -1373,7 +1373,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 
 				Value wanted_return_type = function_type_value.value->function_type.return_type;
 				if (!type_assignable(wanted_return_type.value, returned_type.value) && !context->returned) {
-					handle_expected_type_error(node, wanted_return_type, returned_type);
+					handle_expected_type_error(context, node, wanted_return_type, returned_type);
 				}
 			}
 			(void) arrpop(context->scopes);
@@ -1533,7 +1533,7 @@ static void process_identifier(Context *context, Node *node) {
 
 			Value value_type = get_type(context, identifier.assign_value);
 			if (!type_assignable(type.value, value_type.value)) {
-				handle_expected_type_error(node, type, value_type);
+				handle_expected_type_error(context, node, type, value_type);
 			}
 		}
 	}
@@ -1579,13 +1579,13 @@ static void process_identifier(Context *context, Node *node) {
 
 			Value value_type = get_type(context, identifier.assign_value);
 			if (!type_assignable(type.value, value_type.value)) {
-				handle_expected_type_error(node, type, value_type);
+				handle_expected_type_error(context, node, type, value_type);
 			}
 		}
 	}
 
 	if (type.value == NULL) {
-		handle_semantic_error(node->location, "Identifier '%.*s' not found", (int) identifier.value.len, identifier.value.ptr);
+		handle_semantic_error(context, node->location, "Identifier '%.*s' not found", (int) identifier.value.len, identifier.value.ptr);
 	}
 
 	if (value.value != NULL) {
@@ -1681,18 +1681,18 @@ static void process_if(Context *context, Node *node) {
 			Value else_type = get_type(context, if_.else_body);
 			if (else_type.value != NULL) {
 				if (if_type.value == NULL) {
-					handle_semantic_error(node->location, "Expected value from if");
+					handle_semantic_error(context, node->location, "Expected value from if");
 				}
 			}
 
 			if (if_type.value != NULL) {
 				if (!saved_else_returned) {
 					if (else_type.value == NULL) {
-						handle_semantic_error(node->location, "Expected value from else");
+						handle_semantic_error(context, node->location, "Expected value from else");
 					}
 
 					if (!value_equal(if_type.value, else_type.value)) {
-						handle_mismatched_type_error(node, if_type, else_type);
+						handle_mismatched_type_error(context, node, if_type, else_type);
 					}
 				}
 
@@ -1702,7 +1702,7 @@ static void process_if(Context *context, Node *node) {
 		} else {
 			context->returned = saved_returned;
 			if (if_type.value != NULL) {
-				handle_semantic_error(node->location, "Expected else");
+				handle_semantic_error(context, node->location, "Expected else");
 			}
 		}
 
@@ -1834,7 +1834,7 @@ static void process_internal(Context *context, Node *node) {
 				}
 			}
 
-			inner_node = parse_source_expr(source_string, index, "");
+			inner_node = parse_source_expr(context->data, source_string, index, "");
 			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
 			process_node_context(context, temporary_context, inner_node);
 
@@ -1890,22 +1890,23 @@ static void process_internal(Context *context, Node *node) {
 				strcat(source, "/core/core.lang");
 			} else {
 				size_t slash_index = 0;
-				for (size_t i = 0; i < strlen(node->location.path); i++) {
-					if (node->location.path[i] == '/') {
+				char *node_path = context->data->source_files[node->location.path_ref];
+				for (size_t i = 0; i < strlen(node_path); i++) {
+					if (node_path[i] == '/') {
 						slash_index = i;
 					}
 				}
 
 				char *old_source = source;
 				source = malloc(slash_index + strlen(source) + 2);
-				strncpy(source, node->location.path, slash_index + 1);
+				strncpy(source, node_path, slash_index + 1);
 				source[slash_index + 1] = '\0';
 				strcat(source, old_source);
 			}
 
 			value = get_cached_file(context, source);
 			if (value.value == NULL) {
-				Node *file_node = parse_file(source);
+				Node *file_node = parse_file(context->data, source);
 
 				Scope *saved_scopes = context->scopes;
 				context->scopes = NULL;
@@ -2298,7 +2299,7 @@ static void process_return(Context *context, Node *node) {
 
 		Value type = get_type(context, return_.value);
 		if (!type_assignable(wanted_type.value, type.value)) {
-			handle_expected_type_error(node, wanted_type, type);
+			handle_expected_type_error(context, node, wanted_type, type);
 		}
 	}
 
@@ -2472,7 +2473,7 @@ static void process_structure_access(Context *context, Node *node) {
 	}
 
 	if (item_type.value == NULL) {
-		handle_semantic_error(node->location, "Item '%.*s' not found", (int) structure_access.name.len, structure_access.name.ptr);
+		handle_semantic_error(context, node->location, "Item '%.*s' not found", (int) structure_access.name.len, structure_access.name.ptr);
 	}
 
 	Node_Data *data = data_new(STRUCTURE_ACCESS_NODE);
@@ -2487,7 +2488,7 @@ static void process_structure_access(Context *context, Node *node) {
 
 		Value value_type = get_type(context, structure_access.assign_value);
 		if (!type_assignable(item_type.value, value_type.value)) {
-			handle_expected_type_error(node, item_type, value_type);
+			handle_expected_type_error(context, node, item_type, value_type);
 		}
 	} else {
 		if (data->structure_access.want_pointer) {
@@ -2616,7 +2617,7 @@ static void process_switch(Context *context, Node *node) {
 			if (case_type.value != NULL) {
 				if (switch_type.value == NULL) {
 					if (set_switch_type) {
-						handle_semantic_error(node->location, "Expected value from case");
+						handle_semantic_error(context, node->location, "Expected value from case");
 					} else {
 						switch_type = case_type;
 					}
@@ -2627,11 +2628,11 @@ static void process_switch(Context *context, Node *node) {
 
 			if (switch_type.value != NULL) {
 				if (case_type.value == NULL) {
-					handle_semantic_error(node->location, "Expected value from case");
+					handle_semantic_error(context, node->location, "Expected value from case");
 				}
 
 				if (!value_equal(switch_type.value, case_type.value)) {
-					handle_mismatched_type_error(node, switch_type, case_type);
+					handle_mismatched_type_error(context, node, switch_type, case_type);
 				}
 
 				data->switch_.type = switch_type;
@@ -2644,7 +2645,7 @@ static void process_switch(Context *context, Node *node) {
 		if (case_count < arrlen(enum_type->enum_type.items) && !else_case) {
 			context->returned = saved_returned;
 			if (switch_type.value != NULL) {
-				handle_semantic_error(node->location, "Expected else case");
+				handle_semantic_error(context, node->location, "Expected else case");
 			}
 		}
 	}
@@ -2689,13 +2690,13 @@ static void process_variable(Context *context, Node *node) {
 			type = value_type;
 
 			if (value_type.value == NULL) {
-				handle_semantic_error(node->location, "Expected value");
+				handle_semantic_error(context, node->location, "Expected value");
 			}
 		} else if (!type_assignable(type.value, value_type.value)) {
-			handle_expected_type_error(node, type, value_type);
+			handle_expected_type_error(context, node, type, value_type);
 		}
 	} else if (type.value == NULL) {
-		handle_semantic_error(node->location, "Expected value");
+		handle_semantic_error(context, node->location, "Expected value");
 	}
 
 	Node_Data *data = data_new(VARIABLE_NODE);
@@ -2739,15 +2740,15 @@ static void process_while(Context *context, Node *node) {
 		if (data->while_.has_type) {
 			if (type.value != NULL) {
 				if (while_type.value == NULL) {
-					handle_semantic_error(node->location, "Expected no value in else");
+					handle_semantic_error(context, node->location, "Expected no value in else");
 				} else if (!value_equal(type.value, while_type.value)) {
-					handle_mismatched_type_error(node, type, while_type);
+					handle_mismatched_type_error(context, node, type, while_type);
 				}
 			}
 
 			if (while_type.value != NULL) {
 				if (type.value == NULL) {
-					handle_semantic_error(node->location, "Expected value in else");
+					handle_semantic_error(context, node->location, "Expected value in else");
 				}
 			}
 		}
@@ -2909,8 +2910,8 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 	context->temporary_context = saved_temporary_context;
 }
 
-Context process(Node *root, Codegen codegen) {
-	Context context = { .codegen = codegen };
+Context process(Data *data, Node *root, Codegen codegen) {
+	Context context = { .codegen = codegen, .data = data };
 
 	process_node(&context, root);
 

@@ -15,33 +15,19 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	// Node *internal_root = parse_source((char *) src_internal_lang, src_internal_lang_len, "internal");
+	Data data = {};
+
+	Node *internal_root = parse_source(&data, (char *) src_internal_lang, src_internal_lang_len, "internal");
 
 	char *source_file = argv[1];
-	FILE *file = fopen(realpath(source_file, NULL), "r");
+	Node *root = parse_file(&data, realpath(source_file, NULL));
 
-	fseek(file, 0, SEEK_END);
-	long length = ftell(file);
-	fseek(file, 0, SEEK_SET);
+	Codegen codegen = llvm_codegen();
 
-	char *contents = malloc(length);
-	fread(contents, length, 1, file);
-	fclose(file);
-
-	for (long int i = 0; i < 10000; i++) {
-		Node *root = parse_source(contents, length, "test.lang");
-		(void) root;
-	}
-
-	// char *source_file = argv[1];
-	// Node *root = parse_file(realpath(source_file, NULL));
-
-	// Codegen codegen = llvm_codegen();
-
-	// Context context = process(internal_root, codegen);
-	// context.internal_root = internal_root;
-	// process_node(&context, root);
-	// codegen.build_fn(context, root, codegen.data);
+	Context context = process(&data, internal_root, codegen);
+	context.internal_root = internal_root;
+	process_node(&context, root);
+	codegen.build_fn(context, root, codegen.data);
 
 	return 0;
 }

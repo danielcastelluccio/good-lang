@@ -9,13 +9,13 @@
 #include "parser.h"
 #include "util.h"
 
-static void handle_token_error(Token_Kind expected, Token_Data actual) {
-	printf("%s:%zu:%zu: Unexpected token '%s', expected '%s'\n", actual.location.path, actual.location.row, actual.location.column, token_to_string(actual.kind), token_to_string(expected));
+static void handle_token_error(Lexer *lexer, Token_Kind expected, Token_Data actual) {
+	printf("%s:%u:%u: Unexpected token '%s', expected '%s'\n", lexer->path, actual.location.row, actual.location.column, token_to_string(actual.kind), token_to_string(expected));
 	exit(1);
 }
 
-static void handle_token_error_no_expected(Token_Data actual) {
-	printf("%s:%zu:%zu: Unexpected token '%s'\n", actual.location.path, actual.location.row, actual.location.column, token_to_string(actual.kind));
+static void handle_token_error_no_expected(Lexer *lexer, Token_Data actual) {
+	printf("%s:%u:%u: Unexpected token '%s'\n", lexer->path, actual.location.row, actual.location.column, token_to_string(actual.kind));
 	exit(1);
 }
 
@@ -35,7 +35,7 @@ static bool lexer_peek_check(Lexer *lexer, Token_Kind kind) {
 static Token_Data lexer_consume_check(Lexer *lexer, Token_Kind kind) {
 	Token_Data data = lexer_next(lexer, true);
 	if (data.kind != kind) {
-		handle_token_error(kind, data);
+		handle_token_error(lexer, kind, data);
 	}
 
 	return data;
@@ -130,7 +130,7 @@ static Node *parse_structure(Lexer *lexer) {
 			} else if (token.kind == CURLY_BRACE_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -392,7 +392,7 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 			} else if (token.kind == PARENTHESIS_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -518,7 +518,7 @@ static Node *parse_call_method(Lexer *lexer, Node *argument1) {
 			} else if (token.kind == PARENTHESIS_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -598,7 +598,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 			} else if (token.kind == CURLY_BRACE_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -652,7 +652,7 @@ static Node *parse_union_type(Lexer *lexer) {
 			} else if (token.kind == CURLY_BRACE_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -685,7 +685,7 @@ static Node *parse_tagged_union_type(Lexer *lexer) {
 			} else if (token.kind == CURLY_BRACE_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -712,7 +712,7 @@ static Node *parse_enum_type(Lexer *lexer) {
 			} else if (token.kind == CURLY_BRACE_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -830,7 +830,7 @@ static Node *parse_if(Lexer *lexer) {
 			} else if (token.kind == VERTICAL_BAR) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 
@@ -906,7 +906,7 @@ static Node *parse_for(Lexer *lexer) {
 		} else if (token.kind == VERTICAL_BAR) {
 			break;
 		} else {
-			handle_token_error_no_expected(token);
+			handle_token_error_no_expected(lexer, token);
 		}
 	}
 	lexer_consume_check(lexer, VERTICAL_BAR);
@@ -1100,7 +1100,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 				} else if (token.kind == BRACE_CLOSED) {
 					break;
 				} else {
-					handle_token_error_no_expected(token);
+					handle_token_error_no_expected(lexer, token);
 				}
 			}
 		}
@@ -1141,7 +1141,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 			} else if (token.kind == PARENTHESIS_CLOSED) {
 				break;
 			} else {
-				handle_token_error_no_expected(token);
+				handle_token_error_no_expected(lexer, token);
 			}
 		}
 	}
@@ -1318,7 +1318,7 @@ static Node *parse_expression(Lexer *lexer) {
 			break;
 		}
 		default:
-			handle_token_error_no_expected(token);
+			handle_token_error_no_expected(lexer, token);
 	}
 
 	bool operating = true;
@@ -1380,13 +1380,14 @@ static Node *parse_expression(Lexer *lexer) {
 	return result;
 }
 
-Node *parse_source_expr(char *source, size_t length, char *path) {
-	Lexer lexer = lexer_create(path, source, length);
+Node *parse_source_expr(Data *data, char *source, size_t length, char *path) {
+	Lexer lexer = lexer_create(path, source, length, arrlen(data->source_files));
 	return parse_expression(&lexer);
 }
 
-Node *parse_source(char *source, size_t length, char *path) {
-	Lexer lexer = lexer_create(path, source, length);
+Node *parse_source(Data *data, char *source, size_t length, char *path) {
+	Lexer lexer = lexer_create(path, source, length, arrlen(data->source_files));
+	arrpush(data->source_files, path);
 
 	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
 	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
@@ -1399,7 +1400,7 @@ Node *parse_source(char *source, size_t length, char *path) {
 	return root;
 }
 
-Node *parse_file(char *path) {
+Node *parse_file(Data *data, char *path) {
 	FILE *file = fopen(path, "r");
 	if (!file) {
 		printf("Failed to open path '%s'\n", path);
@@ -1415,5 +1416,5 @@ Node *parse_file(char *path) {
 
 	fclose(file);
 
-	return parse_source(contents, length, path);
+	return parse_source(data, contents, length, path);
 }

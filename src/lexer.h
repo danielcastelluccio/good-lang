@@ -91,9 +91,10 @@ typedef struct {
 	size_t column;
 	Token_Data cached_token;
 	bool has_cached;
+	uint32_t path_ref;
 } Lexer;
 
-Lexer lexer_create(char *path, char *source, size_t source_length);
+Lexer lexer_create(char *path, char *source, size_t source_length, uint32_t source_ref);
 
 Token_Data lexer_next(Lexer *lexer, bool advance);
 

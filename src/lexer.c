@@ -5,7 +5,7 @@
 
 #include "lexer.h"
 
-Lexer lexer_create(char *path, char *source, size_t source_length) {
+Lexer lexer_create(char *path, char *source, size_t source_length, uint32_t path_ref) {
 	return (Lexer) {
 		.source = source,
 		.source_length = source_length,
@@ -13,7 +13,8 @@ Lexer lexer_create(char *path, char *source, size_t source_length) {
 		.path = path,
 		.row = 1,
 		.column = 1,
-		.has_cached = false
+		.has_cached = false,
+		.path_ref = path_ref
 	};
 }
 
@@ -38,7 +39,10 @@ static bool is_whitespace(char character) {
 }
 
 static Token_Data create_token(Token_Kind kind, Lexer *lexer) {
-	return (Token_Data) { .kind = kind, .location = { .path = lexer->path, .row = lexer->row, .column = lexer->column - 1 } };
+	return (Token_Data) {
+		.kind = kind,
+		.location = { .path_ref = lexer->path_ref, .row = lexer->row, .column = lexer->column - 1 }
+	};
 }
 
 static String_View extract_string(char *source, size_t start, size_t end) {
@@ -297,7 +301,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = (Token_Data) {
 				.kind = STRING,
 				.string = extract_string(lexer->source, string_start, string_end),
-				.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+				.location = { .path_ref = lexer->path_ref, .row = string_start_row, .column = string_start_column }
 			};
 			break;
 		}
@@ -316,7 +320,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = (Token_Data) {
 				.kind = CHARACTER,
 				.string = extract_string(lexer->source, string_start, string_end),
-				.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+				.location = { .path_ref = lexer->path_ref, .row = string_start_row, .column = string_start_column }
 			};
 			break;
 		}
@@ -339,12 +343,12 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 					result = (Token_Data) {
 						.kind = IDENTIFIER,
 						.string = extracted_string,
-						.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+						.location = { .path_ref = lexer->path_ref, .row = string_start_row, .column = string_start_column }
 					};
 				} else {
 					result = (Token_Data) {
 						.kind = kind,
-						.location = { .path = lexer->path, .row = string_start_row, .column = string_start_column }
+						.location = { .path_ref = lexer->path_ref, .row = string_start_row, .column = string_start_column }
 					};
 				}
 				break;
@@ -369,7 +373,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 					result = (Token_Data) {
 						.kind = DECIMAL,
 						.decimal = extracted_decimal,
-						.location = { .path = lexer->path, .row = number_start_row, .column = number_start_column }
+						.location = { .path_ref = lexer->path_ref, .row = number_start_row, .column = number_start_column }
 					};
 				} else {
 					size_t number_end = lexer->position;
@@ -378,7 +382,7 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 					result = (Token_Data) {
 						.kind = INTEGER,
 						.integer = extracted_integer,
-						.location = { .path = lexer->path, .row = number_start_row, .column = number_start_column }
+						.location = { .path_ref = lexer->path_ref, .row = number_start_row, .column = number_start_column }
 					};
 				}
 				break;

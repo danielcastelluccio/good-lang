@@ -3,13 +3,14 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "string_view.h"
 
 typedef struct {
-	char *path;
-	size_t row;
-	size_t column;
+	uint32_t path_ref;
+	uint32_t row;
+	uint32_t column;
 } Source_Location;
 
 typedef struct Node Node;
@@ -354,6 +355,7 @@ typedef enum {
 
 struct Node {
 	Node_Kind kind;
+	Source_Location location;
 	union {
 		Array_Access_Node array_access;
 		Array_Type_Node array_type;
@@ -399,7 +401,6 @@ struct Node {
 		Variable_Node variable;
 		While_Node while_;
 	};
-	Source_Location location;
 };
 
 Node *ast_new(Node_Kind kind, Source_Location location);
