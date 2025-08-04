@@ -643,18 +643,6 @@ static Value evaluate_internal(State *state, Node *node) {
 		return (Value) {};
 	} else if (internal.kind == INTERNAL_EMBED) {
 		return evaluate_state(state, internal_data.node);
-	} else if (internal.kind == INTERNAL_EXPRESSION) {
-		Value value = evaluate(state->context, internal.inputs[0]);
-		char *internal_name = malloc(value.value->array_view.length + 1);
-		internal_name[value.value->array_view.length] = '\0';
-
-		for (size_t i = 0; i < value.value->array_view.length; i++) {
-			internal_name[i] = value.value->array_view.values[i]->byte.value;
-		}
-
-		Value result = create_value(INTERNAL_VALUE);
-		result.value->internal.identifier = internal_name;
-		return result;
 	} else {
 		return internal_data.value;
 	}

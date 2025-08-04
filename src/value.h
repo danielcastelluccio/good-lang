@@ -18,7 +18,6 @@ typedef enum {
 	FUNCTION_TYPE_VALUE,
 	INTEGER_VALUE,
 	INTEGER_TYPE_VALUE,
-	INTERNAL_VALUE,
 	MODULE_VALUE,
 	MODULE_TYPE_VALUE,
 	OPTIONAL_VALUE,
@@ -197,10 +196,6 @@ typedef struct {
 	size_t size;
 } Integer_Type_Value;
 
-typedef struct {
-	char *identifier;
-} Internal_Value;
-
 struct Value_Data {
 	Value_Tag tag;
 	union {
@@ -219,7 +214,6 @@ struct Value_Data {
 		Function_Type_Value function_type;
 		Integer_Value integer;
 		Integer_Type_Value integer_type;
-		Internal_Value internal;
 		Module_Value module;
 		Optional_Value optional;
 		Optional_Type_Value optional_type;
@@ -251,3 +245,4 @@ Value create_range_type(Value value);
 Value create_integer(size_t value);
 Value create_byte(char value);
 Value create_boolean(bool value);
+Value create_enum(size_t value);

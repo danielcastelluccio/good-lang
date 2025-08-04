@@ -74,3 +74,9 @@ Value create_boolean(bool value) {
 	boolean.value->boolean.value = value;
 	return boolean;
 }
+
+Value create_enum(size_t value) {
+	Value enum_ = create_value(ENUM_VALUE);
+	enum_.value->enum_.value = value;
+	return enum_;
+}

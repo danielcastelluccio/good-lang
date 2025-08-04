@@ -106,7 +106,6 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case 'i':
 			if (strcmp(identifier, "if") == 0) result = KEYWORD_IF;
-			else if (strcmp(identifier, "internal") == 0) result = KEYWORD_INTERNAL;
 			else if (strcmp(identifier, "is") == 0) result = KEYWORD_IS;
 			break;
 		case 'm':
@@ -437,8 +436,6 @@ char *token_to_string(Token_Kind kind) {
 			return "for";
 		case KEYWORD_IF:
 			return "if";
-		case KEYWORD_INTERNAL:
-			return "internal";
 		case KEYWORD_IS:
 			return "is";
 		case KEYWORD_MOD:

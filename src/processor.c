@@ -684,16 +684,14 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 				hmput(arrlast(context->scopes).static_bindings, sv_hash(static_arguments[i].identifier), static_arguments[i].value);
 			}
 
-			if (function_value.value->tag == FUNCTION_STUB_VALUE) {
-				process_function(context, function_value.value->function_stub.node, true);
+			assert(function_value.value->tag == FUNCTION_STUB_VALUE);
 
-				context->compile_only = compile_only_parent;
+			process_function(context, function_value.value->function_stub.node, true);
 
-				*function_type = get_type(context, function_value.value->function_stub.node);
-				function_value = evaluate(context, function_value.value->function_stub.node);
-			} else {
-				assert(false);
-			}
+			context->compile_only = compile_only_parent;
+
+			*function_type = get_type(context, function_value.value->function_stub.node);
+			function_value = evaluate(context, function_value.value->function_stub.node);
 
 			context->static_id = saved_static_id;
 
@@ -1846,12 +1844,6 @@ static void process_internal(Context *context, Node *node) {
 			process_node(context, internal.inputs[0]);
 			break;
 		}
-		case INTERNAL_EXPRESSION: {
-			process_node(context, internal.inputs[0]);
-
-			set_type(context, node, context->temporary_context.wanted_type);
-			break;
-		}
 		case INTERNAL_SELF: {
 			for (long int i = arrlen(context->scopes) - 1; i >= 0; i--) {
 				if (context->scopes[i].current_type.value != NULL) {
@@ -2127,6 +2119,22 @@ static void process_internal(Context *context, Node *node) {
 			Value type_info_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Type_Info")))->define.typed_value.value;
 			context->static_id = saved_static_id;
 			set_type(context, node, type_info_type);
+			break;
+		}
+		case INTERNAL_OS: {
+			Value operating_system_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Operating_System")))->define.typed_value.value;
+
+			#if defined(__linux__)
+				size_t os_value = 0;
+			#elif defined(__APPLE__)
+				size_t os_value = 1;
+			#elif defined(_WIN32)
+				size_t os_value = 2;
+			#endif
+
+			value = create_enum(os_value);
+			set_type(context, node, operating_system_type);
+			break;
 		}
 	}
 

@@ -233,6 +233,13 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 					return ast_new(NULL_NODE, token.location);
 				}
 				break;
+			case 'O':
+				if (sv_eq_cstr(token.string, "OS")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_OS;
+					return internal;
+				}
+				break;
 			case 'p':
 				if (sv_eq_cstr(token.string, "print")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
@@ -846,17 +853,6 @@ static Node *parse_if(Lexer *lexer) {
 	return if_;
 }
 
-static Node *parse_internal(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
-	internal->internal.kind = INTERNAL_EXPRESSION;
-
-	arrpush(internal->internal.inputs, parse_expression(lexer));
-
-	return internal;
-}
-
 static Node *parse_while(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
@@ -1251,10 +1247,6 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_IF: {
 			result = parse_if(lexer);
-			break;
-		}
-		case KEYWORD_INTERNAL: {
-			result = parse_internal(lexer);
 			break;
 		}
 		case KEYWORD_MOD: {

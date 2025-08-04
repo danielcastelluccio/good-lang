@@ -52,5 +52,3 @@ def Operating_System = enum {
 	MACOS,
 	WINDOWS
 };
-
-def operating_system: Operating_System = internal "operating_system";
