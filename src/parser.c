@@ -272,6 +272,10 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
+					while (lexer_peek(lexer).kind == COMMA) {
+						lexer_consume(lexer);
+						arrpush(internal->internal.inputs, parse_expression(lexer));
+					}
 					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
 					return internal;

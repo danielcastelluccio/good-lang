@@ -181,6 +181,14 @@ Value create_value_data(Value_Data *value, Node *node) {
 static Value initialize_value(Value type) {
 	Value value = {};
 	switch (type.value->tag) {
+		case ARRAY_TYPE_VALUE: {
+			value = create_value(ARRAY_VALUE);
+
+			for (long int i = 0; i < type.value->array_type.size.value->integer.value; i++) {
+				arrpush(value.value->array.values, initialize_value(type.value->array_type.inner).value);
+			}
+			break;
+		}
 		case INTEGER_TYPE_VALUE: {
 			value = create_integer(0);
 			break;
@@ -193,11 +201,24 @@ static Value initialize_value(Value type) {
 			}
 			break;
 		}
-		case ARRAY_TYPE_VALUE: {
-			value = create_value(ARRAY_VALUE);
+		default:
+			assert(false);
+	}
 
-			for (long int i = 0; i < type.value->array_type.size.value->integer.value; i++) {
-				arrpush(value.value->array.values, initialize_value(type.value->array_type.inner).value);
+	return value;
+}
+
+static Value clone_value(Value input) {
+	Value result = {};
+	switch (input.value->tag) {
+		case INTEGER_VALUE: {
+			result = create_integer(input.value->integer.value);
+			break;
+		}
+		case STRUCT_VALUE: {
+			result = create_value(STRUCT_VALUE);
+			for (long int i = 0; i < arrlen(input.value->struct_.values); i++) {
+				arrpush(result.value->struct_.values, clone_value((Value) { .value = input.value->struct_.values[i] }).value);
 			}
 			break;
 		}
@@ -205,7 +226,7 @@ static Value initialize_value(Value type) {
 			assert(false);
 	}
 
-	return value;
+	return result;
 }
 
 static Value evaluate_state(State *state, Node *node);
@@ -517,7 +538,7 @@ static Value evaluate_call(State *state, Node *node) {
 
 	Value *arguments = NULL;
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
-		arrpush(arguments, evaluate_state(state, call.arguments[i]));
+		arrpush(arguments, clone_value(evaluate_state(state, call.arguments[i])));
 	}
 
 	Value_Data *result = NULL;
@@ -681,8 +702,10 @@ static Value evaluate_internal(State *state, Node *node) {
 	Internal_Data internal_data = get_data(state->context, node)->internal;
 
 	if (internal.kind == INTERNAL_PRINT) {
-		Value value = evaluate_state(state, internal.inputs[0]);
-		print_value(value.value);
+		for (long int i = 0; i < arrlen(internal.inputs); i++) {
+			Value value = evaluate_state(state, internal.inputs[i]);
+			print_value(value.value);
+		}
 
 		return (Value) {};
 	} else if (internal.kind == INTERNAL_EMBED) {
@@ -698,7 +721,7 @@ static Value evaluate_variable(State *state, Node *node) {
 
 	Value value = {};
 	if (variable.value != NULL) {
-		value = evaluate_state(state, variable.value);
+		value = clone_value(evaluate_state(state, variable.value));
 	} else {
 		value = initialize_value(node_data->variable.type);
 	}

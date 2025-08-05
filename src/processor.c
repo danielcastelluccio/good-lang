@@ -1868,7 +1868,9 @@ static void process_internal(Context *context, Node *node) {
 			break;
 		}
 		case INTERNAL_PRINT: {
-			process_node(context, internal.inputs[0]);
+			for (long int i = 0; i < arrlen(internal.inputs); i++) {
+				process_node(context, internal.inputs[i]);
+			}
 			break;
 		}
 		case INTERNAL_SELF: {
