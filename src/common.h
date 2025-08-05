@@ -182,6 +182,7 @@ typedef struct {
 	Value item_type;
 	Custom_Operator_Function custom_operator_function;
 	bool want_pointer;
+	bool pointer_access;
 } Array_Access_Data;
 
 typedef struct {

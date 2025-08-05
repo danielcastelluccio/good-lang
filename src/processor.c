@@ -755,11 +755,11 @@ static void process_enforce_pointer(Context *context, Node *node) {
 	}
 }
 
-static void process_enforce_pointer_sometimes(Context *context, Node *node, bool is_assign) {
+static void process_enforce_pointer_sometimes(Context *context, Node *node, bool force_enforce, Node *parent_node) {
 	process_node(context, node);
 
 	Value real_structure_type = get_type(context, node);
-	if ((is_assign || context->temporary_context.want_pointer) && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
+	if ((force_enforce || context->temporary_context.want_pointer || (real_structure_type.value->tag == STRUCT_TYPE_VALUE && parent_node->kind != STRUCTURE_ACCESS_NODE)) && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, node);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
@@ -791,41 +791,33 @@ void add_cached_file(Context *context, char *path, Value value) {
 static void process_array_access(Context *context, Node *node) {
 	Array_Access_Node array_access = node->array_access;
 
-	process_node(context, array_access.parent);
-
 	Temporary_Context temporary_context = { .wanted_type = create_integer_type(false, context->codegen.default_integer_size) };
 	process_node_context(context, temporary_context, array_access.index);
 
-	Value array_type = get_type(context, array_access.parent);
-	Value array_type_original = array_type;
-	if (array_type.value->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, array_access.parent);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, array_access.parent);
-
-		array_type = get_type(context, array_access.parent);
+	process_enforce_pointer_sometimes(context, array_access.parent, array_access.assign_value != NULL, node);
+	Value raw_array_type = get_type(context, array_access.parent);
+	Value array_type = raw_array_type;
+	if (array_type.value->tag == POINTER_TYPE_VALUE) {
+		array_type = array_type.value->pointer_type.inner;
 	}
-
-	assert(array_type.value->tag == POINTER_TYPE_VALUE);
 
 	Custom_Operator_Function custom_operator_function = find_custom_operator(array_type.value->pointer_type.inner, cstr_to_sv("[]"));
 
 	if (custom_operator_function.function == NULL
-			&& array_type.value->pointer_type.inner.value->tag != ARRAY_TYPE_VALUE
-			&& array_type.value->pointer_type.inner.value->tag != ARRAY_VIEW_TYPE_VALUE) {
-		handle_type_error(node, "Cannot perform array access operation on %s", array_type_original);
+			&& array_type.value->tag != ARRAY_TYPE_VALUE
+			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+		handle_type_error(node, "Cannot perform array access operation on %s", array_type);
 	}
 
 	Value item_type = {};
 	if (custom_operator_function.function == NULL) {
-		switch (array_type.value->pointer_type.inner.value->tag) {
+		switch (array_type.value->tag) {
 			case ARRAY_TYPE_VALUE: {
-				item_type = array_type.value->pointer_type.inner.value->array_type.inner;
+				item_type = array_type.value->array_type.inner;
 				break;
 			}
 			case ARRAY_VIEW_TYPE_VALUE: {
-				item_type = array_type.value->pointer_type.inner.value->array_view_type.inner;
+				item_type = array_type.value->array_view_type.inner;
 				break;
 			}
 			default:
@@ -847,6 +839,7 @@ static void process_array_access(Context *context, Node *node) {
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
 	data->array_access.custom_operator_function = custom_operator_function;
 	data->array_access.item_type = item_type;
+	data->array_access.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
 
 	if (array_access.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
@@ -2494,7 +2487,7 @@ static void process_structure(Context *context, Node *node) {
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
-	process_enforce_pointer_sometimes(context, structure_access.parent, structure_access.assign_value != NULL);
+	process_enforce_pointer_sometimes(context, structure_access.parent, structure_access.assign_value != NULL, node);
 
 	Value raw_structure_type = get_type(context, structure_access.parent);
 

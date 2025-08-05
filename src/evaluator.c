@@ -178,6 +178,36 @@ Value create_value_data(Value_Data *value, Node *node) {
 	return (Value) { .value = value, .node = node };
 }
 
+static Value initialize_value(Value type) {
+	Value value = {};
+	switch (type.value->tag) {
+		case INTEGER_TYPE_VALUE: {
+			value = create_integer(0);
+			break;
+		}
+		case STRUCT_TYPE_VALUE: {
+			value = create_value(STRUCT_VALUE);
+
+			for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
+				arrpush(value.value->struct_.values, initialize_value(type.value->struct_type.members[i]).value);
+			}
+			break;
+		}
+		case ARRAY_TYPE_VALUE: {
+			value = create_value(ARRAY_VALUE);
+
+			for (long int i = 0; i < type.value->array_type.size.value->integer.value; i++) {
+				arrpush(value.value->array.values, initialize_value(type.value->array_type.inner).value);
+			}
+			break;
+		}
+		default:
+			assert(false);
+	}
+
+	return value;
+}
+
 static Value evaluate_state(State *state, Node *node);
 
 static Value evaluate_function(State *state, Node *node) {
@@ -368,6 +398,7 @@ static Value evaluate_array_view_type(State *state, Node *node) {
 }
 
 static Value evaluate_identifier(State *state, Node *node) {
+	Identifier_Node identifier = node->identifier;
 	Identifier_Data identifier_data = get_data(state->context, node)->identifier;
 
 	switch (identifier_data.kind) {
@@ -381,7 +412,12 @@ static Value evaluate_identifier(State *state, Node *node) {
 			return create_value_data(NULL, node);
 		case IDENTIFIER_VARIABLE: {
 			Node_Data *variable_data = get_data(state->context, identifier_data.variable);
-			return hmget(state->variables, variable_data);
+			if (identifier.assign_value != NULL) {
+				hmput(state->variables, variable_data, evaluate_state(state, identifier.assign_value));
+				return (Value) {};
+			} else {
+				return hmget(state->variables, variable_data);
+			}
 		}
 		case IDENTIFIER_BINDING: {
 			Node *node = identifier_data.binding.node;
@@ -594,11 +630,20 @@ static Value evaluate_return(State *state, Node *node) {
 static Value evaluate_structure(State *state, Node *node) {
 	Structure_Node structure = node->structure;
 	Structure_Data structure_data = get_data(state->context, node)->structure;
-	assert(arrlen(structure.values) == 0);
 
 	switch (structure_data.type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
 			Value result = create_value_data(value_new(STRUCT_VALUE), node);
+			for (long int i = 0; i < arrlen(structure.values); i++) {
+				arrpush(result.value->struct_.values, evaluate_state(state, structure.values[i].node).value);
+			}
+			return result;
+		}
+		case ARRAY_TYPE_VALUE: {
+			Value result = create_value_data(value_new(ARRAY_VALUE), node);
+			for (long int i = 0; i < arrlen(structure.values); i++) {
+				arrpush(result.value->array.values, evaluate_state(state, structure.values[i].node).value);
+			}
 			return result;
 		}
 		default:
@@ -654,6 +699,8 @@ static Value evaluate_variable(State *state, Node *node) {
 	Value value = {};
 	if (variable.value != NULL) {
 		value = evaluate_state(state, variable.value);
+	} else {
+		value = initialize_value(node_data->variable.type);
 	}
 
 	hmput(state->variables, node_data, value);
@@ -665,9 +712,6 @@ static Value evaluate_structure_access(State *state, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 	Structure_Access_Data structure_access_data = get_data(state->context, node)->structure_access;
 
-	assert(structure_access_data.structure_type.value->tag == STRUCT_TYPE_VALUE || structure_access_data.structure_type.value->tag == ARRAY_VIEW_TYPE_VALUE);
-	assert(!structure_access_data.pointer_access);
-
 	switch (structure_access_data.structure_type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
 			Struct_Type_Value structure_type = structure_access_data.structure_type.value->struct_type;
@@ -675,7 +719,12 @@ static Value evaluate_structure_access(State *state, Node *node) {
 
 			for (long int i = 0; i < arrlen(structure_type.members); i++) {
 				if (sv_eq(structure_type.node->struct_type.members[i].name, structure_access.name)) {
-					return (Value) { .value = structure_value.values[i] };
+					if (structure_access.assign_value != NULL) {
+						structure_value.values[i] = evaluate_state(state, structure_access.assign_value).value;
+						return (Value) {};
+					} else {
+						return (Value) { .value = structure_value.values[i] };
+					}
 				}
 			}
 			break;
@@ -689,6 +738,29 @@ static Value evaluate_structure_access(State *state, Node *node) {
 				return (Value) { .value = create_integer(array_view_value.length).value };
 			} else {
 				assert(false);
+			}
+			break;
+		}
+		default:
+			assert(false);
+	}
+	assert(false);
+}
+
+static Value evaluate_array_access(State *state, Node *node) {
+	Array_Access_Node array_access = node->array_access;
+	Array_Access_Data array_access_data = get_data(state->context, node)->array_access;
+
+	switch (array_access_data.array_type.value->tag) {
+		case ARRAY_TYPE_VALUE: {
+			Array_Value array_value = evaluate_state(state, array_access.parent).value->array;
+
+			long index = evaluate_state(state, array_access.index).value->integer.value;
+			if (array_access.assign_value != NULL) {
+				array_value.values[index] = evaluate_state(state, array_access.assign_value).value;
+				return (Value) {};
+			} else {
+				return (Value) { .value = array_value.values[index] };
 			}
 			break;
 		}
@@ -856,6 +928,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case INTERNAL_NODE:          return evaluate_internal(state, node);
 		case VARIABLE_NODE:          return evaluate_variable(state, node);
 		case STRUCTURE_ACCESS_NODE:  return evaluate_structure_access(state, node);
+		case ARRAY_ACCESS_NODE:      return evaluate_array_access(state, node);
 		case SWITCH_NODE:            return evaluate_switch(state, node);
 		case FOR_NODE:               return evaluate_for(state, node);
 		case IF_NODE:                return evaluate_if(state, node);
@@ -863,6 +936,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case CAST_NODE:              return evaluate_cast(state, node);
 		case RANGE_NODE:             return evaluate_range(state, node);
 		case EXTERN_NODE:            return evaluate_extern(state, node);
+		case DEFINE_NODE:            return (Value) {};
 		default:                     assert(false);
 	}
 }
