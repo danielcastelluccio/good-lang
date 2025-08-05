@@ -368,18 +368,13 @@ static Value evaluate_array_view_type(State *state, Node *node) {
 }
 
 static Value evaluate_identifier(State *state, Node *node) {
-	Identifier_Node identifier = node->identifier;
 	Identifier_Data identifier_data = get_data(state->context, node)->identifier;
 
 	switch (identifier_data.kind) {
 		case IDENTIFIER_VALUE:
 			return identifier_data.value;
 		case IDENTIFIER_STATIC_VARIABLE:
-			if (identifier.assign_value != NULL) {
-				return hmput(state->context->static_variables, identifier_data.static_variable.node_data, evaluate_state(state, identifier.assign_value));
-			} else {
-				return hmget(state->context->static_variables, identifier_data.static_variable.node_data);
-			}
+			return hmget(state->context->static_variables, identifier_data.static_variable.node_data);
 		case IDENTIFIER_ARGUMENT:
 			return function_arguments[identifier_data.argument_index];
 		case IDENTIFIER_UNDERSCORE:

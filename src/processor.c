@@ -1610,6 +1610,10 @@ static void process_identifier(Context *context, Node *node) {
 			if (!type_assignable(type.value, value_type.value)) {
 				handle_expected_type_error(context, node, type, value_type);
 			}
+
+			if (identifier.assign_static) {
+				hmput(context->static_variables, lookup_result.static_variable.node_data, evaluate(context, identifier.assign_value));
+			}
 		}
 	}
 

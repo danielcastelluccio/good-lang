@@ -562,6 +562,12 @@ static Node *parse_call_method(Lexer *lexer, Node *argument1) {
 static Node *parse_assign(Lexer *lexer, Node *target) {
 	lexer_consume(lexer);
 
+	bool static_ = false;
+	if (lexer_peek(lexer).kind == KEYWORD_STATIC) {
+		lexer_consume(lexer);
+		static_ = true;
+	}
+
 	Node *assign_value = parse_expression(lexer);
 
 	switch (target->kind) {
@@ -571,6 +577,7 @@ static Node *parse_assign(Lexer *lexer, Node *target) {
 		}
 		case IDENTIFIER_NODE: {
 			target->identifier.assign_value = assign_value;
+			target->identifier.assign_static = static_;
 			return target;
 		}
 		case ARRAY_ACCESS_NODE: {

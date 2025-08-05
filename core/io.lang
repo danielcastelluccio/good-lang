@@ -101,7 +101,7 @@ def print = fn [T](static fmt: []byte, args: T) {
 		for static fmt |char| {
 			if static char == '{' {
 				print_value(embed("args._", cast(byte) argument_index + 48));
-				run argument_index = argument_index + 1;
+				argument_index =static argument_index + 1;
 			} else if static char == '}' {
 			} else {
 				_ = c::printf("%c\0", char);
