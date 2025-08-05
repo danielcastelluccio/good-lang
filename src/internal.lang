@@ -44,6 +44,8 @@ def Type_Info = tagged_union {
 		members: []type
 	},
 	Byte: struct {
+	},
+	Pointer: struct {
 	}
 };
 

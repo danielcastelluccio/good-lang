@@ -188,7 +188,9 @@ typedef struct {
 		INTERNAL_SIZE_OF,
 		INTERNAL_IMPORT,
 		INTERNAL_TYPE_INFO_OF,
-		INTERNAL_OS
+		INTERNAL_OS,
+		INTERNAL_OK,
+		INTERNAL_ERR
 	} kind;
 	Node **inputs; // stb_ds
 } Internal_Node;
@@ -237,11 +239,6 @@ typedef struct {
 
 typedef struct {
 	Node *value;
-	enum {
-		RETURN_STANDARD,
-		RETURN_SUCCESS,
-		RETURN_ERROR
-	} type;
 } Return_Node;
 
 typedef struct {

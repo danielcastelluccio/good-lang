@@ -190,6 +190,17 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 					lexer_consume(lexer);
 
 					return internal;
+				} else if (sv_eq_cstr(token.string, "err")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_ERR;
+
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
+						arrpush(internal->internal.inputs, parse_expression(lexer));
+					}
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+					return internal;
 				}
 				break;
 			case 'f':
@@ -231,6 +242,20 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 			case 'n':
 				if (sv_eq_cstr(token.string, "null")) {
 					return ast_new(NULL_NODE, token.location);
+				}
+				break;
+			case 'o':
+				if (sv_eq_cstr(token.string, "ok")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_OK;
+
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
+						arrpush(internal->internal.inputs, parse_expression(lexer));
+					}
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+					return internal;
 				}
 				break;
 			case 'O':
@@ -761,19 +786,6 @@ static Node *parse_return(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
 	Node *return_ = ast_new(RETURN_NODE, first_token.location);
-	return_->return_.type = RETURN_STANDARD;
-	if (lexer_peek(lexer).kind == EXCLAMATION) {
-		return_->return_.type = RETURN_SUCCESS;
-
-		lexer_consume(lexer);
-
-		if (lexer_peek(lexer).kind == EXCLAMATION) {
-			return_->return_.type = RETURN_ERROR;
-
-			lexer_consume(lexer);
-		}
-	}
-
 	return_->return_.value = parse_expression_or_nothing(lexer);
 
 	return return_;

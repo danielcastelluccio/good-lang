@@ -688,8 +688,6 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 
 			process_function(context, function_value.value->function_stub.node, true);
 
-			context->compile_only = compile_only_parent;
-
 			*function_type = get_type(context, function_value.value->function_stub.node);
 			function_value = evaluate(context, function_value.value->function_stub.node);
 
@@ -704,6 +702,8 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			(void) arrpop(context->scopes);
 			context->scopes = saved_scopes;
 		}
+
+		context->compile_only = compile_only_parent;
 	}
 
 	if (function_type->value->tag != FUNCTION_TYPE_VALUE) {
@@ -2107,6 +2107,12 @@ static void process_internal(Context *context, Node *node) {
 					data = value_new(STRUCT_VALUE);
 					break;
 				}
+				case POINTER_TYPE_VALUE: {
+					enum_value->enum_.value = 10;
+
+					data = value_new(STRUCT_VALUE);
+					break;
+				}
 				default:
 					assert(false);
 			}
@@ -2134,6 +2140,30 @@ static void process_internal(Context *context, Node *node) {
 
 			value = create_enum(os_value);
 			set_type(context, node, operating_system_type);
+			break;
+		}
+		case INTERNAL_OK: {
+			Value wanted_type = context->temporary_context.wanted_type;
+			assert(wanted_type.value->tag == RESULT_TYPE_VALUE);
+
+			if (arrlen(internal.inputs) > 0) {
+				Temporary_Context temporary_context = { .wanted_type = wanted_type.value->result_type.value };
+				process_node_context(context, temporary_context, internal.inputs[0]);
+			}
+
+			set_type(context, node, wanted_type);
+			break;
+		}
+		case INTERNAL_ERR: {
+			Value wanted_type = context->temporary_context.wanted_type;
+			assert(wanted_type.value->tag == RESULT_TYPE_VALUE);
+
+			if (arrlen(internal.inputs) > 0) {
+				Temporary_Context temporary_context = { .wanted_type = wanted_type.value->result_type.error };
+				process_node_context(context, temporary_context, internal.inputs[0]);
+			}
+
+			set_type(context, node, wanted_type);
 			break;
 		}
 	}
@@ -2290,18 +2320,6 @@ static void process_return(Context *context, Node *node) {
 	Node_Data *data = data_new(RETURN_NODE);
 	if (return_.value != NULL) {
 		Value wanted_type = return_type;
-		if (wanted_type.value->tag == RESULT_TYPE_VALUE) {
-			switch (return_.type) {
-				case RETURN_SUCCESS:
-					wanted_type = wanted_type.value->result_type.value;
-					break;
-				case RETURN_ERROR:
-					wanted_type = wanted_type.value->result_type.error;
-					break;
-				default:
-					break;
-			}
-		}
 
 		Temporary_Context temporary_context = { .wanted_type = wanted_type };
 		process_node_context(context, temporary_context, return_.value);

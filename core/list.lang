@@ -13,8 +13,8 @@ def List = fn (static T: type): type {
 				var new_capacity = list.capacity * 2;
 				if new_capacity == 0 => new_capacity = 1;
 
-				list.items = cast list.allocator:realloc(cast list.items, list.capacity * run size_of(T)) catch |err| {
-					return!! err;
+				list.items = cast list.allocator:realloc(cast list.items, list.capacity * size_of(T)) catch |error| {
+					return err(error);
 				};
 
 				list.capacity = new_capacity;
@@ -23,7 +23,7 @@ def List = fn (static T: type): type {
 			list.items[list.length] = element;
 			list.length = list.length + 1;
 
-			return!;
+			return ok();
 		};
 
 		op to_array_view = fn (list: ^self): []T {

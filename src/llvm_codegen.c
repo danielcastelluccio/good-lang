@@ -925,32 +925,10 @@ static LLVMValueRef generate_return(Node *node, State *state) {
 	Return_Node return_ = node->return_;
 	Return_Data return_data = get_data(&state->context, node)->return_;
 
-	if (return_data.type.value != NULL && return_data.type.value->tag == RESULT_TYPE_VALUE && return_.type != RETURN_STANDARD) {
-		LLVMTypeRef return_type = create_llvm_type(return_data.type.value, state);
-		LLVMValueRef result_value = LLVMBuildAlloca(state->llvm_builder, return_type, "");
-
-		LLVMValueRef tag_pointer = LLVMBuildStructGEP2(state->llvm_builder, return_type, result_value, 0, "");
-		LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, return_type, result_value, 1, "");
-
-		if (return_.type == RETURN_SUCCESS) {
-			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), tag_pointer);
-			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.value.value, state), 0), "");
-			if (return_.value != NULL) LLVMBuildStore(state->llvm_builder, generate_node(return_.value, state), data_pointer);
-		} else if (return_.type == RETURN_ERROR) {
-			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 1, false), tag_pointer);
-			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(return_data.type.value->result_type.error.value, state), 0), "");
-			if (return_.value != NULL) LLVMBuildStore(state->llvm_builder, generate_node(return_.value, state), data_pointer);
-		} else {
-			assert(false);
-		}
-
-		LLVMBuildRet(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, return_type, result_value, ""));
+	if (return_data.type.value != NULL) {
+		LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
 	} else {
-		if (return_data.type.value != NULL) {
-			LLVMBuildRet(state->llvm_builder, generate_node(return_.value, state));
-		} else {
-			LLVMBuildRetVoid(state->llvm_builder);
-		}
+		LLVMBuildRetVoid(state->llvm_builder);
 	}
 	return NULL;
 }
@@ -1309,6 +1287,32 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 			return generate_node(internal_data.node, state);
 		case INTERNAL_SIZE_OF:
 			return generate_value(internal_data.value.value, type.value, state);
+		case INTERNAL_OK: {
+			LLVMTypeRef result_type = create_llvm_type(type.value, state);
+			LLVMValueRef result_value = LLVMBuildAlloca(state->llvm_builder, result_type, "");
+
+			LLVMValueRef tag_pointer = LLVMBuildStructGEP2(state->llvm_builder, result_type, result_value, 0, "");
+			LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, result_type, result_value, 1, "");
+
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), tag_pointer);
+			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type.value->result_type.value.value, state), 0), "");
+			if (arrlen(internal.inputs) > 0) LLVMBuildStore(state->llvm_builder, generate_node(internal.inputs[0], state), data_pointer);
+
+			return LLVMBuildLoad2(state->llvm_builder, result_type, result_value, "");
+		}
+		case INTERNAL_ERR: {
+			LLVMTypeRef result_type = create_llvm_type(type.value, state);
+			LLVMValueRef result_value = LLVMBuildAlloca(state->llvm_builder, result_type, "");
+
+			LLVMValueRef tag_pointer = LLVMBuildStructGEP2(state->llvm_builder, result_type, result_value, 0, "");
+			LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, result_type, result_value, 1, "");
+
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 1, false), tag_pointer);
+			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type.value->result_type.value.value, state), 0), "");
+			if (arrlen(internal.inputs) > 0) LLVMBuildStore(state->llvm_builder, generate_node(internal.inputs[0], state), data_pointer);
+
+			return LLVMBuildLoad2(state->llvm_builder, result_type, result_value, "");
+		}
 		default:
 			assert(false);
 	}
@@ -1569,6 +1573,7 @@ static void generate_main(State *state) {
 	LLVMBasicBlockRef entry = LLVMAppendBasicBlock(llvm_function, "");
 	LLVMPositionBuilderAtEnd(state->llvm_builder, entry);
 
+	assert(state->main_function != NULL);
 	if (!state->main_takes_arguments) {
 		LLVMBuildCall2(state->llvm_builder, LLVMGlobalGetValueType(state->main_function), state->main_function, NULL, 0, "");
 		LLVMBuildRetVoid(state->llvm_builder);

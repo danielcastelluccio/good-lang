@@ -9,6 +9,9 @@ def print_value = fn [T](t: T) {
 		case Byte {
 			_ = c::printf("%hhu\0", t);
 		}
+		case Pointer {
+			_ = c::printf("%p\0", t);
+		}
 		case Struct |struct_| {
 			_ = c::printf(".{\0");
 			for static struct_.members |member, i| {
@@ -101,9 +104,10 @@ def print = fn [T](static fmt: []byte, args: T) {
 	if static type_info is Tuple |tuple| {
 		var static argument_index = 0;
 		for static fmt |char| {
-			if static char == '%' {
+			if static char == '{' {
 				print_value(embed("args._", cast(byte) argument_index + 48));
 				run argument_index = argument_index + 1;
+			} else if static char == '}' {
 			} else {
 				_ = c::printf("%c\0", char);
 			};

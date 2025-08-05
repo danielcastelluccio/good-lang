@@ -39,6 +39,10 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 
 	switch (value1->tag) {
 		case POINTER_TYPE_VALUE: {
+			if (typechecking) {
+				if (value1->pointer_type.inner.value == NULL || value2->pointer_type.inner.value == NULL) return true;
+			}
+
 			if (value1->pointer_type.inner.value == NULL && value2->pointer_type.inner.value == NULL) return true;
 			return value_equal_internal(value1->pointer_type.inner.value, value2->pointer_type.inner.value, typechecking);
 		}

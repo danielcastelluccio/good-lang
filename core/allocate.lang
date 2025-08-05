@@ -14,8 +14,8 @@ def Allocate_Fn = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Allocate_Error
 def Allocator = struct {
 	allocate_fn: Allocate_Fn;
 
-	op new = fn (allocator: ^self, static T: type): ^T {
-		allocator.allocate_fn(ALLOC, null, run size_of(T))
+	op new = fn (allocator: ^self, static T: type): ^T!Allocate_Error {
+		allocator.allocate_fn(ALLOC, null, size_of(T))
 	};
 
 	op realloc = fn (allocator: ^self, ptr: ^, size: uint): ^!Allocate_Error {
@@ -39,21 +39,21 @@ def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Alloc
 	switch mode {
 		case ALLOC => {
 			if c::malloc(size) |ptr| {
-				return! ptr;
+				return ok(ptr);
 			} else {
-				return!! OUT_OF_MEMORY;
+				return err(OUT_OF_MEMORY);
 			};
 		}
 		case REALLOC => {
 			if c::realloc(ptr, size) |ptr| {
-				return! ptr;
+				return ok(ptr);
 			} else {
-				return!! OUT_OF_MEMORY;
+				return err(OUT_OF_MEMORY);
 			};
 		}
 		case FREE => {
 			c::free(ptr);
-			return! null;
+			return ok(null);
 		}
 	};
 };
