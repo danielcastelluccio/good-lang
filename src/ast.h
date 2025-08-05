@@ -301,6 +301,7 @@ typedef struct {
 	Node *condition;
 	Node *body;
 	Node *else_body;
+	bool static_;
 } While_Node;
 
 typedef enum {

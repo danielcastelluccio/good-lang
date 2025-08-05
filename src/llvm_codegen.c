@@ -314,7 +314,9 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			Node_Data *variable_data = get_data(&state->context, variable);
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable_data);
 			if (identifier.assign_value != NULL) {
-				LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
+				if (!identifier.assign_static) {
+					LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
+				}
 				return NULL;
 			} else {
 				if (identifier_data->identifier.want_pointer) {
@@ -1149,41 +1151,51 @@ static LLVMValueRef generate_while(Node *node, State *state) {
 	Node_Data *data = get_data(&state->context, node);
 	While_Data while_data = data->while_;
 
-	LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
-	LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
-	LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
-	LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
-
-	LLVMValueRef value = NULL;
-	if (while_data.type.value != NULL) {
-		value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(while_data.type.value, state), "");
-	}
-
-	While_Codegen_Data while_codegen_data = {
-		.block = done_block,
-		.value = value
-	};
-
-	hmput(state->whiles, data, while_codegen_data);
-	LLVMBuildBr(state->llvm_builder, check_block);
-	LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
-	LLVMValueRef condition = generate_node(while_.condition, state);
-	LLVMBuildCondBr(state->llvm_builder, condition, body_block, else_block);
-	LLVMPositionBuilderAtEnd(state->llvm_builder, body_block);
-	generate_node(while_.body, state);
-	LLVMBuildBr(state->llvm_builder, check_block);
-	LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
-	if (while_.else_body != NULL) {
-		LLVMValueRef else_value = generate_node(while_.else_body, state);
-		LLVMBuildStore(state->llvm_builder, else_value, value);
-	}
-	LLVMBuildBr(state->llvm_builder, done_block);
-	LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
-
-	if (while_data.type.value != NULL) {
-		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(while_data.type.value, state), value, "");
-	} else {
+	if (while_.static_) {
+		size_t saved_static_id = state->context.static_id;
+		for (long int i = 0; i < arrlen(while_data.static_ids); i++) {
+			state->context.static_id = while_data.static_ids[i];
+			generate_node(while_.body, state);
+		}
+		state->context.static_id = saved_static_id;
 		return NULL;
+	} else {
+		LLVMBasicBlockRef check_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMBasicBlockRef body_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMBasicBlockRef else_block = LLVMAppendBasicBlock(state->current_function, "");
+		LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+
+		LLVMValueRef value = NULL;
+		if (while_data.type.value != NULL) {
+			value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(while_data.type.value, state), "");
+		}
+
+		While_Codegen_Data while_codegen_data = {
+			.block = done_block,
+			.value = value
+		};
+
+		hmput(state->whiles, data, while_codegen_data);
+		LLVMBuildBr(state->llvm_builder, check_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, check_block);
+		LLVMValueRef condition = generate_node(while_.condition, state);
+		LLVMBuildCondBr(state->llvm_builder, condition, body_block, else_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, body_block);
+		generate_node(while_.body, state);
+		LLVMBuildBr(state->llvm_builder, check_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, else_block);
+		if (while_.else_body != NULL) {
+			LLVMValueRef else_value = generate_node(while_.else_body, state);
+			LLVMBuildStore(state->llvm_builder, else_value, value);
+		}
+		LLVMBuildBr(state->llvm_builder, done_block);
+		LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
+
+		if (while_data.type.value != NULL) {
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(while_data.type.value, state), value, "");
+		} else {
+			return NULL;
+		}
 	}
 }
 

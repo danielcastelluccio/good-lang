@@ -1270,7 +1270,6 @@ static void process_for(Context *context, Node *node) {
 	Node_Data *data = data_new(FOR_NODE);
 	if (for_.static_) {
 		assert(arrlen(for_.items) == 1);
-		// assert(item_types[0].value->tag == ARRAY_VIEW_TYPE_VALUE);
 
 		Value looped_value_type = item_types[0];
 		Value looped_value = evaluate(context, for_.items[0]);
@@ -1591,8 +1590,6 @@ static void process_identifier(Context *context, Node *node) {
 	}
 
 	if (lookup_result.tag == LOOKUP_RESULT_STATIC_VARIABLE) {
-		data->identifier.kind = IDENTIFIER_STATIC_VARIABLE;
-		data->identifier.static_variable = lookup_result.static_variable;
 		type = lookup_result.type;
 
 		if (identifier.assign_value != NULL) {
@@ -1607,6 +1604,8 @@ static void process_identifier(Context *context, Node *node) {
 			if (identifier.assign_static) {
 				hmput(context->static_variables, lookup_result.static_variable.node_data, evaluate(context, identifier.assign_value));
 			}
+		} else {
+			value = hmget(context->static_variables, lookup_result.static_variable.node_data);
 		}
 	}
 
@@ -2802,39 +2801,56 @@ static void process_while(Context *context, Node *node) {
 	set_data(context, node, data);
 
 	arrpush(context->scopes, (Scope) { .node = node });
+
 	process_node(context, while_.condition);
 
-	process_node(context, while_.body);
+	if (while_.static_) {
+		assert(while_.else_body == NULL);
 
-	Value while_type = data->while_.type;
+		size_t saved_static_id = context->static_id;
+		while (evaluate(context, while_.condition).value->boolean.value) {
+			size_t static_id = ++context->static_id_counter;
+			context->static_id = static_id;
+			arrpush(data->while_.static_ids, static_id);
 
-	if (while_.else_body != NULL) {
-		Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
-		process_node_context(context, temporary_context, while_.else_body);
+			process_node(context, while_.body);
 
-		Value type = get_type(context, while_.else_body);
-		if (data->while_.has_type) {
-			if (type.value != NULL) {
-				if (while_type.value == NULL) {
-					handle_semantic_error(context, node->location, "Expected no value in else");
-				} else if (!value_equal(type.value, while_type.value)) {
-					handle_mismatched_type_error(context, node, type, while_type);
+			process_node(context, while_.condition);
+		}
+		context->static_id = saved_static_id;
+	} else {
+		process_node(context, while_.body);
+
+		Value while_type = data->while_.type;
+
+		if (while_.else_body != NULL) {
+			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+			process_node_context(context, temporary_context, while_.else_body);
+
+			Value type = get_type(context, while_.else_body);
+			if (data->while_.has_type) {
+				if (type.value != NULL) {
+					if (while_type.value == NULL) {
+						handle_semantic_error(context, node->location, "Expected no value in else");
+					} else if (!value_equal(type.value, while_type.value)) {
+						handle_mismatched_type_error(context, node, type, while_type);
+					}
+				}
+
+				if (while_type.value != NULL) {
+					if (type.value == NULL) {
+						handle_semantic_error(context, node->location, "Expected value in else");
+					}
 				}
 			}
+		}
 
-			if (while_type.value != NULL) {
-				if (type.value == NULL) {
-					handle_semantic_error(context, node->location, "Expected value in else");
-				}
-			}
+		if (data->while_.has_type && while_.else_body != NULL) {
+			set_type(context, node, while_type);
 		}
 	}
 
 	(void) arrpop(context->scopes);
-
-	if (data->while_.has_type && while_.else_body != NULL) {
-		set_type(context, node, while_type);
-	}
 }
 
 void process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {

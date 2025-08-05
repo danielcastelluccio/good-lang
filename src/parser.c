@@ -880,6 +880,11 @@ static Node *parse_while(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
 
+	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+		lexer_consume(lexer);
+		while_->while_.static_ = true;
+	}
+
 	while_->while_.condition = parse_expression(lexer);
 	while_->while_.body = parse_separated_statement(lexer);
 

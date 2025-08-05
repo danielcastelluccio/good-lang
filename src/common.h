@@ -193,6 +193,7 @@ typedef struct {
 	Value wanted_type;
 	Value type;
 	bool has_type;
+	size_t *static_ids; // stb_ds
 } While_Data;
 
 typedef struct {
