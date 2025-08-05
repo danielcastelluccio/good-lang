@@ -60,9 +60,7 @@ def print_value = fn [T](t: T) {
 			_ = c::printf(".{\0");
 
 			var static size = array.size;
-			var i: uint = 0;
-			// TODO: do this static
-			while i < size {
+			for static 0..size |i| {
 				_ = c::printf(" \0");
 
 				print_value(t[i]);
@@ -72,7 +70,6 @@ def print_value = fn [T](t: T) {
  				} else {
  					_ = c::printf(" \0");
 				};
-				i = i + 1;
 			};
 
 			_ = c::printf("}\0");
@@ -80,8 +77,7 @@ def print_value = fn [T](t: T) {
 		case Array_View {
 			_ = c::printf(".{\0");
 
-			var i: uint = 0;
-			while i < t.len {
+			for 0..t.len |i| {
 				_ = c::printf(" \0");
 
 				print_value(t[i]);
@@ -91,7 +87,6 @@ def print_value = fn [T](t: T) {
  				} else {
  					_ = c::printf(" \0");
 				};
-				i = i + 1;
 			};
 
 			_ = c::printf("}\0");

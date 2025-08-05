@@ -24,6 +24,7 @@ typedef enum {
 	OPTIONAL_TYPE_VALUE,
 	POINTER_VALUE,
 	POINTER_TYPE_VALUE,
+	RANGE_VALUE,
 	RANGE_TYPE_VALUE,
 	RESULT_TYPE_VALUE,
 	STRUCT_VALUE,
@@ -183,6 +184,11 @@ typedef struct {
 } Optional_Type_Value;
 
 typedef struct {
+	Value start;
+	Value end;
+} Range_Value;
+
+typedef struct {
 	Value type;
 } Range_Type_Value;
 
@@ -219,6 +225,7 @@ struct Value_Data {
 		Optional_Type_Value optional_type;
 		Pointer_Value pointer;
 		Pointer_Type_Value pointer_type;
+		Range_Value range;
 		Range_Type_Value range_type;
 		Result_Type_Value result_type;
 		Struct_Value struct_;

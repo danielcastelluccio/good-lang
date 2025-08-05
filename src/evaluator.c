@@ -805,6 +805,26 @@ static Value evaluate_cast(State *state, Node *node) {
 	}
 }
 
+static Value evaluate_range(State *state, Node *node) {
+	Range_Node range = node->range;
+
+	Value start = {};
+	if (range.start != NULL) {
+		start = evaluate_state(state, range.start);
+	}
+
+	Value end = {};
+	if (range.end != NULL) {
+		end = evaluate_state(state, range.end);
+	}
+
+	Value value = create_value(RANGE_VALUE);
+	value.value->range.start = start;
+	value.value->range.end = end;
+
+	return value;
+}
+
 static Value evaluate_extern(State *state, Node *node) {
 	Extern_Node extern_ = node->extern_;
 	Value value = create_value(EXTERN_VALUE);
@@ -846,6 +866,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case IF_NODE:                return evaluate_if(state, node);
 		case IS_NODE:                return evaluate_is(state, node);
 		case CAST_NODE:              return evaluate_cast(state, node);
+		case RANGE_NODE:             return evaluate_range(state, node);
 		case EXTERN_NODE:            return evaluate_extern(state, node);
 		default:                     assert(false);
 	}

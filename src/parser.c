@@ -1321,6 +1321,12 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_result(lexer, NULL);
 			break;
 		}
+		case PARENTHESIS_OPEN: {
+			lexer_consume(lexer);
+			result = parse_expression(lexer);
+			lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+			break;
+		}
 		default:
 			handle_token_error_no_expected(lexer, token);
 	}

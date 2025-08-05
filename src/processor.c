@@ -900,7 +900,7 @@ static void process_binary_op(Context *context, Node *node) {
 
 	Value left_type = get_type(context, binary_operator.left);
 	Value right_type = get_type(context, binary_operator.right);
-	if (!type_assignable(left_type.value, right_type.value)) {
+	if (!value_equal(left_type.value, right_type.value)) {
 		handle_mismatched_type_error(context, node, left_type, right_type);
 	}
 
@@ -1277,20 +1277,50 @@ static void process_for(Context *context, Node *node) {
 	Node_Data *data = data_new(FOR_NODE);
 	if (for_.static_) {
 		assert(arrlen(for_.items) == 1);
-		assert(item_types[0].value->tag == ARRAY_VIEW_TYPE_VALUE);
+		// assert(item_types[0].value->tag == ARRAY_VIEW_TYPE_VALUE);
 
+		Value looped_value_type = item_types[0];
 		Value looped_value = evaluate(context, for_.items[0]);
 
+		size_t length;
+		switch (looped_value_type.value->tag) {
+			case ARRAY_VIEW_TYPE_VALUE: {
+				length = looped_value.value->array_view.length;
+				break;
+			}
+			case RANGE_TYPE_VALUE: {
+				length = looped_value.value->range.end.value->integer.value - looped_value.value->range.start.value->integer.value;
+				break;
+			}
+			default:
+				assert(false);
+		}
+
 		size_t saved_static_id = context->static_id;
-		for (size_t i = 0; i < looped_value.value->array_view.length; i++) {
+		for (size_t i = 0; i < length; i++) {
 			size_t static_id = ++context->static_id_counter;
 			context->static_id = static_id;
 			arrpush(data->for_.static_ids, static_id);
 
-			Typed_Value typed_value = {
-				.value = (Value) { .value = looped_value.value->array_view.values[i] },
-				.type = element_types[0]
-			};
+			Typed_Value typed_value;
+			switch (looped_value_type.value->tag) {
+				case ARRAY_VIEW_TYPE_VALUE: {
+					typed_value = (Typed_Value) {
+						.value = (Value) { .value = looped_value.value->array_view.values[i] },
+						.type = element_types[0]
+					};
+					break;
+				}
+				case RANGE_TYPE_VALUE: {
+					typed_value = (Typed_Value) {
+						.value = create_integer(i + looped_value.value->range.start.value->integer.value),
+						.type = element_types[0]
+					};
+					break;
+				}
+				default:
+					assert(false);
+			}
 			hmput(arrlast(context->scopes).static_bindings, sv_hash(for_.bindings[0]), typed_value);
 
 			if (arrlen(for_.bindings) > 1) {
@@ -2267,16 +2297,36 @@ static void process_range(Context *context, Node *node) {
 		wanted_type = context->temporary_context.wanted_type.value->range_type.type;
 	}
 
-	Temporary_Context temporary_context = { .wanted_type = wanted_type };
-	process_node_context(context, temporary_context, range.start);
+	if (range.end != NULL && range.start->kind == NUMBER_NODE) {
+		Temporary_Context temporary_context = (Temporary_Context) { .wanted_type = wanted_type };
+		process_node_context(context, temporary_context, range.end);
 
-	if (wanted_type.value == NULL) {
-		wanted_type = get_type(context, range.start);
+		if (wanted_type.value == NULL) {
+			wanted_type = get_type(context, range.end);
+		}
+
+		temporary_context = (Temporary_Context) { .wanted_type = wanted_type };
+		process_node_context(context, temporary_context, range.start);
+	} else {
+		Temporary_Context temporary_context = (Temporary_Context) { .wanted_type = wanted_type };
+		process_node_context(context, temporary_context, range.start);
+
+		if (wanted_type.value == NULL) {
+			wanted_type = get_type(context, range.start);
+		}
+
+		if (range.end != NULL) {
+			temporary_context = (Temporary_Context) { .wanted_type = wanted_type };
+			process_node_context(context, temporary_context, range.end);
+		}
 	}
 
 	if (range.end != NULL) {
-		temporary_context = (Temporary_Context) { .wanted_type = wanted_type };
-		process_node_context(context, temporary_context, range.end);
+		Value start_type = get_type(context, range.start);
+		Value end_type = get_type(context, range.end);
+		if (!value_equal(start_type.value, end_type.value)) {
+			handle_mismatched_type_error(context, node, start_type, end_type);
+		}
 	}
 
 	set_type(context, node, create_range_type(wanted_type));
