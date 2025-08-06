@@ -440,17 +440,20 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 
 static size_t get_precedence(Binary_Op_Node_Kind kind) {
 	switch (kind) {
-		case OP_ADD:
-		case OP_SUBTRACT:
-			return 1;
 		case OP_MULTIPLY:
 		case OP_DIVIDE:
+			return 3;
+		case OP_ADD:
+		case OP_SUBTRACT:
 			return 2;
 		case OP_EQUALS:
+		case OP_NOT_EQUALS:
 		case OP_LESS:
 		case OP_GREATER:
 		case OP_LESS_EQUALS:
 		case OP_GREATER_EQUALS:
+			return 1;
+		case OP_AND:
 			return 0;
 		default:
 			assert(false);
@@ -492,6 +495,9 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 			break;
 		case SLASH:
 			binary_operator->binary_op.operator = OP_DIVIDE;
+			break;
+		case KEYWORD_AND:
+			binary_operator->binary_op.operator = OP_AND;
 			break;
 		default:
 			assert(false);
@@ -1404,11 +1410,14 @@ static Node *parse_expression(Lexer *lexer) {
 			case PERIOD_PERIOD:
 				result = parse_range(lexer, result);
 				break;
-			case KEYWORD_IS:
-				result = parse_is(lexer, result);
+			case KEYWORD_AND:
+				result = parse_binary_operator(lexer, result);
 				break;
 			case KEYWORD_CATCH:
 				result = parse_catch(lexer, result);
+				break;
+			case KEYWORD_IS:
+				result = parse_is(lexer, result);
 				break;
 			default:
 				operating = false;

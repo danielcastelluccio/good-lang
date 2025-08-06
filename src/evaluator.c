@@ -620,6 +620,9 @@ static Value evaluate_binary_op(State *state, Node *node) {
 		case OP_SUBTRACT: {
 			return create_integer(left_value.value->integer.value - right_value.value->integer.value);
 		}
+		case OP_AND: {
+			return create_boolean(left_value.value->boolean.value && right_value.value->boolean.value);
+		}
 		default:
 			assert(false);
 	}

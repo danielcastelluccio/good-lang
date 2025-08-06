@@ -83,6 +83,9 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 	Token_Kind result = IDENTIFIER;
 	char *identifier = &source[start];
 	switch (identifier[0]) {
+		case 'a':
+			if (strcmp(identifier, "and") == 0) result = KEYWORD_AND;
+			break;
 		case 'b':
 			if (strcmp(identifier, "break") == 0) result = KEYWORD_BREAK;
 			break;
@@ -412,6 +415,8 @@ char *token_to_string(Token_Kind kind) {
 			return "Integer";
 		case DECIMAL:
 			return "Decimal";
+		case KEYWORD_AND:
+			return "and";
 		case KEYWORD_BREAK:
 			return "break";
 		case KEYWORD_CAST:

@@ -285,6 +285,10 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "byte");
 			break;
 		}
+		case BOOLEAN_TYPE_VALUE: {
+			buffer += sprintf(buffer, "bool");
+			break;
+		}
 		case INTEGER_VALUE: {
 			buffer += sprintf(buffer, "%li", type.value->integer.value);
 			break;
@@ -903,6 +907,7 @@ static void process_binary_op(Context *context, Node *node) {
 	else if (type.value->tag == FLOAT_TYPE_VALUE) {}
 	else if (type.value->tag == TYPE_TYPE_VALUE) {}
 	else if (can_compare(type.value) && (binary_operator.operator == OP_EQUALS || binary_operator.operator == OP_NOT_EQUALS)) {}
+	else if (type.value->tag == BOOLEAN_TYPE_VALUE && binary_operator.operator == OP_AND) {}
 	else {
 		handle_type_error(node, "Cannot operate on %s", left_type);
 	}
@@ -922,6 +927,9 @@ static void process_binary_op(Context *context, Node *node) {
 		case OP_MULTIPLY:
 		case OP_DIVIDE:
 			result_type = left_type;
+			break;
+		case OP_AND:
+			result_type = create_value(BOOLEAN_TYPE_VALUE);
 			break;
 	}
 

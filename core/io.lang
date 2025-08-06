@@ -74,8 +74,8 @@ def print_value = fn [T](t: T, static fmt: []byte) {
 
 			_ = c::printf("}\0");
 		}
-		case Array_View {
-			if static fmt == "s" {
+		case Array_View |array_view| {
+			if static fmt == "s" and array_view.type == byte {
 				_ = c::printf("%.*s\0", t.len, t.ptr);
 			} else {
 				_ = c::printf(".{\0");
