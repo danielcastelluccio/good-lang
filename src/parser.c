@@ -525,15 +525,28 @@ static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 	return structure_access;
 }
 
-static Node *parse_array_access(Lexer *lexer, Node *array) {
+static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 	Token_Data first_token = lexer_consume(lexer);
 
-	Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
-	array_access->array_access.parent = array;
-	array_access->array_access.index = parse_expression(lexer);
+	Node *first = parse_expression(lexer);
 
-	lexer_consume_check(lexer, BRACE_CLOSED);
-	return array_access;
+	if (lexer_peek(lexer).kind == COMMA) {
+		lexer_consume(lexer);
+
+		Node *slice = ast_new(SLICE_NODE, first_token.location);
+		slice->slice.parent = array;
+		slice->slice.start = first;
+		slice->slice.end = parse_expression(lexer);
+
+		lexer_consume_check(lexer, BRACE_CLOSED);
+		return slice;
+	} else {
+		Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
+		array_access->array_access.parent = array;
+		array_access->array_access.index = first;
+		lexer_consume_check(lexer, BRACE_CLOSED);
+		return array_access;
+	}
 }
 
 static Node *parse_call_method(Lexer *lexer, Node *argument1) {
@@ -1370,7 +1383,7 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_structure_access(lexer, result);
 				break;
 			case BRACE_OPEN:
-				result = parse_array_access(lexer, result);
+				result = parse_array_access_or_slice(lexer, result);
 				break;
 			case COLON:
 				result = parse_call_method(lexer, result);

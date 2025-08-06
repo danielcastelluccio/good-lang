@@ -186,6 +186,12 @@ typedef struct {
 } Array_Access_Data;
 
 typedef struct {
+	Value array_type;
+	Value item_type;
+	bool pointer_access;
+} Slice_Data;
+
+typedef struct {
 	Value type;
 } Binary_Operator_Data;
 
@@ -241,6 +247,7 @@ struct Node_Data {
 		Catch_Data catch;
 		Block_Data block;
 		Array_Access_Data array_access;
+		Slice_Data slice;
 		Binary_Operator_Data binary_operator;
 		Return_Data return_;
 		Break_Data break_;

@@ -247,6 +247,12 @@ typedef struct {
 } Run_Node;
 
 typedef struct {
+	Node *parent;
+	Node *start;
+	Node *end;
+} Slice_Node;
+
+typedef struct {
 	String_View value;
 } String_Node;
 
@@ -341,6 +347,7 @@ typedef enum {
 	RESULT_NODE,
 	RETURN_NODE,
 	RUN_NODE,
+	SLICE_NODE,
 	STRING_NODE,
 	STRUCT_TYPE_NODE,
 	STRUCTURE_NODE,
@@ -390,6 +397,7 @@ struct Node {
 		Result_Type_Node result_type;
 		Return_Node return_;
 		Run_Node run;
+		Slice_Node slice;
 		String_Node string;
 		Struct_Type_Node struct_type;
 		Structure_Node structure;

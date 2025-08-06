@@ -586,27 +586,32 @@ static Value evaluate_binary_op(State *state, Node *node) {
 	Value left_value = evaluate_state(state, binary_operator.left);
 	Value right_value = evaluate_state(state, binary_operator.right);
 
+	Value true_value = create_value(BOOLEAN_VALUE);
+	true_value.value->boolean.value = true;
+
+	Value false_value = create_value(BOOLEAN_VALUE);
+	false_value.value->boolean.value = false;
+
 	switch (binary_operator.operator) {
 		case OP_EQUALS: {
 			if (value_equal(left_value.value, right_value.value)) {
-				Value_Data *true_value = value_new(BOOLEAN_VALUE);
-				true_value->boolean.value = true;
-				return create_value_data(true_value, node);
+				return true_value;
 			} else {
-				Value_Data *false_value = value_new(BOOLEAN_VALUE);
-				false_value->boolean.value = false;
-				return create_value_data(false_value, node);
+				return false_value;
+			}
+		}
+		case OP_NOT_EQUALS: {
+			if (value_equal(left_value.value, right_value.value)) {
+				return false_value;
+			} else {
+				return true_value;
 			}
 		}
 		case OP_LESS: {
 			if (left_value.value->integer.value < right_value.value->integer.value) {
-				Value_Data *true_value = value_new(BOOLEAN_VALUE);
-				true_value->boolean.value = true;
-				return create_value_data(true_value, node);
+				return true_value;
 			} else {
-				Value_Data *false_value = value_new(BOOLEAN_VALUE);
-				false_value->boolean.value = false;
-				return create_value_data(false_value, node);
+				return false_value;
 			}
 		}
 		case OP_ADD: {
@@ -787,6 +792,44 @@ static Value evaluate_array_access(State *state, Node *node) {
 			}
 			break;
 		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			Array_View_Value array_view_value = evaluate_state(state, array_access.parent).value->array_view;
+
+			long index = evaluate_state(state, array_access.index).value->integer.value;
+			if (array_access.assign_value != NULL) {
+				assert(false);
+				return (Value) {};
+			} else {
+				return (Value) { .value = array_view_value.values[index] };
+			}
+			break;
+		}
+		default:
+			assert(false);
+	}
+	assert(false);
+}
+
+static Value evaluate_slice(State *state, Node *node) {
+	Slice_Node slice = node->slice;
+	Slice_Data slice_data = get_data(state->context, node)->slice;
+
+	switch (slice_data.array_type.value->tag) {
+		case ARRAY_VIEW_TYPE_VALUE: {
+			Array_View_Value array_view_value = evaluate_state(state, slice.parent).value->array_view;
+
+			long start = evaluate_state(state, slice.start).value->integer.value;
+			long end = evaluate_state(state, slice.end).value->integer.value;
+
+			Value_Data **values = malloc(sizeof(Value_Data *) * (end - start));
+			memcpy(values, &array_view_value.values[start], sizeof(Value_Data *) * (end - start));
+
+			Value result = create_value(ARRAY_VIEW_VALUE);
+			result.value->array_view.values = values;
+			result.value->array_view.length = end - start;
+
+			return result;
+		}
 		default:
 			assert(false);
 	}
@@ -952,6 +995,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case VARIABLE_NODE:          return evaluate_variable(state, node);
 		case STRUCTURE_ACCESS_NODE:  return evaluate_structure_access(state, node);
 		case ARRAY_ACCESS_NODE:      return evaluate_array_access(state, node);
+		case SLICE_NODE:             return evaluate_slice(state, node);
 		case SWITCH_NODE:            return evaluate_switch(state, node);
 		case FOR_NODE:               return evaluate_for(state, node);
 		case IF_NODE:                return evaluate_if(state, node);

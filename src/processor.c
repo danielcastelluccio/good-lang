@@ -880,6 +880,7 @@ static bool can_compare(Value_Data *type) {
 	if (type->tag == BYTE_TYPE_VALUE) return true;
 	if (type->tag == FLOAT_TYPE_VALUE) return true;
 	if (type->tag == BYTE_TYPE_VALUE) return true;
+	if (type->tag == ARRAY_VIEW_TYPE_VALUE) return true;
 
 	return false;
 }
@@ -2395,6 +2396,51 @@ static void process_run(Context *context, Node *node) {
 	set_type(context, node, get_type(context, run.node));
 }
 
+static void process_slice(Context *context, Node *node) {
+	Slice_Node slice = node->slice;
+
+	Temporary_Context temporary_context = { .wanted_type = create_integer_type(false, context->codegen.default_integer_size) };
+	process_node_context(context, temporary_context, slice.start);
+
+	process_node_context(context, temporary_context, slice.end);
+
+	process_enforce_pointer_sometimes(context, slice.parent, false, node);
+	Value raw_array_type = get_type(context, slice.parent);
+	Value array_type = raw_array_type;
+	if (array_type.value->tag == POINTER_TYPE_VALUE) {
+		array_type = array_type.value->pointer_type.inner;
+	}
+
+	if (array_type.value->tag != ARRAY_TYPE_VALUE
+			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+		handle_type_error(node, "Cannot perform array access operation on %s", array_type);
+	}
+
+	Value item_type = {};
+	switch (array_type.value->tag) {
+		case ARRAY_TYPE_VALUE: {
+			item_type = array_type.value->array_type.inner;
+			break;
+		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			item_type = array_type.value->array_view_type.inner;
+			break;
+		}
+		default:
+			assert(false);
+	}
+
+	Node_Data *data = data_new(ARRAY_ACCESS_NODE);
+	data->array_access.array_type = array_type;
+	data->array_access.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
+	set_data(context, node, data);
+
+	Value array_view_type = create_value(ARRAY_VIEW_TYPE_VALUE);
+	array_view_type.value->array_view_type.inner = item_type;
+
+	set_type(context, node, array_view_type);
+}
+
 static void process_string(Context *context, Node *node) {
 	String_Node string = node->string;
 
@@ -2967,6 +3013,9 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		case RUN_NODE:
 			process_run(context, node);
+			break;
+		case SLICE_NODE:
+			process_slice(context, node);
 			break;
 		case STRING_NODE:
 			process_string(context, node);

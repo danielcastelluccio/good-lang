@@ -1,6 +1,6 @@
 def c = import("c.lang");
 
-def print_value = fn [T](t: T) {
+def print_value = fn [T](t: T, static fmt: []byte) {
  	var static type_info = type_info_of(T);
  	switch static type_info {
 		case Integer {
@@ -18,7 +18,7 @@ def print_value = fn [T](t: T) {
 				var static name = member.name;
 				_ = c::printf(" .%.*s = \0", name.len, name.ptr);
 
-				print_value(embed("t.", name));
+				print_value(embed("t.", name), "");
 
 				if static i < struct_.members.len - 1 {
  					_ = c::printf(",\0");
@@ -35,7 +35,7 @@ def print_value = fn [T](t: T) {
 				var static name = member.name;
 				if t is embed(name) |value| {
 					_ = c::printf(" .%.*s = \0", name.len, name.ptr);
-					print_value(value);
+					print_value(value, "");
 					_ = c::printf(" \0");
 				};
 			};
@@ -51,7 +51,7 @@ def print_value = fn [T](t: T) {
 		}
 		case Optional {
 			if t |value| {
-				print_value(value);
+				print_value(value, "");
 			} else {
 				_ = c::printf("null\0");
 			};
@@ -63,7 +63,7 @@ def print_value = fn [T](t: T) {
 			for static 0..size |i| {
 				_ = c::printf(" \0");
 
-				print_value(t[i]);
+				print_value(t[i], "");
 
  				if i < size - 1 {
  					_ = c::printf(",\0");
@@ -75,37 +75,66 @@ def print_value = fn [T](t: T) {
 			_ = c::printf("}\0");
 		}
 		case Array_View {
-			_ = c::printf(".{\0");
+			if static fmt == "s" {
+				_ = c::printf("%.*s\0", t.len, t.ptr);
+			} else {
+				_ = c::printf(".{\0");
 
-			for 0..t.len |i| {
-				_ = c::printf(" \0");
+				for 0..t.len |i| {
+					_ = c::printf(" \0");
 
-				print_value(t[i]);
+					print_value(t[i], "");
 
- 				if i < t.len - 1 {
- 					_ = c::printf(",\0");
- 				} else {
- 					_ = c::printf(" \0");
+					if i < t.len - 1 {
+						_ = c::printf(",\0");
+					} else {
+						_ = c::printf(" \0");
+					};
 				};
-			};
 
-			_ = c::printf("}\0");
+				_ = c::printf("}\0");
+			};
 		}
  	};
 };
+
+// def print = fn [T](static fmt: []byte, args: T) {
+// 	var static type_info = type_info_of(T);
+// 	if static type_info is Tuple |tuple| {
+// 		var static argument_index = 0;
+// 		for static fmt |char| {
+// 			if static char == '{' {
+// 				print_value(embed("args._", cast(byte) argument_index + 48));
+// 				argument_index =static argument_index + 1;
+// 			} else if static char == '}' {
+// 			} else {
+// 				_ = c::printf("%c\0", char);
+// 			};
+// 		};
+// 	};
+// };
 
 def print = fn [T](static fmt: []byte, args: T) {
 	var static type_info = type_info_of(T);
 	if static type_info is Tuple |tuple| {
 		var static argument_index = 0;
-		for static fmt |char| {
-			if static char == '{' {
-				print_value(embed("args._", cast(byte) argument_index + 48));
+		var static i: uint = 0;
+		while static i < fmt.len {
+			if static fmt[i] == '{' {
+				var static start = i + 1;
+				while static fmt[i] != '}' {
+					i =static i + 1;
+				};
+
+				var static end = i;
+
+				var static format = fmt[start, end];
+				print_value(embed("args._", cast(byte) argument_index + 48), format);
 				argument_index =static argument_index + 1;
-			} else if static char == '}' {
 			} else {
-				_ = c::printf("%c\0", char);
+				_ = c::printf("%c\0", fmt[i]);
 			};
+			i =static i + 1;
 		};
 	};
 };
