@@ -2203,6 +2203,20 @@ static void process_internal(Context *context, Node *node) {
 			set_type(context, node, wanted_type);
 			break;
 		}
+		case INTERNAL_COMPILE_ERROR: {
+			process_node(context, internal.inputs[0]);
+
+			Value string = evaluate(context, internal.inputs[0]);
+
+			char *message = malloc(string.value->array_view.length + 1);
+			message[string.value->array_view.length] = '\0';
+			for (size_t i = 0; i < string.value->array_view.length; i++) {
+				message[i] = string.value->array_view.values[i]->byte.value;
+			}
+
+			handle_semantic_error(context, node->location, "%.*s", (int) string.value->array_view.length, message);
+			break;
+		}
 	}
 
 	Node_Data *data = data_new(INTERNAL_NODE);

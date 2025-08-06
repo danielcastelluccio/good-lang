@@ -98,22 +98,6 @@ def print_value = fn [T](t: T, static fmt: []byte) {
  	};
 };
 
-// def print = fn [T](static fmt: []byte, args: T) {
-// 	var static type_info = type_info_of(T);
-// 	if static type_info is Tuple |tuple| {
-// 		var static argument_index = 0;
-// 		for static fmt |char| {
-// 			if static char == '{' {
-// 				print_value(embed("args._", cast(byte) argument_index + 48));
-// 				argument_index =static argument_index + 1;
-// 			} else if static char == '}' {
-// 			} else {
-// 				_ = c::printf("%c\0", char);
-// 			};
-// 		};
-// 	};
-// };
-
 def print = fn [T](static fmt: []byte, args: T) {
 	var static type_info = type_info_of(T);
 	if static type_info is Tuple |tuple| {
@@ -136,5 +120,7 @@ def print = fn [T](static fmt: []byte, args: T) {
 			};
 			i =static i + 1;
 		};
+	} else {
+		compile_error("Need tuple as argument");
 	};
 };

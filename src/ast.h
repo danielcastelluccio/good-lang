@@ -192,7 +192,8 @@ typedef struct {
 		INTERNAL_TYPE_INFO_OF,
 		INTERNAL_OS,
 		INTERNAL_OK,
-		INTERNAL_ERR
+		INTERNAL_ERR,
+		INTERNAL_COMPILE_ERROR
 	} kind;
 	Node **inputs; // stb_ds
 } Internal_Node;

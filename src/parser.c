@@ -156,6 +156,18 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 					return internal;
 				}
 				break;
+			case 'c':
+				if (sv_eq_cstr(token.string, "compile_error")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_COMPILE_ERROR;
+					
+					lexer_consume_check(lexer, PARENTHESIS_OPEN);
+					arrpush(internal->internal.inputs, parse_expression(lexer));
+					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+					return internal;
+				}
+				break;
 			case 'C':
 				if (sv_eq_cstr(token.string, "C_CHAR_SIZE")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
