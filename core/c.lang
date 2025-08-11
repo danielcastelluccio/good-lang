@@ -12,6 +12,7 @@ def size_t = unsigned_long;
 def FILE = struct {};
 
 def printf: fn (s: ^[_]byte, ..): int = extern "printf";
+def sprintf: fn (str: ^[_]byte, format: ^[_]byte, ..): int = extern "sprintf";
 
 def malloc: fn (size: size_t): ?^ = extern "malloc";
 def free: fn (ptr: ^) = extern "free";
@@ -19,3 +20,5 @@ def realloc: fn (ptr: ^, size: size_t): ?^ = extern "realloc";
 
 def fopen: fn (path: ^[_]byte, mode: ^[_]byte): ^FILE = extern "fopen";
 def fread: fn (buffer: ^[_]byte, size: size_t, count: size_t, stream: ^FILE): size_t = extern "fread";
+
+def strlen: fn (s: ^[_]byte): size_t = extern "strlen";

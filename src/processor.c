@@ -515,9 +515,10 @@ static Custom_Operator_Function find_custom_operator(Context *context, Value typ
 				size_t saved_static_id = context->static_id;
 				context->static_id = 0;
 				process_node_with_scopes(context, operator, scopes);
-				context->static_id = saved_static_id;
 
 				Operator_Data data = get_data(context, operator)->operator;
+				context->static_id = saved_static_id;
+
 				return (Custom_Operator_Function) {
 					.function = data.typed_value.value.value,
 					.function_type = data.typed_value.type,

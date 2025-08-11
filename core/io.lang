@@ -1,128 +1,10 @@
 def c = import("c.lang");
 
-def print_value = fn [T](t: T, static fmt: []byte) {
- 	var static type_info = type_info_of(T);
- 	switch static type_info {
-		case Integer {
-			_ = c::printf("%li\0", t);
-		}
-		case Byte {
-			_ = c::printf("%hhu\0", t);
-		}
-		case Pointer {
-			_ = c::printf("%p\0", t);
-		}
-		case Struct |struct_| {
-			_ = c::printf(".{\0");
-			for static struct_.members |member, i| {
-				var static name = member.name;
-				_ = c::printf(" .%.*s = \0", name.len, name.ptr);
-
-				print_value(embed("t.", name), "");
-
-				if static i < struct_.members.len - 1 {
- 					_ = c::printf(",\0");
- 				} else {
- 					_ = c::printf(" \0");
-				};
-			};
-			_ = c::printf("}\0");
-		}
-		case Tagged_Union |tagged_union_| {
-			_ = c::printf(".{\0");
-
-			for static tagged_union_.members |member| {
-				var static name = member.name;
-				if t is embed(name) |value| {
-					_ = c::printf(" .%.*s = \0", name.len, name.ptr);
-					print_value(value, "");
-					_ = c::printf(" \0");
-				};
-			};
-
-			_ = c::printf("}\0");
-		}
-		case Enum |enum_| {
-			for static enum_.values |value| {
-				if t == embed(value) {
-					_ = c::printf("%.*s\0", value.len, value.ptr);
-				};
-			};
-		}
-		case Optional {
-			if t |value| {
-				print_value(value, "");
-			} else {
-				_ = c::printf("null\0");
-			};
-		}
-		case Array |array| {
-			_ = c::printf(".{\0");
-
-			var static size = array.size;
-			for static 0..size |i| {
-				_ = c::printf(" \0");
-
-				print_value(t[i], "");
-
- 				if i < size - 1 {
- 					_ = c::printf(",\0");
- 				} else {
- 					_ = c::printf(" \0");
-				};
-			};
-
-			_ = c::printf("}\0");
-		}
-		case Array_View |array_view| {
-			if static fmt == "s" and array_view.type == byte {
-				_ = c::printf("%.*s\0", t.len, t.ptr);
-			} else {
-				_ = c::printf(".{\0");
-
-				for 0..t.len |i| {
-					_ = c::printf(" \0");
-
-					print_value(t[i], "");
-
-					if i < t.len - 1 {
-						_ = c::printf(",\0");
-					} else {
-						_ = c::printf(" \0");
-					};
-				};
-
-				_ = c::printf("}\0");
-			};
-		}
- 	};
-};
-
-def print = fn [T](static fmt: []byte, args: T) {
-	var static type_info = type_info_of(T);
-	if static type_info is Tuple |tuple| {
-		var static argument_index = 0;
-		var static i: uint = 0;
-		while static i < fmt.len {
-			if static fmt[i] == '{' {
-				var static start = i + 1;
-				while static fmt[i] != '}' {
-					i =static i + 1;
-				};
-
-				var static end = i;
-
-				var static format = fmt[start, end];
-				print_value(embed("args._", cast(byte) argument_index + 48), format);
-				argument_index =static argument_index + 1;
-			} else {
-				_ = c::printf("%c\0", fmt[i]);
-			};
-			i =static i + 1;
-		};
-	} else {
-		compile_error("Need tuple as argument");
-	};
+def cstr_to_slice = fn (cstr: ^[_]byte): []byte {
+	var slice: []byte;
+	slice.ptr = cstr;
+	slice.len = c::strlen(cstr);
+	return slice;
 };
 
 def Output_Fn = fn (data: ^, char: byte);
@@ -130,8 +12,142 @@ def Output_Fn = fn (data: ^, char: byte);
 def Printer = struct {
 	output_fn: Output_Fn;
 
-	op print = fn (printer: ^Printer, fmt: []byte) {
-		printer:print_chars(fmt);
+	op print = fn [T](printer: ^Printer, static fmt: []byte, args: T) {
+		var static type_info = type_info_of(T);
+		if static type_info is Tuple |tuple| {
+			var static argument_index = 0;
+			var static i: uint = 0;
+			while static i < fmt.len {
+				if static fmt[i] == '{' {
+					var static start = i + 1;
+					while static fmt[i] != '}' {
+						i =static i + 1;
+					};
+
+					var static end = i;
+
+					var static format = fmt[start, end];
+					printer:print_value(embed("args._", cast(byte) argument_index + 48), format);
+					argument_index =static argument_index + 1;
+				} else {
+					printer:print_char(fmt[i]);
+				};
+				i =static i + 1;
+			};
+		} else {
+			compile_error("Need tuple as argument");
+		};
+	};
+
+	op print_value = fn [T](printer: ^Printer, t: T, static fmt: []byte) {
+		var static type_info = type_info_of(T);
+		switch static type_info {
+			case Integer {
+				var buf: [24]byte;
+				_ = c::sprintf(&buf, "%li\0", t);
+				printer:print_chars(cstr_to_slice(&buf));
+			}
+			case Byte {
+				var buf: [24]byte;
+				_ = c::sprintf(&buf, "%hhu\0", t);
+				printer:print_chars(cstr_to_slice(&buf));
+			}
+			case Pointer {
+				var buf: [24]byte;
+				_ = c::sprintf(&buf, "%p\0", t);
+				printer:print_chars(cstr_to_slice(&buf));
+			}
+			case Struct |struct_| {
+				printer:print_chars(".{");
+				for static struct_.members |member, i| {
+					var static name = member.name;
+					printer:print_chars(" .");
+					printer:print_chars(name);
+					printer:print_chars(" = ");
+
+					printer:print_value(embed("t.", name), "");
+
+					if static i < struct_.members.len - 1 {
+						printer:print_chars(",");
+					} else {
+						printer:print_chars(" ");
+					};
+				};
+				printer:print_chars("}");
+			}
+			case Tagged_Union |tagged_union_| {
+				printer:print_chars(".{");
+
+				for static tagged_union_.members |member| {
+					var static name = member.name;
+					if t is embed(name) |value| {
+						printer:print_chars(name);
+
+						printer:print_value(value, "");
+						printer:print_chars(" ");
+					};
+				};
+
+				printer:print_chars("}");
+			}
+			case Enum |enum_| {
+				for static enum_.values |value| {
+					if t == embed(value) {
+						printer:print_chars(value);
+					};
+				};
+			}
+			case Optional {
+				if t |value| {
+					printer:print_value(value, "");
+				} else {
+					printer:print_chars("null");
+				};
+			}
+			case Array |array| {
+				printer:print_chars(".{");
+
+				var static size = array.size;
+				for static 0..size |i| {
+					printer:print_chars(" ");
+
+					printer:print_value(t[i], "");
+
+					if i < size - 1 {
+						printer:print_chars(",");
+					} else {
+						printer:print_chars(" ");
+					};
+				};
+
+				printer:print_chars("}");
+			}
+			case Array_View |array_view| {
+				if static fmt == "s" and array_view.type == byte {
+					printer:print_chars(t);
+				} else {
+					printer:print_chars(".{");
+
+					for 0..t.len |i| {
+						printer:print_chars(" ");
+
+						printer:print_value(t[i], "");
+
+						if i < t.len - 1 {
+							printer:print_chars(",");
+						} else {
+							printer:print_chars(" ");
+						};
+					};
+
+					printer:print_chars("}");
+				};
+			}
+		};
+	};
+
+	op print_char = fn (printer: ^Printer, char: byte) {
+		printer.output_fn(null, char);
 	};
 
 	op print_chars = fn (printer: ^Printer, chars: []byte) {
