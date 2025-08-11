@@ -124,3 +124,19 @@ def print = fn [T](static fmt: []byte, args: T) {
 		compile_error("Need tuple as argument");
 	};
 };
+
+def Output_Fn = fn (data: ^, char: byte);
+
+def Printer = struct {
+	output_fn: Output_Fn;
+
+	op print = fn (printer: ^Printer, fmt: []byte) {
+		printer:print_chars(fmt);
+	};
+
+	op print_chars = fn (printer: ^Printer, chars: []byte) {
+		for chars |c| {
+			printer.output_fn(null, c);
+		};
+	};
+};

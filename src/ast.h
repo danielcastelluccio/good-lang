@@ -220,6 +220,11 @@ typedef struct {
 } Number_Node;
 
 typedef struct {
+	String_View identifier;
+	Node *expression;
+} Operator_Node;
+
+typedef struct {
 	Node *inner;
 } Optional_Type_Node;
 
@@ -261,7 +266,7 @@ typedef struct {
 
 typedef struct {
 	Structure_Member *members; // stb_ds
-	Operator_Overload *operator_overloads; // stb_ds
+	Node **operators; // stb_ds
 } Struct_Type_Node;
 
 typedef struct {
@@ -343,6 +348,7 @@ typedef enum {
 	MODULE_TYPE_NODE,
 	NULL_NODE,
 	NUMBER_NODE,
+	OPERATOR_NODE,
 	OPTIONAL_NODE,
 	POINTER_NODE,
 	RANGE_NODE,
@@ -393,6 +399,7 @@ struct Node {
 		Is_Node is;
 		Module_Node module;
 		Number_Node number;
+		Operator_Node operator;
 		Optional_Type_Node optional_type;
 		Pointer_Type_Node pointer_type;
 		Range_Node range;

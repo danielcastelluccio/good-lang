@@ -501,26 +501,26 @@ static void process_initial_argument_types(Context *context, Value_Data *functio
 	}
 }
 
-static Custom_Operator_Function find_custom_operator(Value type, String_View operator) {
+static Custom_Operator_Function find_custom_operator(Context *context, Value type, String_View operator_id) {
 	if (type.value->tag == STRUCT_TYPE_VALUE) {
-		Operator_Overload *operators = type.value->struct_type.node->struct_type.operator_overloads;
+		Node **operators = type.value->struct_type.node->struct_type.operators;
 		for (long int i = 0; i < arrlen(operators); i++) {
-			if (sv_eq(operators[i].name, operator)) {
-				Value_Data *function = type.value->struct_type.operators[i].function.value;
-				Value_Data *function_type = NULL;
-				switch (function->tag) {
-					case FUNCTION_VALUE:
-						function_type = function->function.type;
-						break;
-					case FUNCTION_STUB_VALUE:
-						function_type = value_new(NONE_VALUE);
-						break;
-					default:
-						assert(false);
+			Node *operator = operators[i];
+			if (sv_eq(operator->operator.identifier, operator_id)) {
+				Scope *scopes = NULL;
+				for (long i = 0; i < arrlen(type.value->struct_type.scopes); i++) {
+					arrpush(scopes, type.value->struct_type.scopes[i]);
 				}
+
+				size_t saved_static_id = context->static_id;
+				context->static_id = 0;
+				process_node_with_scopes(context, operator, scopes);
+				context->static_id = saved_static_id;
+
+				Operator_Data data = get_data(context, operator)->operator;
 				return (Custom_Operator_Function) {
-					.function = function,
-					.function_type = (Value) { .value = function_type },
+					.function = data.typed_value.value.value,
+					.function_type = data.typed_value.type,
 				};
 			}
 		}
@@ -805,7 +805,7 @@ static void process_array_access(Context *context, Node *node) {
 		array_type = array_type.value->pointer_type.inner;
 	}
 
-	Custom_Operator_Function custom_operator_function = find_custom_operator(array_type.value->pointer_type.inner, cstr_to_sv("[]"));
+	Custom_Operator_Function custom_operator_function = find_custom_operator(context, array_type.value->pointer_type.inner, cstr_to_sv("[]"));
 
 	if (custom_operator_function.function == NULL
 			&& array_type.value->tag != ARRAY_TYPE_VALUE
@@ -1101,7 +1101,7 @@ static void process_call_method(Context *context, Node *node) {
 		argument1_type = get_type(context, call_method.argument1);
 	}
 
-	Custom_Operator_Function custom_operator_function = find_custom_operator(argument1_type.value->pointer_type.inner, call_method.method);
+	Custom_Operator_Function custom_operator_function = find_custom_operator(context, argument1_type.value->pointer_type.inner, call_method.method);
 	if (custom_operator_function.function == NULL) {
 		handle_semantic_error(context, node->location, "Method '%.*s' not found", (int) call_method.method.len, call_method.method.ptr);
 	}
@@ -1337,9 +1337,9 @@ static void process_for(Context *context, Node *node) {
 		}
 		context->static_id = saved_static_id;
 	} else {
-		assert(arrlen(for_.items) == arrlen(for_.bindings));
+		assert(arrlen(for_.items) >= arrlen(for_.bindings));
 
-		for (long int i = 0; i < arrlen(for_.items); i++) {
+		for (long int i = 0; i < arrlen(for_.bindings); i++) {
 			Binding binding = {
 				.type = element_types[i],
 				.index = i
@@ -2295,6 +2295,18 @@ static void process_number(Context *context, Node *node) {
 	set_type(context, node, wanted_type);
 }
 
+static void process_operator(Context *context, Node *node) {
+	Operator_Node operator = node->operator;
+	process_node(context, operator.expression);
+
+	Node_Data *data = data_new(OPERATOR_NODE);
+	data->operator.typed_value = (Typed_Value) {
+		.type = get_type(context, operator.expression),
+		.value = evaluate(context, operator.expression)
+	};
+	set_data(context, node, data);
+}
+
 static void process_optional(Context *context, Node *node) {
 	Optional_Type_Node optional = node->optional_type;
 	process_node(context, optional.inner);
@@ -3015,6 +3027,9 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		case NUMBER_NODE:
 			process_number(context, node);
+			break;
+		case OPERATOR_NODE:
+			process_operator(context, node);
 			break;
 		case OPTIONAL_NODE:
 			process_optional(context, node);

@@ -220,6 +220,10 @@ typedef struct {
 	Node *node;
 } Internal_Data;
 
+typedef struct {
+	Typed_Value typed_value;
+} Operator_Data;
+
 struct Node_Data {
 	Node_Kind kind;
 	union {
@@ -254,6 +258,7 @@ struct Node_Data {
 		While_Data while_;
 		For_Data for_;
 		Internal_Data internal;
+		Operator_Data operator;
 	};
 };
 

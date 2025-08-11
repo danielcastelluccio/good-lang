@@ -636,17 +636,31 @@ static Node *parse_assign(Lexer *lexer, Node *target) {
 	}
 }
 
-static String_View parse_operator(Lexer *lexer) {
-	Token_Data operator_token = lexer_consume(lexer);
-	switch (operator_token.kind) {
+static Node *parse_operator(Lexer *lexer) {
+	Token_Data first_token = lexer_consume_check(lexer, KEYWORD_OP);
+
+	Token_Data identifier = lexer_consume(lexer);
+	String_View operator_id = {};
+	switch (identifier.kind) {
 		case IDENTIFIER:
-			return operator_token.string;
+			operator_id = identifier.string;
+			break;
 		case BRACE_OPEN:
 			lexer_consume_check(lexer, BRACE_CLOSED);
-			return cstr_to_sv("[]");
+			operator_id = cstr_to_sv("[]");
+			break;
 		default:
 			assert(false);
 	}
+
+	lexer_consume_check(lexer, EQUALS);
+
+	Node *expression = parse_expression(lexer);
+
+	Node *operator = ast_new(OPERATOR_NODE, first_token.location);
+	operator->operator.identifier = operator_id;
+	operator->operator.expression = expression;
+	return operator;
 }
 
 static Node *parse_struct_type(Lexer *lexer) {
@@ -683,20 +697,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 
 	if (lexer_peek_check(lexer, KEYWORD_OP)) {
 		while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-			lexer_consume_check(lexer, KEYWORD_OP);
-
-			String_View operator = parse_operator(lexer);
-
-	 		lexer_consume_check(lexer, EQUALS);
-
-	 		Node *function = parse_expression(lexer);
-
-			Operator_Overload operator_definition = {
-	 			.name = operator,
-	 			.function = function
-	 		};
-			arrpush(struct_->struct_type.operator_overloads, operator_definition);
-
+			arrpush(struct_->struct_type.operators, parse_operator(lexer));
 			lexer_consume_check(lexer, SEMICOLON);
 	 	}
 	}
@@ -954,21 +955,23 @@ static Node *parse_for(Lexer *lexer) {
 		}
 	}
 
-	lexer_consume_check(lexer, VERTICAL_BAR);
-	while (true) {
-		Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-		arrpush(for_->for_.bindings, identifier.string);
+	if (lexer_peek(lexer).kind == VERTICAL_BAR) {
+		lexer_consume_check(lexer, VERTICAL_BAR);
+		while (true) {
+			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+			arrpush(for_->for_.bindings, identifier.string);
 
-		Token_Data token = lexer_peek(lexer);
-		if (token.kind == COMMA) {
-			lexer_consume(lexer);
-		} else if (token.kind == VERTICAL_BAR) {
-			break;
-		} else {
-			handle_token_error_no_expected(lexer, token);
+			Token_Data token = lexer_peek(lexer);
+			if (token.kind == COMMA) {
+				lexer_consume(lexer);
+			} else if (token.kind == VERTICAL_BAR) {
+				break;
+			} else {
+				handle_token_error_no_expected(lexer, token);
+			}
 		}
+		lexer_consume_check(lexer, VERTICAL_BAR);
 	}
-	lexer_consume_check(lexer, VERTICAL_BAR);
 
 	for_->for_.body = parse_separated_statement(lexer);
 

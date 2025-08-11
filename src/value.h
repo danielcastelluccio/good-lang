@@ -110,15 +110,10 @@ typedef struct {
 } Integer_Value;
 
 typedef struct {
-	String_View operator;
-	Value function;
-} Operator_Value_Definition;
-
-typedef struct {
 	Value *members; // stb_ds
 	Node *node;
 	Value *arguments; // stb_ds
-	Operator_Value_Definition *operators; // stb_ds
+	Scope *scopes;
 } Struct_Type_Value;
 
 typedef struct {

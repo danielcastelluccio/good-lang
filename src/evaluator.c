@@ -287,14 +287,11 @@ static Value evaluate_struct_type(State *state, Node *node) {
 
 	struct_value_data->struct_type.arguments = function_arguments;
 
-	for (long int i = 0; i < arrlen(struct_type.operator_overloads); i++) {
-		process_node(state->context, struct_type.operator_overloads[i].function);
-		Operator_Value_Definition item = {
-			.operator = struct_type.operator_overloads[i].name,
-			.function = evaluate_state(state, struct_type.operator_overloads[i].function)
-		};
-		arrpush(struct_value.value->struct_type.operators, item);
+	Scope *scopes = NULL;
+	for (long int i = 0; i < arrlen(state->context->scopes); i++) {
+		arrpush(scopes, state->context->scopes[i]);
 	}
+	struct_value.value->struct_type.scopes = scopes;
 
 	(void) arrpop(state->context->scopes);
 

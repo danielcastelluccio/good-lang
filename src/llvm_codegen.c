@@ -345,7 +345,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 				if (identifier_data->identifier.want_pointer || get_type(&state->context, node->for_.items[index]).value->tag == RANGE_TYPE_VALUE) {
 					return binding_llvm_value;
 				} else {
-					return LLVMBuildLoad2(state->llvm_builder, LLVMTypeOf(binding_llvm_value), binding_llvm_value, "");
+					return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type.value, state), binding_llvm_value, "");
 				}
 			} else if (node->kind == IF_NODE) {
 				LLVMValueRef binding_llvm_value = hmget(state->ifs, node_data).binding;
