@@ -53,7 +53,8 @@ typedef enum {
 	OP_SUBTRACT,
 	OP_MULTIPLY,
 	OP_DIVIDE,
-	OP_AND
+	OP_AND,
+	OP_OR
 } Binary_Op_Node_Kind;
 
 typedef struct {

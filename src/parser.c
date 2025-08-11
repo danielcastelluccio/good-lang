@@ -466,6 +466,7 @@ static size_t get_precedence(Binary_Op_Node_Kind kind) {
 		case OP_GREATER_EQUALS:
 			return 1;
 		case OP_AND:
+		case OP_OR:
 			return 0;
 		default:
 			assert(false);
@@ -510,6 +511,9 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 			break;
 		case KEYWORD_AND:
 			binary_operator->binary_op.operator = OP_AND;
+			break;
+		case KEYWORD_OR:
+			binary_operator->binary_op.operator = OP_OR;
 			break;
 		default:
 			assert(false);
@@ -1423,6 +1427,9 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_range(lexer, result);
 				break;
 			case KEYWORD_AND:
+				result = parse_binary_operator(lexer, result);
+				break;
+			case KEYWORD_OR:
 				result = parse_binary_operator(lexer, result);
 				break;
 			case KEYWORD_CATCH:

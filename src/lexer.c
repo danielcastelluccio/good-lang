@@ -116,6 +116,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case 'o':
 			if (strcmp(identifier, "op") == 0) result = KEYWORD_OP;
+			else if (strcmp(identifier, "or") == 0) result = KEYWORD_OR;
 			break;
 		case 'r':
 			if (strcmp(identifier, "return") == 0) result = KEYWORD_RETURN;
@@ -459,6 +460,8 @@ char *token_to_string(Token_Kind kind) {
 			return "switch";
 		case KEYWORD_TAGGED_UNION:
 			return "tagged_union";
+		case KEYWORD_OR:
+			return "or";
 		case KEYWORD_UNION:
 			return "union";
 		case KEYWORD_VAR:

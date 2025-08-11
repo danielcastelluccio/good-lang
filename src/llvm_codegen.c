@@ -945,6 +945,10 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 					return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
 				}
 			}
+		case OP_AND:
+			return LLVMBuildAnd(state->llvm_builder, left_value, right_value, "");
+		case OP_OR:
+			return LLVMBuildOr(state->llvm_builder, left_value, right_value, "");
 		default:
 			assert(false);
 	}
