@@ -1,5 +1,6 @@
 def allocate = import("allocate.lang");
 def c = import("c.lang");
 def file = import("file.lang");
-def list = import("list.lang");
 def io = import("io.lang");
+def list = import("list.lang");
+def slice = import("slice.lang");

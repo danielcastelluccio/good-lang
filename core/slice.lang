@@ -1,0 +1,8 @@
+def cstr_to_slice = fn (cstr: ^[_]byte): []byte {
+	var slice: []byte;
+	slice.ptr = cstr;
+	slice.len = c::strlen(cstr);
+	return slice;
+};
+
+def c = import("c.lang");
