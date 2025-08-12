@@ -130,18 +130,18 @@ typedef struct {
 } Define_Data;
 
 typedef struct {
-	bool compile_only;
-	bool returned;
-} Function_Data;
-
-typedef struct {
 	Value *static_arguments;
 	Typed_Value value;
 } Static_Argument_Variation;
 
 typedef struct {
-	Value value;
+	bool compile_only;
+	bool returned;
 	Static_Argument_Variation *function_values;
+} Function_Data;
+
+typedef struct {
+	Value value;
 } Function_Type_Data;
 
 typedef struct {

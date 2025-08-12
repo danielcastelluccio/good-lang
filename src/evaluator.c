@@ -71,7 +71,11 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			return value_equal_internal(value1->optional_type.inner.value, value2->optional_type.inner.value, typechecking);
 		}
 		case RESULT_TYPE_VALUE: {
-			return value_equal_internal(value1->result_type.value.value, value2->result_type.value.value, typechecking) && value_equal_internal(value1->result_type.error.value, value2->result_type.error.value, typechecking);
+			if (value1->result_type.value.value != NULL) {
+				if (!value_equal_internal(value1->result_type.value.value, value2->result_type.value.value, typechecking)) return false;
+			}
+
+			return value_equal_internal(value1->result_type.error.value, value2->result_type.error.value, typechecking);
 		}
 		case INTEGER_TYPE_VALUE: {
 			return value1->integer_type.signed_ == value2->integer_type.signed_ && value1->integer_type.size == value2->integer_type.size;
@@ -213,6 +217,10 @@ static Value clone_value(Value input) {
 	switch (input.value->tag) {
 		case INTEGER_VALUE: {
 			result = create_integer(input.value->integer.value);
+			break;
+		}
+		case INTEGER_TYPE_VALUE: {
+			result = create_integer_type(input.value->integer_type.signed_, input.value->integer_type.size);
 			break;
 		}
 		case STRUCT_VALUE: {

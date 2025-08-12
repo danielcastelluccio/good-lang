@@ -518,7 +518,7 @@ static Custom_Operator_Function find_custom_operator(Context *context, Value typ
 
 				Operator_Data data = get_data(context, operator)->operator;
 				context->static_id = saved_static_id;
-
+	
 				return (Custom_Operator_Function) {
 					.function = data.typed_value.value.value,
 					.function_type = data.typed_value.type,
@@ -644,15 +644,15 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			}
 		}
 
-		Node_Data *function_data = get_data(context, function_type_node);
+		Node_Data *function_data = get_data(context, function_value.value->function.node);
 		if (function_data == NULL) {
-			function_data = data_new(FUNCTION_TYPE_NODE);
+			function_data = data_new(FUNCTION_NODE);
 		}
-		set_data(context, function_type_node, function_data);
+		set_data(context, function_value.value->function.node, function_data);
 
 		bool found_match = false;
 
-		Static_Argument_Variation *function_values = function_data->function_type.function_values;
+		Static_Argument_Variation *function_values = function_data->function.function_values;
 		for (long int i = 0; i < arrlen(function_values); i++) {
 			bool match = arrlen(function_values[i].static_arguments) == arrlen(static_argument_values);
 			if (match) {
@@ -702,7 +702,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 				.static_arguments = static_argument_values,
 				.value = { .value = function_value, .type = *function_type }
 			};
-			arrpush(function_data->function_type.function_values, static_argument_variation);
+			arrpush(function_data->function.function_values, static_argument_variation);
 
 			(void) arrpop(context->scopes);
 			context->scopes = saved_scopes;
@@ -712,7 +712,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 	}
 
 	if (function_type->value->tag != FUNCTION_TYPE_VALUE) {
-		handle_type_error(node, "Expected function pointer, but got %s", *function_type);
+		handle_type_error(node, "Expected function, but got %s", *function_type);
 	}
 
 	assert(function_type->value->tag == FUNCTION_TYPE_VALUE);
@@ -1381,35 +1381,31 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 
 	process_function_type(context, function.function_type, given_static_arguments);
 
-	set_type(context, node, get_data(context, function.function_type)->function_type.value);
+	Node_Data *function_type_data = get_data(context, function.function_type);
 
-	if (!static_argument || given_static_arguments) {
-		Node_Data *function_type_data = get_data(context, function.function_type);
+	Value function_type_value = function_type_data->function_type.value;
 
-		Value function_type_value = function_type_data->function_type.value;
+	set_type(context, node, function_type_value);
 
-		set_type(context, node, function_type_value);
+	if (function.body != NULL) {
+		Scope scope = {
+			.node = node,
+			.node_type = function_type_value
+		};
+		arrpush(context->scopes, scope);
 
-		if (function.body != NULL) {
-			Scope scope = {
-				.node = node,
-				.node_type = function_type_value
-			};
-			arrpush(context->scopes, scope);
+		Temporary_Context temporary_context = { .wanted_type = function_type_value.value->function_type.return_type };
+		process_node_context(context, temporary_context, function.body);
 
-			Temporary_Context temporary_context = { .wanted_type = function_type_value.value->function_type.return_type };
-			process_node_context(context, temporary_context, function.body);
+		if (function_type_value.value->function_type.return_type.value != NULL) {
+			Value returned_type = get_type(context, function.body);
 
-			if (function_type_value.value->function_type.return_type.value != NULL) {
-				Value returned_type = get_type(context, function.body);
-
-				Value wanted_return_type = function_type_value.value->function_type.return_type;
-				if (!type_assignable(wanted_return_type.value, returned_type.value) && !context->returned) {
-					handle_expected_type_error(context, node, wanted_return_type, returned_type);
-				}
+			Value wanted_return_type = function_type_value.value->function_type.return_type;
+			if (!type_assignable(wanted_return_type.value, returned_type.value) && !context->returned) {
+				handle_expected_type_error(context, node, wanted_return_type, returned_type);
 			}
-			(void) arrpop(context->scopes);
 		}
+		(void) arrpop(context->scopes);
 	}
 
 	Node_Data *data = data_new(FUNCTION_NODE);
@@ -2300,10 +2296,12 @@ static void process_operator(Context *context, Node *node) {
 	Operator_Node operator = node->operator;
 	process_node(context, operator.expression);
 
+	Value value = evaluate(context, operator.expression);
+
 	Node_Data *data = data_new(OPERATOR_NODE);
 	data->operator.typed_value = (Typed_Value) {
 		.type = get_type(context, operator.expression),
-		.value = evaluate(context, operator.expression)
+		.value = value
 	};
 	set_data(context, node, data);
 }

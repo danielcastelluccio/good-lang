@@ -1,4 +1,4 @@
-def List = fn (static T: type): type {
+def List = fn (T: type): type {
 	return struct {
 		items: ^[_]T,
 		length: uint,

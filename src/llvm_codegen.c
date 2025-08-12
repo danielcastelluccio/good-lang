@@ -147,7 +147,11 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 		case RESULT_TYPE_VALUE: {
 			Result_Type_Value result_type = value->result_type;
 
-			size_t max_size = LLVMABISizeOfType(LLVMCreateTargetDataLayout(state->llvm_target), create_llvm_type(result_type.value.value, state));
+			size_t max_size = 0;
+			if (result_type.value.value != NULL) {
+				max_size = LLVMABISizeOfType(LLVMCreateTargetDataLayout(state->llvm_target), create_llvm_type(result_type.value.value, state));
+			}
+
 			size_t error_size = LLVMABISizeOfType(LLVMCreateTargetDataLayout(state->llvm_target), create_llvm_type(result_type.error.value, state));
 			if (error_size > max_size) {
 				max_size = error_size;
@@ -1339,8 +1343,10 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 			LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, result_type, result_value, 1, "");
 
 			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), tag_pointer);
-			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type.value->result_type.value.value, state), 0), "");
-			if (arrlen(internal.inputs) > 0) LLVMBuildStore(state->llvm_builder, generate_node(internal.inputs[0], state), data_pointer);
+			if (arrlen(internal.inputs) > 0) {
+				data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type.value->result_type.value.value, state), 0), "");
+				LLVMBuildStore(state->llvm_builder, generate_node(internal.inputs[0], state), data_pointer);
+			}
 
 			return LLVMBuildLoad2(state->llvm_builder, result_type, result_value, "");
 		}
@@ -1352,7 +1358,7 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 			LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, result_type, result_value, 1, "");
 
 			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 1, false), tag_pointer);
-			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type.value->result_type.value.value, state), 0), "");
+			data_pointer = LLVMBuildBitCast(state->llvm_builder, data_pointer, LLVMPointerType(create_llvm_type(type.value->result_type.error.value, state), 0), "");
 			if (arrlen(internal.inputs) > 0) LLVMBuildStore(state->llvm_builder, generate_node(internal.inputs[0], state), data_pointer);
 
 			return LLVMBuildLoad2(state->llvm_builder, result_type, result_value, "");
