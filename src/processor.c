@@ -289,6 +289,10 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "bool");
 			break;
 		}
+		case TYPE_TYPE_VALUE: {
+			buffer += sprintf(buffer, "type");
+			break;
+		}
 		case INTEGER_VALUE: {
 			buffer += sprintf(buffer, "%li", type.value->integer.value);
 			break;
@@ -644,11 +648,14 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			}
 		}
 
-		Node_Data *function_data = get_data(context, function_value.value->function.node);
+		size_t saved_saved_static_id = context->static_id;
+		context->static_id = 0;
+		Node_Data *function_data = get_data(context, function_value.value->function_stub.node);
 		if (function_data == NULL) {
 			function_data = data_new(FUNCTION_NODE);
 		}
-		set_data(context, function_value.value->function.node, function_data);
+		set_data(context, function_value.value->function_stub.node, function_data);
+		context->static_id = saved_saved_static_id;
 
 		bool found_match = false;
 
@@ -1029,6 +1036,23 @@ static void process_break(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static bool is_simple_cast(Value from_type, Value to_type) {
+	if (from_type.value->tag != to_type.value->tag) return false;
+	if (value_equal(from_type.value, to_type.value)) return true;
+
+	switch (from_type.value->tag) {
+		case POINTER_TYPE_VALUE:
+			return true;
+		case RESULT_TYPE_VALUE:
+			if (is_simple_cast(from_type.value->result_type.value, to_type.value->result_type.value) && is_simple_cast(from_type.value->result_type.error, to_type.value->result_type.error)) return true;
+			return false;
+		case ENUM_TYPE_VALUE:
+			return false;
+		default:
+			assert(false);
+	}
+}
+
 static void process_cast(Context *context, Node *node) {
 	Cast_Node cast = node->cast;
 
@@ -1042,7 +1066,7 @@ static void process_cast(Context *context, Node *node) {
 	}
 
 	bool cast_ok = false;
-	if (from_type.value->tag == POINTER_TYPE_VALUE && to_type.value->tag == POINTER_TYPE_VALUE) cast_ok = true;
+	if (is_simple_cast(from_type, to_type)) cast_ok = true;
 	else if (from_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->tag == BYTE_TYPE_VALUE) cast_ok = true;
 
 	if (!cast_ok) {

@@ -33,49 +33,43 @@ Value jmp_result;
 
 Value *function_arguments;
 
-bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typechecking) {
+bool value_equal(Value_Data *value1, Value_Data *value2) {
 	if (value1 == NULL || value2 == NULL) return false;
 	if (value1->tag != value2->tag) return false;
 
 	switch (value1->tag) {
 		case POINTER_TYPE_VALUE: {
-			if (typechecking) {
-				if (value1->pointer_type.inner.value == NULL || value2->pointer_type.inner.value == NULL) return true;
-			}
-
 			if (value1->pointer_type.inner.value == NULL && value2->pointer_type.inner.value == NULL) return true;
-			return value_equal_internal(value1->pointer_type.inner.value, value2->pointer_type.inner.value, typechecking);
+			return value_equal(value1->pointer_type.inner.value, value2->pointer_type.inner.value);
 		}
 		case ARRAY_TYPE_VALUE: {
-			if (!typechecking || value1->array_type.size.value != NULL) {
-				if ((value1->array_type.size.value == NULL && value2->array_type.size.value != NULL) || (value1->array_type.size.value != NULL && value2->array_type.size.value == NULL)) return false;
-				if (value1->array_type.size.value != NULL) {
-					if (!value_equal_internal(value1->array_type.size.value, value2->array_type.size.value, typechecking)) return false;
-				}
+			if (value1->array_type.size.value != NULL) {
+				if (value2->array_type.size.value == NULL) return false;
+				if (!value_equal(value1->array_type.size.value, value2->array_type.size.value)) return false;
 			}
 
-			return value_equal_internal(value1->array_type.inner.value, value2->array_type.inner.value, typechecking);
+			return value_equal(value1->array_type.inner.value, value2->array_type.inner.value);
 		}
 		case ARRAY_VIEW_TYPE_VALUE: {
-			return value_equal_internal(value1->array_view_type.inner.value, value2->array_view_type.inner.value, typechecking);
+			return value_equal(value1->array_view_type.inner.value, value2->array_view_type.inner.value);
 		}
 		case ARRAY_VIEW_VALUE: {
 			if (value1->array_view.length != value2->array_view.length) return false;
 
 			for (long int i = 0; i < arrlen(value1->array_view.values); i++) {
-				if (!value_equal_internal(value1->array_view.values[i], value2->array_view.values[i], typechecking)) return false;
+				if (!value_equal(value1->array_view.values[i], value2->array_view.values[i])) return false;
 			}
 			return true;
 		}
 		case OPTIONAL_TYPE_VALUE: {
-			return value_equal_internal(value1->optional_type.inner.value, value2->optional_type.inner.value, typechecking);
+			return value_equal(value1->optional_type.inner.value, value2->optional_type.inner.value);
 		}
 		case RESULT_TYPE_VALUE: {
 			if (value1->result_type.value.value != NULL) {
-				if (!value_equal_internal(value1->result_type.value.value, value2->result_type.value.value, typechecking)) return false;
+				if (!value_equal(value1->result_type.value.value, value2->result_type.value.value)) return false;
 			}
 
-			return value_equal_internal(value1->result_type.error.value, value2->result_type.error.value, typechecking);
+			return value_equal(value1->result_type.error.value, value2->result_type.error.value);
 		}
 		case INTEGER_TYPE_VALUE: {
 			return value1->integer_type.signed_ == value2->integer_type.signed_ && value1->integer_type.size == value2->integer_type.size;
@@ -85,7 +79,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 
 			for (long int i = 0; i < arrlen(value1->struct_type.members); i++) {
 				if (!sv_eq(value1->struct_type.node->struct_type.members[i].name, value2->struct_type.node->struct_type.members[i].name)) return false;
-				if (!value_equal_internal(value1->struct_type.members[i].value, value2->struct_type.members[i].value, typechecking)) return false;
+				if (!value_equal(value1->struct_type.members[i].value, value2->struct_type.members[i].value)) return false;
 			}
 
 			return true;
@@ -94,7 +88,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			if (arrlen(value1->tuple_type.members) != arrlen(value2->tuple_type.members)) return false;
 
 			for (long int i = 0; i < arrlen(value1->tuple_type.members); i++) {
-				if (!value_equal_internal(value1->tuple_type.members[i].value, value2->tuple_type.members[i].value, typechecking)) return false;
+				if (!value_equal(value1->tuple_type.members[i].value, value2->tuple_type.members[i].value)) return false;
 			}
 
 			return true;
@@ -104,7 +98,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 
 			for (long int i = 0; i < arrlen(value1->union_type.items); i++) {
 				if (!sv_eq(value1->union_type.items[i].identifier, value2->union_type.items[i].identifier)) return false;
-				if (!value_equal_internal(value1->union_type.items[i].type.value, value2->union_type.items[i].type.value, typechecking)) return false;
+				if (!value_equal(value1->union_type.items[i].type.value, value2->union_type.items[i].type.value)) return false;
 			}
 
 			return true;
@@ -114,7 +108,7 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 
 			for (long int i = 0; i < arrlen(value1->tagged_union_type.items); i++) {
 				if (!sv_eq(value1->tagged_union_type.items[i].identifier, value2->tagged_union_type.items[i].identifier)) return false;
-				if (!value_equal_internal(value1->tagged_union_type.items[i].type.value, value2->tagged_union_type.items[i].type.value, typechecking)) return false;
+				if (!value_equal(value1->tagged_union_type.items[i].type.value, value2->tagged_union_type.items[i].type.value)) return false;
 			}
 
 			return true;
@@ -132,12 +126,12 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 			if (arrlen(value1->function_type.arguments) != arrlen(value2->function_type.arguments)) return false;
 			for (long int i = 0; i < arrlen(value1->function_type.arguments); i++) {
 				if (!sv_eq(value1->function_type.arguments[i].identifier, value2->function_type.arguments[i].identifier)) return false;
-				if (!value_equal_internal(value1->function_type.arguments[i].type.value, value2->function_type.arguments[i].type.value, typechecking)) return false;
+				if (!value_equal(value1->function_type.arguments[i].type.value, value2->function_type.arguments[i].type.value)) return false;
 			}
 
 			if ((value1->function_type.return_type.value == NULL && value2->function_type.return_type.value != NULL) || (value1->function_type.return_type.value != NULL && value2->function_type.return_type.value == NULL)) return false;
 			if (value1->function_type.return_type.value != NULL) {
-				if (!value_equal_internal(value1->function_type.return_type.value, value2->function_type.return_type.value, typechecking)) {
+				if (!value_equal(value1->function_type.return_type.value, value2->function_type.return_type.value)) {
 					return false;
 				}
 			}
@@ -165,12 +159,8 @@ bool value_equal_internal(Value_Data *value1, Value_Data *value2, bool typecheck
 	}
 }
 
-bool value_equal(Value_Data *value1, Value_Data *value2) {
-	return value_equal_internal(value1, value2, false);
-}
-
 bool type_assignable(Value_Data *type1, Value_Data *type2) {
-	return value_equal_internal(type1, type2, true);
+	return value_equal(type1, type2);
 }
 
 #define handle_evaluate_error(/* State * */ state, /* Source_Location */ location, /* char * */ fmt, ...) { \
