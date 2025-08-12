@@ -34,19 +34,79 @@ def Printer = struct {
 		var static type_info = type_info_of(T);
 		switch static type_info {
 			case Integer {
-				var buf: [24]byte;
-				_ = c::sprintf(&buf, "%li\0", t);
-				printer:print_chars(slice::cstr_to_slice(&buf));
+				var buffer: [24]byte;
+				var index: uint = 24;
+				var i: uint = cast t;
+
+				if i == 0 {
+					index = index - 1;
+					buffer[index] = '0';
+				};
+
+				while i > 0 {
+					index = index - 1;
+
+					var ch = i % 10 + 48;
+
+					buffer[index] = cast ch;
+					i = i / 10;
+				};
+
+				var slic: []byte;
+				slic.ptr = cast &buffer[index];
+				slic.len = 24 - index;
+
+				printer:print_chars(slic);
 			}
 			case Byte {
-				var buf: [24]byte;
-				_ = c::sprintf(&buf, "%hhu\0", t);
-				printer:print_chars(slice::cstr_to_slice(&buf));
+				var buffer: [24]byte;
+				var index: uint = 24;
+				var i: uint = cast t;
+
+				if i == 0 {
+					index = index - 1;
+					buffer[index] = '0';
+				};
+
+				while i > 0 {
+					index = index - 1;
+
+					var ch = i % 10 + 48;
+
+					buffer[index] = cast ch;
+					i = i / 10;
+				};
+
+				var slic: []byte;
+				slic.ptr = cast &buffer[index];
+				slic.len = 24 - index;
+
+				printer:print_chars(slic);
 			}
 			case Pointer {
-				var buf: [24]byte;
-				_ = c::sprintf(&buf, "%p\0", t);
-				printer:print_chars(slice::cstr_to_slice(&buf));
+				if t == null {
+					printer:print_chars("null");
+				} else {
+					var buffer: [24]byte;
+					var index: uint = 24;
+					var i: uint = cast t;
+					while i > 0 {
+						index = index - 1;
+
+						var ch = i % 16 + 48;
+						if ch > 57 => ch = ch + 39;
+
+						buffer[index] = cast ch;
+						i = i / 16;
+					};
+
+					var slic: []byte;
+					slic.ptr = cast &buffer[index];
+					slic.len = 24 - index;
+
+					printer:print_chars("0x");
+					printer:print_chars(slic);
+				};
 			}
 			case Struct |struct_| {
 				printer:print_chars(".{");

@@ -53,6 +53,7 @@ typedef enum {
 	OP_SUBTRACT,
 	OP_MULTIPLY,
 	OP_DIVIDE,
+	OP_MODULUS,
 	OP_AND,
 	OP_OR
 } Binary_Op_Node_Kind;

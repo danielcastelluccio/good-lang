@@ -893,6 +893,7 @@ static bool can_compare(Value_Data *type) {
 	if (type->tag == FLOAT_TYPE_VALUE) return true;
 	if (type->tag == BYTE_TYPE_VALUE) return true;
 	if (type->tag == ARRAY_VIEW_TYPE_VALUE) return true;
+	if (type->tag == POINTER_TYPE_VALUE) return true;
 
 	return false;
 }
@@ -900,9 +901,15 @@ static bool can_compare(Value_Data *type) {
 static void process_binary_op(Context *context, Node *node) {
 	Binary_Op_Node binary_operator = node->binary_op;
 
-	process_node(context, binary_operator.left);
-	Temporary_Context temporary_context = { .wanted_type = get_type(context, binary_operator.left) };
-	process_node_context(context, temporary_context, binary_operator.right);
+	if (binary_operator.left->kind == NUMBER_NODE) {
+		process_node(context, binary_operator.right);
+		Temporary_Context temporary_context = { .wanted_type = get_type(context, binary_operator.right) };
+		process_node_context(context, temporary_context, binary_operator.left);
+	} else {
+		process_node(context, binary_operator.left);
+		Temporary_Context temporary_context = { .wanted_type = get_type(context, binary_operator.left) };
+		process_node_context(context, temporary_context, binary_operator.right);
+	}
 
 	Value left_type = get_type(context, binary_operator.left);
 	Value right_type = get_type(context, binary_operator.right);
@@ -934,6 +941,7 @@ static void process_binary_op(Context *context, Node *node) {
 		case OP_SUBTRACT:
 		case OP_MULTIPLY:
 		case OP_DIVIDE:
+		case OP_MODULUS:
 			result_type = left_type;
 			break;
 		case OP_AND:
@@ -1068,6 +1076,8 @@ static void process_cast(Context *context, Node *node) {
 	bool cast_ok = false;
 	if (is_simple_cast(from_type, to_type)) cast_ok = true;
 	else if (from_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->tag == BYTE_TYPE_VALUE) cast_ok = true;
+	else if (from_type.value->tag == BYTE_TYPE_VALUE && to_type.value->tag == INTEGER_TYPE_VALUE) cast_ok = true;
+	else if (from_type.value->tag == POINTER_TYPE_VALUE && to_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->integer_type.signed_ == false && to_type.value->integer_type.size == context->codegen.default_integer_size) cast_ok = true;
 
 	if (!cast_ok) {
 		handle_2type_error(node, "Cannot cast from %s to %s", from_type, to_type);

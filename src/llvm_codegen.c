@@ -547,7 +547,17 @@ static LLVMValueRef generate_run(Node *node, State *state) {
 static LLVMValueRef generate_cast(Node *node, State *state) {
 	assert(node->kind == CAST_NODE);
 	Cast_Node cast = node->cast;
-	return generate_node(cast.node, state);
+	Cast_Data cast_data = get_data(&state->context, node)->cast;
+
+	LLVMValueRef llvm_value = generate_node(cast.node, state);
+
+	if (cast_data.from_type.value->tag == INTEGER_TYPE_VALUE && cast_data.to_type.value->tag == BYTE_TYPE_VALUE) {
+		return LLVMBuildTrunc(state->llvm_builder, llvm_value, create_llvm_type(cast_data.to_type.value, state), "");
+	} else if (cast_data.from_type.value->tag == BYTE_TYPE_VALUE && cast_data.to_type.value->tag == INTEGER_TYPE_VALUE) {
+		return LLVMBuildZExt(state->llvm_builder, llvm_value, create_llvm_type(cast_data.to_type.value, state), "");
+	}
+
+	return llvm_value;
 }
 
 static LLVMValueRef generate_reference(Node *node, State *state) {
@@ -879,6 +889,9 @@ static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValu
 		case ENUM_TYPE_VALUE: {
 			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
 		}
+		case POINTER_TYPE_VALUE: {
+			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
+		}
 		default:
 			assert(false);
 	}
@@ -947,6 +960,16 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 					return LLVMBuildSDiv(state->llvm_builder, left_value, right_value, "");
 				} else {
 					return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
+				}
+			}
+		case OP_MODULUS:
+			if (is_type_float(binary_operator_data.type.value)) {
+				return LLVMBuildFRem(state->llvm_builder, left_value, right_value, "");
+			} else {
+				if (is_type_signed(binary_operator_data.type.value)) {
+					return LLVMBuildSRem(state->llvm_builder, left_value, right_value, "");
+				} else {
+					return LLVMBuildURem(state->llvm_builder, left_value, right_value, "");
 				}
 			}
 		case OP_AND:

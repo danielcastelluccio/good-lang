@@ -268,6 +268,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '>':
 			result = create_token(GREATER, lexer);
 			break;
+		case '%':
+			result = create_token(PERCENT, lexer);
+			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
 				increment_position(lexer);
@@ -526,6 +529,8 @@ char *token_to_string(Token_Kind kind) {
 			return "(";
 		case PARENTHESIS_CLOSED:
 			return ")";
+		case PERCENT:
+			return "%";
 		case CURLY_BRACE_OPEN:
 			return "{";
 		case CURLY_BRACE_CLOSED:

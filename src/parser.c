@@ -454,6 +454,7 @@ static size_t get_precedence(Binary_Op_Node_Kind kind) {
 	switch (kind) {
 		case OP_MULTIPLY:
 		case OP_DIVIDE:
+		case OP_MODULUS:
 			return 3;
 		case OP_ADD:
 		case OP_SUBTRACT:
@@ -508,6 +509,9 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 			break;
 		case SLASH:
 			binary_operator->binary_op.operator = OP_DIVIDE;
+			break;
+		case PERCENT:
+			binary_operator->binary_op.operator = OP_MODULUS;
 			break;
 		case KEYWORD_AND:
 			binary_operator->binary_op.operator = OP_AND;
@@ -1402,6 +1406,9 @@ static Node *parse_expression(Lexer *lexer) {
 			case MINUS:
 			case ASTERISK:
 			case SLASH:
+			case PERCENT:
+			case KEYWORD_AND:
+			case KEYWORD_OR:
 				result = parse_binary_operator(lexer, result);
 				break;
 			case PERIOD:
@@ -1428,12 +1435,6 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case PERIOD_PERIOD:
 				result = parse_range(lexer, result);
-				break;
-			case KEYWORD_AND:
-				result = parse_binary_operator(lexer, result);
-				break;
-			case KEYWORD_OR:
-				result = parse_binary_operator(lexer, result);
 				break;
 			case KEYWORD_CATCH:
 				result = parse_catch(lexer, result);
