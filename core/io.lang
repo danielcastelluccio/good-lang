@@ -52,11 +52,7 @@ def Printer = struct {
 					i = i / 10;
 				};
 
-				var slic: []byte;
-				slic.ptr = cast &buffer[index];
-				slic.len = 24 - index;
-
-				printer:print_chars(slic);
+				printer:print_chars(buffer[index, 24]);
 			}
 			case Byte {
 				var buffer: [24]byte;
@@ -77,11 +73,7 @@ def Printer = struct {
 					i = i / 10;
 				};
 
-				var slic: []byte;
-				slic.ptr = cast &buffer[index];
-				slic.len = 24 - index;
-
-				printer:print_chars(slic);
+				printer:print_chars(buffer[index, 24]);
 			}
 			case Pointer {
 				if t == null {
@@ -93,19 +85,15 @@ def Printer = struct {
 					while i > 0 {
 						index = index - 1;
 
-						var ch = i % 16 + 48;
-						if ch > 57 => ch = ch + 39;
+						var ch = i % 16;
+						if ch > 9 => ch = ch + 87 else ch = ch + 48;
 
 						buffer[index] = cast ch;
 						i = i / 16;
 					};
 
-					var slic: []byte;
-					slic.ptr = cast &buffer[index];
-					slic.len = 24 - index;
-
 					printer:print_chars("0x");
-					printer:print_chars(slic);
+					printer:print_chars(buffer[index, 24]);
 				};
 			}
 			case Struct |struct_| {
@@ -207,6 +195,3 @@ def Printer = struct {
 		};
 	};
 };
-
-def c = import("c.lang");
-def slice = import("slice.lang");

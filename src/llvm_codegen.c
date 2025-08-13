@@ -1391,6 +1391,43 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_slice(Node *node, State *state) {
+	assert(node->kind == SLICE_NODE);
+	Slice_Node slice = node->slice;
+	Slice_Data slice_data = get_data(&state->context, node)->slice;
+
+	LLVMValueRef start_llvm_value = generate_node(slice.start, state);
+	LLVMValueRef end_llvm_value = generate_node(slice.end, state);
+	LLVMValueRef indices[2] = {
+		LLVMConstInt(LLVMInt64Type(), 0, false),
+		start_llvm_value
+	};
+
+	LLVMValueRef array_llvm_value = generate_node(slice.parent, state);
+
+	Value array_type = slice_data.array_type;
+	switch (array_type.value->tag) {
+		case ARRAY_TYPE_VALUE: {
+			assert(slice_data.pointer_access);
+			LLVMTypeRef array_llvm_type = create_llvm_type(array_type.value, state);
+			LLVMValueRef pointer = LLVMBuildGEP2(state->llvm_builder, array_llvm_type, array_llvm_value, indices, 2, "");
+			LLVMValueRef length = LLVMBuildSub(state->llvm_builder, end_llvm_value, start_llvm_value, "");
+
+			LLVMTypeRef array_view_llvm_type = create_llvm_type(create_array_view_type(slice_data.item_type).value, state);
+			LLVMValueRef array_view_allocated_llvm_value = LLVMBuildAlloca(state->llvm_builder, array_view_llvm_type, "");
+			LLVMBuildStore(state->llvm_builder, length, LLVMBuildStructGEP2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, 0, ""));
+			LLVMBuildStore(state->llvm_builder, pointer, LLVMBuildStructGEP2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, 1, ""));
+
+			return LLVMBuildLoad2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, "");
+		}
+		default:
+			assert(false);
+	}
+
+	(void) slice;
+	assert(false);
+}
+
 static LLVMValueRef generate_node(Node *node, State *state) {
 	switch (node->kind) {
 		case DEFINE_NODE:
@@ -1454,6 +1491,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_range(node, state);
 		case INTERNAL_NODE:
 			return generate_internal(node, state);
+		case SLICE_NODE:
+			return generate_slice(node, state);
 		default:
 			assert(false);
 	}

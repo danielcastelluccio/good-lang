@@ -771,7 +771,7 @@ static void process_enforce_pointer_sometimes(Context *context, Node *node, bool
 	process_node(context, node);
 
 	Value real_structure_type = get_type(context, node);
-	if ((force_enforce || context->temporary_context.want_pointer || (real_structure_type.value->tag == STRUCT_TYPE_VALUE && parent_node->kind != STRUCTURE_ACCESS_NODE)) && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
+	if ((force_enforce || context->temporary_context.want_pointer || (real_structure_type.value->tag == STRUCT_TYPE_VALUE && parent_node->kind != STRUCTURE_ACCESS_NODE) || (real_structure_type.value->tag == ARRAY_TYPE_VALUE && parent_node->kind == SLICE_NODE)) && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, node);
 
 		Temporary_Context temporary_context = { .want_pointer = true };
@@ -2498,9 +2498,10 @@ static void process_slice(Context *context, Node *node) {
 			assert(false);
 	}
 
-	Node_Data *data = data_new(ARRAY_ACCESS_NODE);
-	data->array_access.array_type = array_type;
-	data->array_access.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
+	Node_Data *data = data_new(SLICE_NODE);
+	data->slice.array_type = array_type;
+	data->slice.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
+	data->slice.item_type = item_type;
 	set_data(context, node, data);
 
 	Value array_view_type = create_value(ARRAY_VIEW_TYPE_VALUE);
