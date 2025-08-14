@@ -11,11 +11,12 @@ typedef enum {
 	BYTE_TYPE_VALUE,
 	ENUM_VALUE,
 	ENUM_TYPE_VALUE,
-	EXTERN_VALUE,
 	FLOAT_TYPE_VALUE,
 	FUNCTION_VALUE,
 	FUNCTION_STUB_VALUE,
 	FUNCTION_TYPE_VALUE,
+	GLOBAL_VALUE,
+	GLOBAL_TYPE_VALUE,
 	INTEGER_VALUE,
 	INTEGER_TYPE_VALUE,
 	MODULE_VALUE,
@@ -71,11 +72,6 @@ typedef struct {
 } Enum_Type_Value;
 
 typedef struct {
-	String_View name;
-	Value type;
-} Extern_Value;
-
-typedef struct {
 	size_t size;
 } Float_Type_Value;
 
@@ -104,6 +100,15 @@ typedef struct {
 	bool variadic;
 	Node *node;
 } Function_Type_Value;
+
+typedef struct {
+	Value value;
+	Node *node;
+} Global_Value;
+
+typedef struct {
+	Value type;
+} Global_Type_Value;
 
 typedef struct {
 	long value;
@@ -208,11 +213,12 @@ struct Value_Data {
 		Byte_Value byte;
 		Enum_Value enum_;
 		Enum_Type_Value enum_type;
-		Extern_Value extern_;
 		Float_Type_Value float_type;
 		Function_Value function;
 		Function_Stub_Value function_stub;
 		Function_Type_Value function_type;
+		Global_Value global;
+		Global_Type_Value global_type;
 		Integer_Value integer;
 		Integer_Type_Value integer_type;
 		Module_Value module;

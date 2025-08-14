@@ -107,6 +107,9 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			if (strcmp(identifier, "fn") == 0) result = KEYWORD_FN;
 			else if (strcmp(identifier, "for") == 0) result = KEYWORD_FOR;
 			break;
+		case 'g':
+			if (strcmp(identifier, "global") == 0) result = KEYWORD_GLOBAL;
+			break;
 		case 'i':
 			if (strcmp(identifier, "if") == 0) result = KEYWORD_IF;
 			else if (strcmp(identifier, "is") == 0) result = KEYWORD_IS;
@@ -443,6 +446,8 @@ char *token_to_string(Token_Kind kind) {
 			return "fn";
 		case KEYWORD_FOR:
 			return "for";
+		case KEYWORD_GLOBAL:
+			return "global";
 		case KEYWORD_IF:
 			return "if";
 		case KEYWORD_IS:

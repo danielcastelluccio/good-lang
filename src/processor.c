@@ -45,6 +45,7 @@ typedef struct {
 		struct {
 			Node *node;
 			Scope *scope;
+			bool var;
 		} define;
 		Node *variable;
 		Variable_Definition static_variable;
@@ -473,8 +474,6 @@ static void process_initial_argument_types(Context *context, Value_Data *functio
 			function_type_node = function_value->function_stub.node->function.function_type;
 			break;
 		case FUNCTION_VALUE:
-			return;
-		case EXTERN_VALUE:
 			return;
 		default:
 			assert(false);
@@ -1283,10 +1282,6 @@ static void process_enum_type(Context *context, Node *node) {
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
-static void process_extern(Context *context, Node *node) {
-	set_type(context, node, context->temporary_context.wanted_type);
-}
-
 static void process_for(Context *context, Node *node) {
 	For_Node for_ = node->for_;
 
@@ -1501,6 +1496,25 @@ static bool process_function_type(Context *context, Node *node, bool given_stati
 	return true;
 }
 
+static void process_global(Context *context, Node *node) {
+	Global_Node global = node->global;
+
+	Value type = {};
+	if (global.type != NULL) {
+		process_node(context, global.type);
+		type = evaluate(context, global.type);
+	}
+
+	if (global.value != NULL) {
+		Temporary_Context temporary_context = { .wanted_type = type };
+		process_node_context(context, temporary_context, global.value);
+
+		type = get_type(context, global.value);
+	}
+
+	set_type(context, node, type);
+}
+
 static void process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
 
@@ -1576,6 +1590,16 @@ static void process_identifier(Context *context, Node *node) {
 		context->static_id = saved_static_id;
 		type = typed_value.type;
 		value = typed_value.value;
+
+		if (define_node->define.var && identifier.assign_value != NULL) {
+			Temporary_Context temporary_context = { .wanted_type = type };
+			process_node_context(context, temporary_context, identifier.assign_value);
+
+			Value value_type = get_type(context, identifier.assign_value);
+			if (!type_assignable(type.value, value_type.value)) {
+				handle_expected_type_error(context, node, type, value_type);
+			}
+		}
 	}
 
 	if (lookup_result.tag == LOOKUP_RESULT_VARIABLE) {
@@ -1657,8 +1681,13 @@ static void process_identifier(Context *context, Node *node) {
 	if (value.value != NULL) {
 		value.node = node;
 
-		data->identifier.kind = IDENTIFIER_VALUE;
-		data->identifier.value = value;
+		if (define_node != NULL && define_node->define.var) {
+			data->identifier.kind = IDENTIFIER_VAR_VALUE;
+			data->identifier.value = value;
+		} else {
+			data->identifier.kind = IDENTIFIER_VALUE;
+			data->identifier.value = value;
+		}
 	}
 
 	data->identifier.type = type;
@@ -3026,9 +3055,6 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 		case ENUM_TYPE_NODE:
 			process_enum_type(context, node);
 			break;
-		case EXTERN_NODE:
-			process_extern(context, node);
-			break;
 		case FOR_NODE:
 			process_for(context, node);
 			break;
@@ -3037,6 +3063,9 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		case FUNCTION_TYPE_NODE:
 			process_function_type(context, node, false);
+			break;
+		case GLOBAL_NODE:
+			process_global(context, node);
 			break;
 		case IDENTIFIER_NODE:
 			process_identifier(context, node);

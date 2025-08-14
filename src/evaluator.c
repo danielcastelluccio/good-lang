@@ -432,7 +432,12 @@ static Value evaluate_identifier(State *state, Node *node) {
 				hmput(state->variables, variable_data, evaluate_state(state, identifier.assign_value));
 				return (Value) {};
 			} else {
-				return hmget(state->variables, variable_data);
+				Value value = hmget(state->variables, variable_data);
+				if (value.value == NULL) {
+					handle_evaluate_error(state, node->location, "Cannot evaluate identifier at compile time");
+				}
+
+				return value;
 			}
 		}
 		case IDENTIFIER_BINDING: {
@@ -956,11 +961,11 @@ static Value evaluate_range(State *state, Node *node) {
 	return value;
 }
 
-static Value evaluate_extern(State *state, Node *node) {
-	Extern_Node extern_ = node->extern_;
-	Value value = create_value(EXTERN_VALUE);
-	value.value->extern_.name = extern_.name;
-	value.value->extern_.type = get_type(state->context, node);
+static Value evaluate_global(State *state, Node *node) {
+	Global_Node global = node->global;
+	Value value = create_value(GLOBAL_VALUE);
+	value.value->global.node = node;
+	value.value->global.value = evaluate_state(state, global.value);
 	return value;
 }
 
@@ -1000,7 +1005,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case IS_NODE:                return evaluate_is(state, node);
 		case CAST_NODE:              return evaluate_cast(state, node);
 		case RANGE_NODE:             return evaluate_range(state, node);
-		case EXTERN_NODE:            return evaluate_extern(state, node);
+		case GLOBAL_NODE:            return evaluate_global(state, node);
 		case DEFINE_NODE:            return (Value) {};
 		default:                     assert(false);
 	}

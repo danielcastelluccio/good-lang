@@ -804,21 +804,17 @@ static Node *parse_enum_type(Lexer *lexer) {
 	return enum_;
 }
 
-static Node *parse_extern(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *extern_ = ast_new(EXTERN_NODE, first_token.location);
-	extern_->extern_.name = lexer_consume_check(lexer, STRING).string;
-
-	return extern_;
-}
-
 static Node *parse_define(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
-	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
+
+	if (lexer_peek_check(lexer, KEYWORD_VAR)) {
+		lexer_consume(lexer);
+		define->define.var = true;
+	}
+
+	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 
 	if (lexer_peek(lexer).kind == COLON) {
 		lexer_consume_check(lexer, COLON);
@@ -980,6 +976,26 @@ static Node *parse_for(Lexer *lexer) {
 	for_->for_.body = parse_separated_statement(lexer);
 
 	return for_;
+}
+
+static Node *parse_global(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *global = ast_new(GLOBAL_NODE, first_token.location);
+
+	if (lexer_peek_check(lexer, COLON)) {
+		lexer_consume(lexer);
+		global->global.type = parse_expression(lexer);
+	}
+
+	if (lexer_peek_check(lexer, KEYWORD_EXTERN)) {
+		lexer_consume(lexer);
+		global->global.extern_ = lexer_consume_check(lexer, STRING).string;
+	}
+
+	global->global.value = parse_separated_statement_or_nothing(lexer);
+
+	return global;
 }
 
 static Node *parse_switch(Lexer *lexer) {
@@ -1227,12 +1243,19 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		.variadic = variadic
 	};
 
+	String_View extern_ = {};
+	if (lexer_peek_check(lexer, KEYWORD_EXTERN)) {
+		lexer_consume(lexer);
+		extern_ = lexer_consume_check(lexer, STRING).string;
+	}
+
 	Node *body = parse_separated_statement_or_nothing(lexer);
 
-	if (body != NULL) {
+	if (body != NULL || extern_.ptr != NULL) {
 		Node *function = ast_new(FUNCTION_NODE, first_token.location);
 		function->function.function_type = function_type;
 		function->function.body = body;
+		function->function.extern_ = extern_;
 		return function;
 	} else {
 		return function_type;
@@ -1303,16 +1326,16 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_enum_type(lexer);
 			break;
 		}
-		case KEYWORD_EXTERN: {
-			result = parse_extern(lexer);
-			break;
-		}
 		case KEYWORD_FN: {
 			result = parse_function_or_function_type(lexer);
 			break;
 		}
 		case KEYWORD_FOR: {
 			result = parse_for(lexer);
+			break;
+		}
+		case KEYWORD_GLOBAL: {
+			result = parse_global(lexer);
 			break;
 		}
 		case KEYWORD_IF: {

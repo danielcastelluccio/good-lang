@@ -111,6 +111,7 @@ typedef struct {
 	String_View identifier;
 	Node *type;
 	Node *expression;
+	bool var;
 } Define_Node;
 
 typedef struct {
@@ -128,10 +129,6 @@ typedef struct {
 } Enum_Type_Node;
 
 typedef struct {
-	String_View name;
-} Extern_Node;
-
-typedef struct {
 	Node **items;
 	Node *body;
 	String_View *bindings;
@@ -141,6 +138,7 @@ typedef struct {
 typedef struct {
 	Node *function_type;
 	Node *body;
+	String_View extern_;
 } Function_Node;
 
 typedef struct {
@@ -156,6 +154,12 @@ typedef struct {
 	Node *return_;
 	bool variadic;
 } Function_Type_Node;
+
+typedef struct {
+	Node *type;
+	Node *value;
+	String_View extern_;
+} Global_Node;
 
 typedef struct {
 	Node *module;
@@ -337,10 +341,10 @@ typedef enum {
 	DEOPTIONAL_NODE,
 	DEREFERENCE_NODE,
 	ENUM_TYPE_NODE,
-	EXTERN_NODE,
 	FOR_NODE,
 	FUNCTION_NODE,
 	FUNCTION_TYPE_NODE,
+	GLOBAL_NODE,
 	IDENTIFIER_NODE,
 	IF_NODE,
 	INTERNAL_NODE,
@@ -390,10 +394,10 @@ struct Node {
 		Deoptional_Node deoptional;
 		Dereference_Node dereference;
 		Enum_Type_Node enum_type;
-		Extern_Node extern_;
 		For_Node for_;
 		Function_Node function;
 		Function_Type_Node function_type;
+		Global_Node global;
 		Identifier_Node identifier;
 		If_Node if_;
 		Internal_Node internal;
