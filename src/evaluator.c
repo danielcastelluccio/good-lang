@@ -75,6 +75,8 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 			return value1->integer_type.signed_ == value2->integer_type.signed_ && value1->integer_type.size == value2->integer_type.size;
 		}
 		case STRUCT_TYPE_VALUE: {
+			if (value1->struct_type.node != value2->struct_type.node) return false;
+
 			if (arrlen(value1->struct_type.members) != arrlen(value2->struct_type.members)) return false;
 
 			for (long int i = 0; i < arrlen(value1->struct_type.members); i++) {
@@ -205,6 +207,14 @@ static Value initialize_value(Value type) {
 static Value clone_value(Value input) {
 	Value result = {};
 	switch (input.value->tag) {
+		case BOOLEAN_VALUE: {
+			result = create_boolean(input.value->boolean.value);
+			break;
+		}
+		case BOOLEAN_TYPE_VALUE: {
+			result = create_value(BOOLEAN_TYPE_VALUE);
+			break;
+		}
 		case INTEGER_VALUE: {
 			result = create_integer(input.value->integer.value);
 			break;
