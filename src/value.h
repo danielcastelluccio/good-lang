@@ -117,7 +117,8 @@ typedef struct {
 typedef struct {
 	Value *members; // stb_ds
 	Node *node;
-	Value *arguments; // stb_ds
+	Value *inherited_arguments; // stb_ds
+	Node *inherited_node;
 	Scope *scopes;
 } Struct_Type_Value;
 

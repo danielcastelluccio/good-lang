@@ -402,10 +402,15 @@ static bool pattern_match(Node *node, Value value, Context *context, String_View
 		}
 		case CALL_NODE: {
 			if (value.value->tag == STRUCT_TYPE_VALUE) {
-				for (long int i = 0; i < arrlen(node->call.arguments); i++) {
-					if (!pattern_match(node->call.arguments[i], value.value->struct_type.arguments[i], context, inferred_arguments, match_result)) {
-			 			return false;
-			 		}
+				process_node(context, node->call.function);
+				Node *function_node = evaluate(context, node->call.function).value->function.node;
+
+				if (function_node == value.value->struct_type.inherited_node) {
+					for (long int i = 0; i < arrlen(node->call.arguments); i++) {
+						if (!pattern_match(node->call.arguments[i], value.value->struct_type.inherited_arguments[i], context, inferred_arguments, match_result)) {
+							return false;
+						}
+					}
 				}
 			}
 			break;

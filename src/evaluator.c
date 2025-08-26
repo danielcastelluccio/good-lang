@@ -31,6 +31,7 @@ typedef struct {
 jmp_buf jmp;
 Value jmp_result;
 
+Node *function_node;
 Value *function_arguments;
 
 bool value_equal(Value_Data *value1, Value_Data *value2) {
@@ -293,7 +294,10 @@ static Value evaluate_struct_type(State *state, Node *node) {
 		arrpush(struct_value_data->struct_type.members, evaluate_state(state, struct_type.members[i].type));
 	}
 
-	struct_value_data->struct_type.arguments = function_arguments;
+	if (struct_type.inherit_function) {
+		struct_value_data->struct_type.inherited_node = function_node;
+		struct_value_data->struct_type.inherited_arguments = function_arguments;
+	}
 
 	Scope *scopes = NULL;
 	for (long int i = 0; i < arrlen(state->context->scopes); i++) {
@@ -557,7 +561,9 @@ static Value evaluate_call(State *state, Node *node) {
 	state->context->static_id = function.value->function.static_id;
 
 	Value *saved_function_arguments = function_arguments;
+	Node *saved_function_node = function_node;
 	function_arguments = arguments;
+	function_node = function.value->function.node;
 
 	assert(function.value->tag == FUNCTION_VALUE);
 
@@ -585,6 +591,7 @@ static Value evaluate_call(State *state, Node *node) {
 	state->fors = saved_fors;
 
 	function_arguments = saved_function_arguments;
+	function_node = saved_function_node;
 	state->context->static_id = saved_static_argument_id;
 
 	return create_value_data(result, node);

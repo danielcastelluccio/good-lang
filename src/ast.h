@@ -272,6 +272,7 @@ typedef struct {
 typedef struct {
 	Structure_Member *members; // stb_ds
 	Node **operators; // stb_ds
+	bool inherit_function;
 } Struct_Type_Node;
 
 typedef struct {

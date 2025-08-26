@@ -672,6 +672,11 @@ static Node *parse_struct_type(Lexer *lexer) {
 
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 
+	if (lexer_peek(lexer).kind == AT) {
+		lexer_consume(lexer);
+		struct_->struct_type.inherit_function = true;
+	}
+
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED && !lexer_peek_check(lexer, KEYWORD_OP)) {
 		while (true) {
