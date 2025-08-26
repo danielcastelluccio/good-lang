@@ -177,6 +177,21 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 			buffer += sprintf(buffer, "%s", type_node->boolean.value ? "true" : "false");
 			break;
 		}
+		case INTERNAL_NODE: {
+			switch (type_node->internal.kind) {
+				case INTERNAL_UINT: {
+					buffer += sprintf(buffer, "uint");
+					break;
+				}
+				case INTERNAL_BOOL: {
+					buffer += sprintf(buffer, "bool");
+					break;
+				}
+				default:
+					assert(false);
+			}
+			break;
+		}
 		default:
 			assert(false);
 	}
@@ -185,7 +200,7 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 }
 
 static int print_type(Value type, char *buffer) {
-	if (type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE)) {
+	if (type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE || type.node->kind == INTERNAL_NODE)) {
 		return print_type_node(type.node, false, buffer);
 	}
 
@@ -2284,6 +2299,8 @@ static void process_internal(Context *context, Node *node) {
 			break;
 		}
 	}
+
+	value.node = node;
 
 	Node_Data *data = data_new(INTERNAL_NODE);
 	data->internal.value = value;

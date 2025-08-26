@@ -1672,6 +1672,9 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 		case STRUCT_VALUE:
 			result = generate_struct(value, type, state);
 			break;
+		case NONE_VALUE:
+			result = NULL;
+			break;
 		default:
 			assert(false);
 	}
