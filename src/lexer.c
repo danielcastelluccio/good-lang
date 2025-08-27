@@ -93,6 +93,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			if (strcmp(identifier, "cast") == 0) result = KEYWORD_CAST;
 			else if (strcmp(identifier, "case") == 0) result = KEYWORD_CASE;
 			else if (strcmp(identifier, "catch") == 0) result = KEYWORD_CATCH;
+			else if (strcmp(identifier, "const") == 0) result = KEYWORD_CONST;
 			break;
 		case 'd':
 			if (strcmp(identifier, "def") == 0) result = KEYWORD_DEF;
@@ -432,6 +433,8 @@ char *token_to_string(Token_Kind kind) {
 			return "case";
 		case KEYWORD_CATCH:
 			return "catch";
+		case KEYWORD_CONST:
+			return "const";
 		case KEYWORD_DEF:
 			return "def";
 		case KEYWORD_DEFER:

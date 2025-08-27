@@ -986,6 +986,13 @@ static Value evaluate_global(State *state, Node *node) {
 	return value;
 }
 
+static Value evaluate_const(State *state, Node *node) {
+	Const_Node const_ = node->const_;
+	Value value = create_value(CONST_VALUE);
+	value.value->const_.value = evaluate_state(state, const_.value);
+	return value;
+}
+
 static Value evaluate_state(State *state, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE:          return evaluate_function(state, node);
@@ -1023,6 +1030,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case CAST_NODE:              return evaluate_cast(state, node);
 		case RANGE_NODE:             return evaluate_range(state, node);
 		case GLOBAL_NODE:            return evaluate_global(state, node);
+		case CONST_NODE:             return evaluate_const(state, node);
 		case DEFINE_NODE:            return (Value) {};
 		default:                     assert(false);
 	}

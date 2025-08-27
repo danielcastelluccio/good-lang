@@ -9,6 +9,8 @@ typedef enum {
 	BOOLEAN_TYPE_VALUE,
 	BYTE_VALUE,
 	BYTE_TYPE_VALUE,
+	CONST_VALUE,
+	CONST_TYPE_VALUE,
 	ENUM_VALUE,
 	ENUM_TYPE_VALUE,
 	FLOAT_TYPE_VALUE,
@@ -159,6 +161,17 @@ typedef struct {
 } Byte_Value;
 
 typedef struct {
+	Value value;
+} Const_Value;
+
+typedef struct {
+	enum {
+		NUMBER,
+		STRING
+	} type;
+} Const_Type_Value;
+
+typedef struct {
 	Value_Data **values;
 } Struct_Value;
 
@@ -212,6 +225,8 @@ struct Value_Data {
 		Array_View_Type_Value array_view_type;
 		Boolean_Value boolean;
 		Byte_Value byte;
+		Const_Value const_;
+		Const_Type_Value const_type;
 		Enum_Value enum_;
 		Enum_Type_Value enum_type;
 		Float_Type_Value float_type;

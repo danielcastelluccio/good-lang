@@ -814,9 +814,9 @@ static Node *parse_define(Lexer *lexer) {
 
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, KEYWORD_VAR)) {
+	if (lexer_peek_check(lexer, ASTERISK)) {
 		lexer_consume(lexer);
-		define->define.var = true;
+		define->define.special = true;
 	}
 
 	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
@@ -1001,6 +1001,16 @@ static Node *parse_global(Lexer *lexer) {
 	global->global.value = parse_separated_statement_or_nothing(lexer);
 
 	return global;
+}
+
+static Node *parse_const(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *const_ = ast_new(CONST_NODE, first_token.location);
+
+	const_->const_.value = parse_expression(lexer);
+
+	return const_;
 }
 
 static Node *parse_switch(Lexer *lexer) {
@@ -1317,6 +1327,10 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_CAST: {
 			result = parse_cast(lexer);
+			break;
+		}
+		case KEYWORD_CONST: {
+			result = parse_const(lexer);
 			break;
 		}
 		case KEYWORD_DEF: {

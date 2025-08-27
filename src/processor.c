@@ -293,6 +293,11 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "}");
 			break;
 		}
+		case GLOBAL_TYPE_VALUE: {
+			buffer += sprintf(buffer, "global:");
+			buffer += print_type(type.value->global_type.type, buffer);
+			break;
+		}
 		case INTEGER_TYPE_VALUE: {
 			buffer += sprintf(buffer, "int(%s,%li)", type.value->integer_type.signed_ ? "true" : "false", type.value->integer_type.size);
 			break;
@@ -1214,6 +1219,16 @@ static void process_catch(Context *context, Node *node) {
 	set_data(context, node, data);
 }
 
+static void process_const(Context *context, Node *node) {
+	Const_Node const_ = node->const_;
+
+	process_node(context, const_.value);
+
+	Value const_type = create_value(CONST_TYPE_VALUE);
+	const_type.value->const_type.type = NUMBER;
+	set_type(context, node, create_value(CONST_TYPE_VALUE));
+}
+
 static void process_define(Context *context, Node *node) {
 	Define_Node define = node->define;
 
@@ -1532,7 +1547,9 @@ static void process_global(Context *context, Node *node) {
 		type = get_type(context, global.value);
 	}
 
-	set_type(context, node, type);
+	Value global_type = create_value(GLOBAL_TYPE_VALUE);
+	global_type.value->global_type.type = type;
+	set_type(context, node, global_type);
 }
 
 static void process_identifier(Context *context, Node *node) {
@@ -1611,13 +1628,40 @@ static void process_identifier(Context *context, Node *node) {
 		type = typed_value.type;
 		value = typed_value.value;
 
-		if (define_node->define.var && identifier.assign_value != NULL) {
-			Temporary_Context temporary_context = { .wanted_type = type };
-			process_node_context(context, temporary_context, identifier.assign_value);
+		if (define_node->define.special) {
+			switch (type.value->tag) {
+				case GLOBAL_TYPE_VALUE: {
+					type = type.value->global_type.type;
 
-			Value value_type = get_type(context, identifier.assign_value);
-			if (!type_assignable(type.value, value_type.value)) {
-				handle_expected_type_error(context, node, type, value_type);
+					if (identifier.assign_value != NULL) {
+						Temporary_Context temporary_context = { .wanted_type = type };
+						process_node_context(context, temporary_context, identifier.assign_value);
+
+						Value value_type = get_type(context, identifier.assign_value);
+						if (!type_assignable(type.value, value_type.value)) {
+							handle_expected_type_error(context, node, type, value_type);
+						}
+					}
+					break;
+				}
+				case CONST_TYPE_VALUE: {
+					Value const_type = type;
+
+					type = context->temporary_context.wanted_type;
+
+					if (type.value == NULL) {
+						switch (const_type.value->const_type.type) {
+							case NUMBER:
+								type = create_integer_type(true, context->codegen.default_integer_size);
+								break;
+							default:
+								assert(false);
+						}
+					}
+					break;
+				}
+				default:
+					assert(false);
 			}
 		}
 	}
@@ -1701,13 +1745,13 @@ static void process_identifier(Context *context, Node *node) {
 	if (value.value != NULL) {
 		value.node = node;
 
-		if (define_node != NULL && define_node->define.var) {
-			data->identifier.kind = IDENTIFIER_VAR_VALUE;
-			data->identifier.value = value;
+		if (define_node != NULL && define_node->define.special) {
+			data->identifier.kind = IDENTIFIER_SPECIAL_VALUE;
 		} else {
 			data->identifier.kind = IDENTIFIER_VALUE;
-			data->identifier.value = value;
 		}
+
+		data->identifier.value = value;
 	}
 
 	data->identifier.type = type;
@@ -3064,6 +3108,9 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		case CATCH_NODE:
 			process_catch(context, node);
+			break;
+		case CONST_NODE:
+			process_const(context, node);
 			break;
 		case DEFINE_NODE:
 			process_define(context, node);

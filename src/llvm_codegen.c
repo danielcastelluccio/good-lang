@@ -59,7 +59,6 @@ typedef struct {
 
 static LLVMValueRef generate_node(Node *node, State *state);
 static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *state);
-static LLVMValueRef generate_var_value(Value_Data *value, Value_Data *type, State *state);
 
 static LLVMTypeRef create_llvm_type(Value_Data *node, State *state);
 
@@ -367,16 +366,39 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 		case IDENTIFIER_VALUE: {
 			return generate_value(identifier_data->identifier.value.value, identifier_data->identifier.type.value, state);
 		}
-		case IDENTIFIER_VAR_VALUE: {
-			LLVMValueRef value = generate_var_value(identifier_data->identifier.value.value, identifier_data->identifier.type.value, state);
-			switch (identifier_data->identifier.value.value->tag) {
+		case IDENTIFIER_SPECIAL_VALUE: {
+			Value_Data *value = identifier_data->identifier.value.value;
+			Value_Data *type = identifier_data->identifier.type.value;
+			switch (value->tag) {
 				case GLOBAL_VALUE: {
+					Global_Value global_value = value->global;
+					LLVMValueRef global_llvm_value = hmget(state->globals, value);
+					if (global_llvm_value == NULL) {
+						global_llvm_value = LLVMAddGlobal(state->llvm_module, create_llvm_type(type, state), "");
+						LLVMSetValueName2(global_llvm_value, global_value.node->global.extern_.ptr, global_value.node->global.extern_.len);
+						LLVMSetInitializer(global_llvm_value, generate_value(global_value.value.value, type, state));
+						hmput(state->globals, value, global_llvm_value);
+					}
+
 					if (identifier.assign_value != NULL) {
-						LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), value);
+						LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), global_llvm_value);
 						return NULL;
 					} else {
-						return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type.value, state), value, "");
+						return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), global_llvm_value, "");
 					}
+				}
+				case CONST_VALUE: {
+					Const_Value const_value = value->const_;
+
+					switch (const_value.value.value->tag) {
+						case INTEGER_VALUE: {
+							return LLVMConstInt(create_llvm_type(type, state), const_value.value.value->integer.value, false);
+						}
+						default:
+							assert(false);
+					}
+
+					break;
 				}
 				default:
 					assert(false);
@@ -1680,31 +1702,6 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 	}
 
 	hmput(state->generated_cache, value, result);
-	return result;
-}
-
-static LLVMValueRef generate_global(Value_Data *value, Value_Data *type, State *state) {
-	Global_Value global_value = value->global;
-	LLVMValueRef global_llvm_value = hmget(state->globals, value);
-	if (global_llvm_value == NULL) {
-		global_llvm_value = LLVMAddGlobal(state->llvm_module, create_llvm_type(type, state), "");
-		LLVMSetValueName2(global_llvm_value, global_value.node->global.extern_.ptr, global_value.node->global.extern_.len);
-		LLVMSetInitializer(global_llvm_value, generate_value(global_value.value.value, type, state));
-		hmput(state->globals, value, global_llvm_value);
-	}
-	return global_llvm_value;
-}
-
-static LLVMValueRef generate_var_value(Value_Data *value, Value_Data *type, State *state) {
-	LLVMValueRef result = NULL;
-	switch (value->tag) {
-		case GLOBAL_VALUE:
-			result = generate_global(value, type, state);
-			break;
-		default:
-			assert(false);
-	}
-
 	return result;
 }
 

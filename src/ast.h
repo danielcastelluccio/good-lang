@@ -104,6 +104,10 @@ typedef struct {
 } Catch_Node;
 
 typedef struct {
+	Node *value;
+} Const_Node;
+
+typedef struct {
 	Node *node;
 } Defer_Node;
 
@@ -111,7 +115,7 @@ typedef struct {
 	String_View identifier;
 	Node *type;
 	Node *expression;
-	bool var;
+	bool special;
 } Define_Node;
 
 typedef struct {
@@ -337,6 +341,7 @@ typedef enum {
 	CALL_METHOD_NODE,
 	CHARACTER_NODE,
 	CATCH_NODE,
+	CONST_NODE,
 	DEFER_NODE,
 	DEFINE_NODE,
 	DEOPTIONAL_NODE,
@@ -390,6 +395,7 @@ struct Node {
 		Call_Method_Node call_method;
 		Character_Node character;
 		Catch_Node catch;
+		Const_Node const_;
 		Defer_Node defer;
 		Define_Node define;
 		Deoptional_Node deoptional;
