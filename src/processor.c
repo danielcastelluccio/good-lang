@@ -878,6 +878,19 @@ void add_cached_file(Context *context, char *path, Value value) {
 	arrpush(context->cached_files, file);
 }
 
+static bool is_trivially_evaluatable(Context *context, Node *node) {
+	switch (node->kind) {
+		case FUNCTION_NODE: {
+			return true;
+		}
+		case IDENTIFIER_NODE: {
+			return get_data(context, node)->identifier.kind == IDENTIFIER_VALUE;
+		}
+		default:
+			return false;
+	}
+}
+
 static void process_array_access(Context *context, Node *node) {
 	Array_Access_Node array_access = node->array_access;
 
@@ -1181,12 +1194,7 @@ static void process_call(Context *context, Node *node) {
 	}
 
 	Value function_value = {};
-	if (call.function->kind == IDENTIFIER_NODE && get_data(context, call.function)->identifier.kind == IDENTIFIER_VALUE) {
-		function_value = get_data(context, call.function)->identifier.value;
-
-		process_initial_argument_types(context, function_value.value, call.arguments);
-	}
-	if (call.function->kind == FUNCTION_NODE) {
+	if (is_trivially_evaluatable(context, call.function)) {
 		function_value = evaluate(context, call.function);
 
 		process_initial_argument_types(context, function_value.value, call.arguments);
