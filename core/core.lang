@@ -3,4 +3,6 @@ def c = import("c.lang");
 def file = import("file.lang");
 def io = import("io.lang");
 def list = import("list.lang");
+def print = import("print.lang");
+def simple = import("simple.lang");
 def slice = import("slice.lang");

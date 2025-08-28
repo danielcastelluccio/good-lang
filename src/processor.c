@@ -293,6 +293,56 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "}");
 			break;
 		}
+		case FUNCTION_TYPE_VALUE: {
+			bool found_inferred = false;
+			bool found_noninferred = false;
+			buffer += sprintf(buffer, "fn");
+			for (long int i = 0; i < arrlen(type.value->function_type.arguments); i++) {
+				Function_Argument_Value arg = type.value->function_type.arguments[i];
+
+				if (arg.inferred) {
+					if (!found_inferred) {
+						buffer += sprintf(buffer, "[");
+					}
+					found_inferred = true;
+
+					buffer += sprintf(buffer, "%.*s", (int) arg.identifier.len, arg.identifier.ptr);
+				} else {
+					if (found_inferred) {
+						buffer += sprintf(buffer, "]");
+					}
+					if (!found_noninferred) {
+						buffer += sprintf(buffer, "(");
+					}
+
+					found_noninferred = true;
+
+					if (arg.static_) {
+						buffer += sprintf(buffer, "static ");
+					}
+
+					buffer += sprintf(buffer, "%.*s:", (int) arg.identifier.len, arg.identifier.ptr);
+					buffer += print_type(arg.type, buffer);
+
+					if (i < arrlen(type.value->function_type.arguments) - 1) {
+						buffer += sprintf(buffer, ",");
+					}
+				}
+			}
+
+			if (found_inferred && !found_noninferred) {
+				buffer += sprintf(buffer, "](");
+			} else if (!found_noninferred) {
+				buffer += sprintf(buffer, "(");
+			}
+
+			buffer += sprintf(buffer, ")");
+			break;
+		}
+		case FUNCTION_TYPE_STUB_VALUE: {
+			buffer += sprintf(buffer, "fn[]()");
+			break;
+		}
 		case GLOBAL_TYPE_VALUE: {
 			buffer += sprintf(buffer, "global:");
 			buffer += print_type(type.value->global_type.type, buffer);
@@ -312,6 +362,10 @@ static int print_type(Value type, char *buffer) {
 		}
 		case TYPE_TYPE_VALUE: {
 			buffer += sprintf(buffer, "type");
+			break;
+		}
+		case MODULE_TYPE_VALUE: {
+			buffer += sprintf(buffer, "mod");
 			break;
 		}
 		case INTEGER_VALUE: {
@@ -1132,6 +1186,11 @@ static void process_call(Context *context, Node *node) {
 
 		process_initial_argument_types(context, function_value.value, call.arguments);
 	}
+	if (call.function->kind == FUNCTION_NODE) {
+		function_value = evaluate(context, call.function);
+
+		process_initial_argument_types(context, function_value.value, call.arguments);
+	}
 	function_value = process_call_generic(context, node, function_value, &function_type, call.arguments);
 
 	data->call.function_type = function_type;
@@ -1439,7 +1498,7 @@ static void process_function(Context *context, Node *node, bool given_static_arg
 	}
 
 	if (static_argument && !given_static_arguments) {
-		set_type(context, node, create_value(NONE_VALUE));
+		set_type(context, node, create_value(FUNCTION_TYPE_STUB_VALUE));
 		return;
 	}
 
@@ -1566,7 +1625,14 @@ static void process_identifier(Context *context, Node *node) {
 	Scope *define_scopes = NULL;
 	if (identifier.module != NULL) {
 		process_node(context, identifier.module);
+
+		Value module_type = get_type(context, identifier.module);
+		if (module_type.value->tag != MODULE_TYPE_VALUE) {
+			handle_type_error(node, "Expected module, but got %s", module_type);
+		}
+
 		Value module_value = evaluate(context, identifier.module);
+
 		for (long int i = 0; i < arrlen(module_value.value->module.body->block.statements); i++) {
 			Node *statement = module_value.value->module.body->block.statements[i];
 			if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier.value)) {

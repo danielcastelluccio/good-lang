@@ -1,0 +1,8 @@
+def print = fn [T](static fmt: []byte, args: T) {
+	var printer: print_::Printer = .{ io::print_stdout_fn };
+	printer:print(fmt, args);
+};
+
+def c = import("c.lang");
+def io = import("io.lang");
+def print_ = import("print.lang");

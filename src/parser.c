@@ -278,20 +278,20 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				}
 				break;
 			case 'p':
-				if (sv_eq_cstr(token.string, "print")) {
-					Node *internal = ast_new(INTERNAL_NODE, token.location);
-					internal->internal.kind = INTERNAL_PRINT;
+				// if (sv_eq_cstr(token.string, "print")) {
+				// 	Node *internal = ast_new(INTERNAL_NODE, token.location);
+				// 	internal->internal.kind = INTERNAL_PRINT;
 
-					lexer_consume_check(lexer, PARENTHESIS_OPEN);
-					arrpush(internal->internal.inputs, parse_expression(lexer));
-					while (lexer_peek(lexer).kind == COMMA) {
-						lexer_consume(lexer);
-						arrpush(internal->internal.inputs, parse_expression(lexer));
-					}
-					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+				// 	lexer_consume_check(lexer, PARENTHESIS_OPEN);
+				// 	arrpush(internal->internal.inputs, parse_expression(lexer));
+				// 	while (lexer_peek(lexer).kind == COMMA) {
+				// 		lexer_consume(lexer);
+				// 		arrpush(internal->internal.inputs, parse_expression(lexer));
+				// 	}
+				// 	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
-					return internal;
-				}
+				// 	return internal;
+				// }
 				break;
 			case 's':
 				if (sv_eq_cstr(token.string, "self")) {
@@ -814,12 +814,12 @@ static Node *parse_define(Lexer *lexer) {
 
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 
+	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+
 	if (lexer_peek_check(lexer, ASTERISK)) {
 		lexer_consume(lexer);
 		define->define.special = true;
 	}
-
-	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 
 	if (lexer_peek(lexer).kind == COLON) {
 		lexer_consume_check(lexer, COLON);
