@@ -373,6 +373,11 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 				case GLOBAL_VALUE: {
 					Global_Value global_value = value->global;
 					LLVMValueRef global_llvm_value = hmget(state->globals, value);
+
+					if (identifier_data->identifier.want_pointer) {
+						type = type->pointer.value;
+					}
+
 					if (global_llvm_value == NULL) {
 						global_llvm_value = LLVMAddGlobal(state->llvm_module, create_llvm_type(type, state), "");
 						LLVMSetValueName2(global_llvm_value, global_value.node->global.extern_.ptr, global_value.node->global.extern_.len);
@@ -384,7 +389,11 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 						LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), global_llvm_value);
 						return NULL;
 					} else {
-						return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), global_llvm_value, "");
+						if (identifier_data->identifier.want_pointer) {
+							return global_llvm_value;
+						} else {
+							return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), global_llvm_value, "");
+						}
 					}
 				}
 				case CONST_VALUE: {

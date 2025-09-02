@@ -1707,6 +1707,12 @@ static void process_identifier(Context *context, Node *node) {
 				case GLOBAL_TYPE_VALUE: {
 					type = type.value->global_type.type;
 
+					if (data->identifier.want_pointer) {
+						Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
+						pointer_type->pointer_type.inner = type;
+						type = (Value) { .value = pointer_type };
+					}
+
 					if (identifier.assign_value != NULL) {
 						Temporary_Context temporary_context = { .wanted_type = type };
 						process_node_context(context, temporary_context, identifier.assign_value);

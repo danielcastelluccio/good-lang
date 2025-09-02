@@ -814,12 +814,12 @@ static Node *parse_define(Lexer *lexer) {
 
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 
-	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-
 	if (lexer_peek_check(lexer, ASTERISK)) {
 		lexer_consume(lexer);
 		define->define.special = true;
 	}
+
+	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 
 	if (lexer_peek(lexer).kind == COLON) {
 		lexer_consume_check(lexer, COLON);

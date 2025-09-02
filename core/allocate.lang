@@ -31,7 +31,8 @@ def C_Allocator = struct {
 	};
 };
 
-def c_allocator: C_Allocator = .{};
+// Do not modify, is a global so a pointer can be taken.
+def* c_allocator = global: C_Allocator => .{};
 
 def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Allocate_Error {
 	switch mode {

@@ -1,6 +1,8 @@
+// Do not modify, is a global so a pointer can be taken.
+def* stdout_printer = global: print_::Printer => .{ io::print_stdout_fn };
+
 def print = fn [T](static fmt: []byte, args: T) {
-	var printer: print_::Printer = .{ io::print_stdout_fn };
-	printer:print(fmt, args);
+	stdout_printer:print(fmt, args);
 };
 
 def c = import("c.lang");
