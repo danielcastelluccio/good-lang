@@ -1147,6 +1147,8 @@ static bool is_simple_cast(Value from_type, Value to_type) {
 			return false;
 		case ENUM_TYPE_VALUE:
 			return false;
+		case INTEGER_TYPE_VALUE:
+			return false;
 		default:
 			assert(false);
 	}

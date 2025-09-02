@@ -1,0 +1,28 @@
+def File = struct {
+	file: ^c::FILE;
+
+	op read_to_buffer = fn (file: ^self, buffer: []byte): []byte {
+		var size = c::fread(buffer.ptr, 1, buffer.len, file.file);
+		buffer.len = size;
+		return buffer;
+	};
+};
+
+def PATH_MAX = 4096;
+
+def path_slice_to_cstring = fn (path: []byte): [PATH_MAX]byte {
+	var new_path: [PATH_MAX]byte;
+	for path, 0.. |c, i| {
+		new_path[i] = c;
+	};
+	new_path[path.len] = '\0';
+
+	return new_path;
+};
+
+def open = fn (path: []byte): File {
+	var new_path = path_slice_to_cstring(path);
+	return .{ c::fopen(&new_path, "r\0") };
+};
+
+def c = import("c.lang");

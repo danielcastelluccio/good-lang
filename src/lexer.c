@@ -288,14 +288,6 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(PERIOD, lexer);
 			break;
 		}
-		case '-':
-			if (lexer->source[lexer->position] == '>') {
-				result = create_token(MINUS_GREATER, lexer);
-				increment_position(lexer);
-				break;
-			}
-			result = create_token(MINUS, lexer);
-			break;
 		case '"': {
 			size_t string_start = lexer->position;
 			size_t string_start_row = lexer->row;
@@ -362,38 +354,42 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 					};
 				}
 				break;
-			} else if (is_numeric(character)) {
-				size_t number_start = lexer->position - 1;
-				size_t number_start_row = lexer->row;
-				size_t number_start_column = lexer->column - 1;
+			} else if (is_numeric(character) || character == '-') {
+				if (is_numeric(character) || is_numeric(lexer->source[lexer->position])) {
+					size_t number_start = lexer->position - 1;
+					size_t number_start_row = lexer->row;
+					size_t number_start_column = lexer->column - 1;
 
-				while (is_numeric(lexer->source[lexer->position])) {
-					increment_position(lexer);
-				}
-
-				if (lexer->source[lexer->position] == '.' && lexer->source[lexer->position + 1] != '.') {
-					increment_position(lexer);
 					while (is_numeric(lexer->source[lexer->position])) {
 						increment_position(lexer);
 					}
 
-					size_t number_end = lexer->position;
-					double extracted_decimal = extract_decimal(lexer->source, number_start, number_end);
+					if (lexer->source[lexer->position] == '.' && lexer->source[lexer->position + 1] != '.') {
+						increment_position(lexer);
+						while (is_numeric(lexer->source[lexer->position])) {
+							increment_position(lexer);
+						}
 
-					result = (Token_Data) {
-						.kind = DECIMAL,
-						.decimal = extracted_decimal,
-						.location = { .path_ref = lexer->path_ref, .row = number_start_row, .column = number_start_column }
-					};
+						size_t number_end = lexer->position;
+						double extracted_decimal = extract_decimal(lexer->source, number_start, number_end);
+
+						result = (Token_Data) {
+							.kind = DECIMAL,
+							.decimal = extracted_decimal,
+							.location = { .path_ref = lexer->path_ref, .row = number_start_row, .column = number_start_column }
+						};
+					} else {
+						size_t number_end = lexer->position;
+						size_t extracted_integer = extract_integer(lexer->source, number_start, number_end);
+
+						result = (Token_Data) {
+							.kind = INTEGER,
+							.integer = extracted_integer,
+							.location = { .path_ref = lexer->path_ref, .row = number_start_row, .column = number_start_column }
+						};
+					}
 				} else {
-					size_t number_end = lexer->position;
-					size_t extracted_integer = extract_integer(lexer->source, number_start, number_end);
-
-					result = (Token_Data) {
-						.kind = INTEGER,
-						.integer = extracted_integer,
-						.location = { .path_ref = lexer->path_ref, .row = number_start_row, .column = number_start_column }
-					};
+					result = create_token(MINUS, lexer);
 				}
 				break;
 			} else {
@@ -521,8 +517,6 @@ char *token_to_string(Token_Kind kind) {
 			return "..";
 		case PERIOD_CURLY_BRACE_OPEN:
 			return ".{";
-		case MINUS_GREATER:
-			return "->";
 		case EQUALS_EQUALS:
 			return "==";
 		case EXCLAMATION:

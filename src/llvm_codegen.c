@@ -921,8 +921,13 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 }
 
 static bool is_type_signed(Value_Data *type) {
-	(void) type;
-	return false;
+	switch (type->tag) {
+		case INTEGER_TYPE_VALUE: {
+			return type->integer_type.signed_;
+		}
+		default:
+			assert(false);
+	}
 }
 
 static bool is_type_float(Value_Data *type) {

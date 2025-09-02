@@ -36,7 +36,13 @@ def Printer = struct {
 			case Integer {
 				var buffer: [24]byte;
 				var index: uint = 24;
-				var i: uint = cast t;
+
+				var negative = t < 0;
+
+				var i = t;
+				if negative {
+					i = 0 - i;
+				};
 
 				if i == 0 {
 					index = index - 1;
@@ -50,6 +56,11 @@ def Printer = struct {
 
 					buffer[index] = cast ch;
 					i = i / 10;
+				};
+
+				if negative {
+					index = index - 1;
+					buffer[index] = '-';
 				};
 
 				printer:print_chars(buffer[index, 24]);
