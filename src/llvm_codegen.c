@@ -480,6 +480,8 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 	switch (type->tag) {
 		case POINTER_TYPE_VALUE:
 			return LLVMConstNull(create_llvm_type(type, state));
+		case BYTE_TYPE_VALUE:
+			return LLVMConstInt(LLVMInt8Type(), 0, false);
 		case OPTIONAL_TYPE_VALUE: {
 			if (type->optional_type.inner.value->tag == POINTER_TYPE_VALUE) {
 				return LLVMConstNull(create_llvm_type(type, state));

@@ -51,6 +51,7 @@ typedef struct {
 typedef struct {
 	Value inner;
 	Value size;
+	Value sentinel;
 } Array_Type_Value;
 
 typedef struct {

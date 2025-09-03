@@ -49,6 +49,11 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 				if (!value_equal(value1->array_type.size.value, value2->array_type.size.value)) return false;
 			}
 
+			if (value1->array_type.sentinel.value != NULL) {
+				if (value2->array_type.sentinel.value == NULL) return false;
+				if (!value_equal(value1->array_type.sentinel.value, value2->array_type.sentinel.value)) return false;
+			}
+
 			return value_equal(value1->array_type.inner.value, value2->array_type.inner.value);
 		}
 		case ARRAY_VIEW_TYPE_VALUE: {
@@ -415,6 +420,9 @@ static Value evaluate_array_type(State *state, Node *node) {
 
 	Value_Data *array_type_value = value_new(ARRAY_TYPE_VALUE);
 	array_type_value->array_type.size = evaluate_state(state, array_type.size);
+	if (array_type.sentinel != NULL) {
+		array_type_value->array_type.sentinel = evaluate_state(state, array_type.sentinel);
+	}
 	array_type_value->array_type.inner = evaluate_state(state, array_type.inner);
 	return create_value_data(array_type_value, node);
 }
@@ -993,6 +1001,18 @@ static Value evaluate_const(State *state, Node *node) {
 	return value;
 }
 
+static Value evaluate_null(State *state, Node *node) {
+	Null_Data null_data = get_data(state->context, node)->null_;
+
+	switch (null_data.type.value->tag) {
+		case BYTE_TYPE_VALUE: {
+			return create_byte(0);
+		}
+		default:
+			assert(false);
+	}
+}
+
 static Value evaluate_state(State *state, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE:          return evaluate_function(state, node);
@@ -1031,6 +1051,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case RANGE_NODE:             return evaluate_range(state, node);
 		case GLOBAL_NODE:            return evaluate_global(state, node);
 		case CONST_NODE:             return evaluate_const(state, node);
+		case NULL_NODE:              return evaluate_null(state, node);
 		case DEFINE_NODE:            return (Value) {};
 		default:                     assert(false);
 	}

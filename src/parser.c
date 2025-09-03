@@ -1112,10 +1112,18 @@ static Node *parse_array_or_array_view_type(Lexer *lexer) {
 	Node *size = NULL;
 	if (lexer_peek(lexer).kind != BRACE_CLOSED) {
 		size = parse_expression(lexer);
+
+		Node *sentinel = NULL;
+		if (lexer_peek(lexer).kind == SEMICOLON) {
+			lexer_consume(lexer);
+			sentinel = parse_expression(lexer);
+		}
+
 		lexer_consume_check(lexer, BRACE_CLOSED);
 
 		Node *array_type = ast_new(ARRAY_TYPE_NODE, first_token.location);
 		array_type->array_type.size = size;
+		array_type->array_type.sentinel = sentinel;
 		array_type->array_type.inner = parse_expression(lexer);
 		return array_type;
 	} else {

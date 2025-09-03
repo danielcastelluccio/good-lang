@@ -36,6 +36,7 @@ typedef struct {
 typedef struct {
 	Node *inner;
 	Node *size;
+	Node *sentinel;
 } Array_Type_Node;
 
 typedef struct {

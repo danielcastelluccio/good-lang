@@ -191,6 +191,10 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 					buffer += sprintf(buffer, "bool");
 					break;
 				}
+				case INTERNAL_BYTE: {
+					buffer += sprintf(buffer, "byte");
+					break;
+				}
 				default:
 					assert(false);
 			}
@@ -237,6 +241,12 @@ static int print_type(Value type, char *buffer) {
 			} else {
 				buffer += sprintf(buffer, "_");
 			}
+
+			if (type.value->array_type.sentinel.value != NULL) {
+				buffer += sprintf(buffer, ";");
+				buffer += print_type(type.value->array_type.sentinel, buffer);
+			}
+
 			buffer += sprintf(buffer, "]");
 			buffer += print_type(type.value->array_type.inner, buffer);
 			break;
@@ -376,6 +386,10 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "%li", type.value->integer.value);
 			break;
 		}
+		case BYTE_VALUE: {
+			buffer += sprintf(buffer, "%i", type.value->byte.value);
+			break;
+		}
 		case NONE_VALUE: {
 			buffer += sprintf(buffer, "()");
 			break;
@@ -431,10 +445,10 @@ static void handle_mismatched_type_error(Context *context, Node *node, Value typ
 	handle_semantic_error(context, node->location, message, type1_string, type2_string); \
 }
 
-static String_View expand_escapes(String_View sv) {
+static String_View expand_escapes(String_View sv, Value type) {
 	size_t original_length = sv.len;
-	char *new_string = malloc(original_length);
-	memset(new_string, 0, original_length);
+	char *new_string = malloc(original_length + 1);
+	memset(new_string, 0, original_length + 1);
 
 	size_t original_index = 0;
 	size_t new_index = 0;
@@ -457,6 +471,11 @@ static String_View expand_escapes(String_View sv) {
 			original_index += 1;
 			new_index += 1;
 		}
+	}
+
+	if (type.value != NULL && type.value->tag == POINTER_TYPE_VALUE && type.value->pointer_type.inner.value->tag == ARRAY_TYPE_VALUE && type.value->pointer_type.inner.value->array_type.sentinel.value != NULL) {
+		new_string[new_index] = type.value->pointer_type.inner.value->array_type.sentinel.value->byte.value;
+		new_index++;
 	}
 
 	return (String_View) { .ptr = new_string, .len = new_index };
@@ -972,6 +991,17 @@ static void process_array_type(Context *context, Node *node) {
 	Array_Type_Node array_type = node->array_type;
 	process_node(context, array_type.inner);
 	process_node(context, array_type.size);
+	if (array_type.sentinel != NULL) {
+		Value byte_type_value = create_value(BYTE_TYPE_VALUE);
+		Temporary_Context temporary_context = { .wanted_type = byte_type_value };
+		process_node_context(context, temporary_context, array_type.sentinel);
+
+		Value sentinel_type = get_type(context, array_type.sentinel);
+		if (!value_equal(byte_type_value.value, sentinel_type.value)) {
+			handle_mismatched_type_error(context, node, byte_type_value, sentinel_type);
+		}
+
+	}
 	set_type(context, node, create_value(TYPE_TYPE_VALUE));
 }
 
@@ -1251,7 +1281,7 @@ static void process_call_method(Context *context, Node *node) {
 static void process_character(Context *context, Node *node) {
 	Character_Node character = node->character;
 
-	String_View new_string = expand_escapes(character.value);
+	String_View new_string = expand_escapes(character.value, (Value) {});
 	if (new_string.len != 1) {
 		handle_semantic_error(context, node->location, "Expected only one character");
 	}
@@ -2709,8 +2739,6 @@ static void process_slice(Context *context, Node *node) {
 static void process_string(Context *context, Node *node) {
 	String_Node string = node->string;
 
-	String_View new_string = expand_escapes(string.value);
-
 	Value type = context->temporary_context.wanted_type;
 	bool invalid_type = false;
 	if (type.value == NULL) invalid_type = true;
@@ -2721,6 +2749,8 @@ static void process_string(Context *context, Node *node) {
 	if (invalid_type) {
 		type = create_array_view_type(create_value(BYTE_TYPE_VALUE));
 	}
+
+	String_View new_string = expand_escapes(string.value, type);
 
 	Node_Data *data = data_new(STRING_NODE);
 	data->string.type = type;

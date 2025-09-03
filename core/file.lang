@@ -22,7 +22,7 @@ def path_slice_to_cstring = fn (path: []byte): [PATH_MAX]byte {
 
 def open = fn (path: []byte): File {
 	var new_path = path_slice_to_cstring(path);
-	return .{ c::fopen(&new_path, "r\0") };
+	return .{ c::fopen(cast &new_path, "r\0") };
 };
 
 def c = import("c.lang");
