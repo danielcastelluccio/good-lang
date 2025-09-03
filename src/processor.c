@@ -183,6 +183,10 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 					buffer += sprintf(buffer, "uint");
 					break;
 				}
+				case INTERNAL_SINT: {
+					buffer += sprintf(buffer, "sint");
+					break;
+				}
 				case INTERNAL_BOOL: {
 					buffer += sprintf(buffer, "bool");
 					break;
@@ -1974,6 +1978,14 @@ static void process_internal(Context *context, Node *node) {
 			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
 			break;
 		}
+		case INTERNAL_SINT: {
+			value.value = value_new(INTEGER_TYPE_VALUE);
+			value.value->integer_type.size = context->codegen.default_integer_size;
+			value.value->integer_type.signed_ = true;
+
+			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			break;
+		}
 		case INTERNAL_TYPE: {
 			value.value = value_new(TYPE_TYPE_VALUE);
 			set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
@@ -2479,6 +2491,8 @@ static void process_null(Context *context, Node *node) {
 	set_type(context, node, wanted_type);
 }
 
+Node *sint_node;
+
 static void process_number(Context *context, Node *node) {
 	Number_Node number = node->number;
 
@@ -2494,6 +2508,11 @@ static void process_number(Context *context, Node *node) {
 			wanted_type = create_float_type(context->codegen.default_integer_size);
 		} else {
 			wanted_type = create_integer_type(true, context->codegen.default_integer_size);
+			if (sint_node == NULL) {
+				sint_node = ast_new(INTERNAL_NODE, (Source_Location) {});
+				sint_node->internal.kind = INTERNAL_SINT;
+			}
+			wanted_type.node = sint_node;
 		}
 	}
 
