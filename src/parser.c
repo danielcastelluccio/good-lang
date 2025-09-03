@@ -1114,7 +1114,7 @@ static Node *parse_array_or_array_view_type(Lexer *lexer) {
 		size = parse_expression(lexer);
 
 		Node *sentinel = NULL;
-		if (lexer_peek(lexer).kind == SEMICOLON) {
+		if (lexer_peek(lexer).kind == COMMA) {
 			lexer_consume(lexer);
 			sentinel = parse_expression(lexer);
 		}
