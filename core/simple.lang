@@ -1,7 +1,7 @@
 // Do not modify, is a global so a pointer can be taken.
 def* stdout_printer = global: print_::Printer => .{ io::print_stdout_fn };
 
-def print = fn [T](static fmt: []byte, args: T) {
+def print = fn [T]($fmt: []byte, args: T) {
 	stdout_printer:print(fmt, args);
 };
 

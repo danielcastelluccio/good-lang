@@ -3,35 +3,35 @@ def Output_Fn = fn (data: ^, char: byte);
 def Printer = struct {
 	output_fn: Output_Fn;
 
-	op print = fn [T](printer: ^Printer, static fmt: []byte, args: T) {
-		var static type_info = type_info_of(T);
-		if static type_info is Tuple |tuple| {
-			var static argument_index = 0;
-			var static i: uint = 0;
-			while static i < fmt.len {
-				if static fmt[i] == '{' {
-					var static start = i + 1;
-					while static fmt[i] != '}' {
-						i =static i + 1;
+	op print = fn [T](printer: ^Printer, $fmt: []byte, args: T) {
+		var$ type_info = type_info_of(T);
+		if$ type_info is Tuple |tuple| {
+			var$ argument_index = 0;
+			var$ i: uint = 0;
+			while$ i < fmt.len {
+				if$ fmt[i] == '{' {
+					var$ start = i + 1;
+					while$ fmt[i] != '}' {
+						i =$ i + 1;
 					};
 
-					var static end = i;
+					var$ end = i;
 
 					printer:print_value(embed("args._", cast(byte) argument_index + 48), fmt[start, end]);
-					argument_index =static argument_index + 1;
+					argument_index =$ argument_index + 1;
 				} else {
 					printer:print_char(fmt[i]);
 				};
-				i =static i + 1;
+				i =$ i + 1;
 			};
 		} else {
 			compile_error("Need tuple as argument");
 		};
 	};
 
-	op print_value = fn [T](printer: ^Printer, t: T, static fmt: []byte) {
-		var static type_info = type_info_of(T);
-		switch static type_info {
+	op print_value = fn [T](printer: ^Printer, t: T, $fmt: []byte) {
+		var$ type_info = type_info_of(T);
+		switch$ type_info {
 			case Integer {
 				var buffer: [24]byte;
 				var index: uint = 24;
@@ -108,14 +108,14 @@ def Printer = struct {
 			}
 			case Struct |struct_| {
 				printer:print_chars(".{");
-				for static struct_.members |member, i| {
+				for$ struct_.members |member, i| {
 					printer:print_chars(" .");
 					printer:print_chars(run member.name);
 					printer:print_chars(" = ");
 
 					printer:print_value(embed("t.", member.name), "");
 
-					if static i < struct_.members.len - 1 {
+					if$ i < struct_.members.len - 1 {
 						printer:print_chars(",");
 					} else {
 						printer:print_chars(" ");
@@ -126,7 +126,7 @@ def Printer = struct {
 			case Tagged_Union |tagged_union_| {
 				printer:print_chars(".{");
 
-				for static tagged_union_.members |member| {
+				for$ tagged_union_.members |member| {
 					if t is embed(member.name) |value| {
 						printer:print_chars(run member.name);
 
@@ -138,7 +138,7 @@ def Printer = struct {
 				printer:print_chars("}");
 			}
 			case Enum |enum_| {
-				for static enum_.values |value| {
+				for$ enum_.values |value| {
 					if t == embed(value) {
 						printer:print_chars(value);
 					};
@@ -154,7 +154,7 @@ def Printer = struct {
 			case Array |array| {
 				printer:print_chars(".{");
 
-				for static 0..run array.size |i| {
+				for$ 0..run array.size |i| {
 					printer:print_chars(" ");
 
 					printer:print_value(t[i], "");
@@ -169,7 +169,7 @@ def Printer = struct {
 				printer:print_chars("}");
 			}
 			case Array_View |array_view| {
-				if static fmt == "s" and array_view.type == byte {
+				if$ fmt == "s" and array_view.type == byte {
 					printer:print_chars(t);
 				} else {
 					printer:print_chars(".{");

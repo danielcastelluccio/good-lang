@@ -606,7 +606,7 @@ static Node *parse_assign(Lexer *lexer, Node *target) {
 	lexer_consume(lexer);
 
 	bool static_ = false;
-	if (lexer_peek(lexer).kind == KEYWORD_STATIC) {
+	if (lexer_peek(lexer).kind == DOLLAR) {
 		lexer_consume(lexer);
 		static_ = true;
 	}
@@ -825,7 +825,7 @@ static Node *parse_variable(Lexer *lexer) {
 
 	Node *variable = ast_new(VARIABLE_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		variable->variable.static_ = true;
 	}
@@ -859,7 +859,7 @@ static Node *parse_if(Lexer *lexer) {
 
 	Node *if_ = ast_new(IF_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		if_->if_.static_ = true;
 	}
@@ -898,7 +898,7 @@ static Node *parse_while(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		while_->while_.static_ = true;
 	}
@@ -919,7 +919,7 @@ static Node *parse_for(Lexer *lexer) {
 
 	Node *for_ = ast_new(FOR_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		for_->for_.static_ = true;
 	}
@@ -994,7 +994,7 @@ static Node *parse_switch(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		switch_->switch_.static_ = true;
 	}
@@ -1198,7 +1198,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 				variadic = true;
 			} else {
 				bool static_ = false;
-				if (lexer_peek_check(lexer, KEYWORD_STATIC)) {
+				if (lexer_peek_check(lexer, DOLLAR)) {
 					lexer_consume(lexer);
 					static_ = true;
 				}

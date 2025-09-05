@@ -127,8 +127,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			else if (strcmp(identifier, "run") == 0) result = KEYWORD_RUN;
 			break;
 		case 's':
-			if (strcmp(identifier, "static") == 0) result = KEYWORD_STATIC;
-			else if (strcmp(identifier, "struct") == 0) result = KEYWORD_STRUCT;
+			if (strcmp(identifier, "struct") == 0) result = KEYWORD_STRUCT;
 			else if (strcmp(identifier, "switch") == 0) result = KEYWORD_SWITCH;
 			break;
 		case 't':
@@ -274,6 +273,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		case '%':
 			result = create_token(PERCENT, lexer);
+			break;
+		case '$':
+			result = create_token(DOLLAR, lexer);
 			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
@@ -459,8 +461,6 @@ char *token_to_string(Token_Kind kind) {
 			return "return";
 		case KEYWORD_RUN:
 			return "run";
-		case KEYWORD_STATIC:
-			return "static";
 		case KEYWORD_STRUCT:
 			return "struct";
 		case KEYWORD_SWITCH:
@@ -501,6 +501,8 @@ char *token_to_string(Token_Kind kind) {
 			return "&";
 		case AT:
 			return "@";
+		case DOLLAR:
+			return "$";
 		case VERTICAL_BAR:
 			return "|";
 		case LESS:
