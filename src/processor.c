@@ -2122,7 +2122,12 @@ static void process_internal(Context *context, Node *node) {
 			}
 
 			inner_node = parse_source_statement(context->data, source_string, index, "");
-			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
+
+			if (internal.assign_value != NULL) {
+				set_assign_value(inner_node, internal.assign_value, internal.assign_static);
+			}
+
+			Temporary_Context temporary_context = context->temporary_context;
 			process_node_context(context, temporary_context, inner_node);
 
 			set_type(context, node, get_type(context, inner_node));

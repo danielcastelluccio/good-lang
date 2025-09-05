@@ -613,31 +613,8 @@ static Node *parse_assign(Lexer *lexer, Node *target) {
 
 	Node *assign_value = parse_expression(lexer);
 
-	switch (target->kind) {
-		case STRUCTURE_ACCESS_NODE: {
-			target->structure_access.assign_value = assign_value;
-			return target;
-		}
-		case IDENTIFIER_NODE: {
-			target->identifier.assign_value = assign_value;
-			target->identifier.assign_static = static_;
-			return target;
-		}
-		case ARRAY_ACCESS_NODE: {
-			target->array_access.assign_value = assign_value;
-			return target;
-		}
-		case DEOPTIONAL_NODE: {
-			target->deoptional.assign_value = assign_value;
-			return target;
-		}
-		case DEREFERENCE_NODE: {
-			target->dereference.assign_value = assign_value;
-			return target;
-		}
-		default:
-			assert(false);
-	}
+	set_assign_value(target, assign_value, static_);
+	return target;
 }
 
 static Node *parse_operator(Lexer *lexer) {

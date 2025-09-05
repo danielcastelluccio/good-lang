@@ -208,6 +208,8 @@ typedef struct {
 		INTERNAL_COMPILE_ERROR
 	} kind;
 	Node **inputs; // stb_ds
+	Node *assign_value;
+	bool assign_static;
 } Internal_Node;
 
 typedef struct {
@@ -435,5 +437,7 @@ struct Node {
 };
 
 Node *ast_new(Node_Kind kind, Source_Location location);
+
+void set_assign_value(Node *node, Node *assign_value, bool static_);
 
 #endif
