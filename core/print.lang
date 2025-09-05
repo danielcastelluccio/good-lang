@@ -54,7 +54,7 @@ def Printer = struct {
 
 					var ch = i % 10 + 48;
 
-					buffer[index] = cast ch;
+					buffer[index] = cast(byte) ch;
 					i = i / 10;
 				};
 
@@ -68,7 +68,7 @@ def Printer = struct {
 			case Byte {
 				var buffer: [24]byte;
 				var index: uint = 24;
-				var i: uint = cast t;
+				var i: uint = cast(uint) t;
 
 				if i == 0 {
 					index = index - 1;
@@ -80,7 +80,7 @@ def Printer = struct {
 
 					var ch = i % 10 + 48;
 
-					buffer[index] = cast ch;
+					buffer[index] = cast(byte) ch;
 					i = i / 10;
 				};
 
@@ -92,14 +92,14 @@ def Printer = struct {
 				} else {
 					var buffer: [24]byte;
 					var index: uint = 24;
-					var i: uint = cast t;
+					var i: uint = cast(uint) t;
 					while i > 0 {
 						index = index - 1;
 
 						var ch = i % 16;
 						if ch > 9 => ch = ch + 87 else ch = ch + 48;
 
-						buffer[index] = cast ch;
+						buffer[index] = cast(byte) ch;
 						i = i / 16;
 					};
 
@@ -191,6 +191,13 @@ def Printer = struct {
 					};
 
 					printer:print_chars("}");
+				};
+			}
+			case Boolean {
+				if t {
+					printer:print_chars("true");
+				} else {
+					printer:print_chars("false");
 				};
 			}
 		};

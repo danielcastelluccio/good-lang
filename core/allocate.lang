@@ -13,7 +13,7 @@ def Allocator = struct {
 	allocate_fn: Allocate_Fn;
 
 	op new = fn (allocator: ^Allocator, static T: type): ^T!Allocate_Error {
-		cast allocator.allocate_fn(ALLOC, null, size_of(T))
+		cast(^T!Allocate_Error) allocator.allocate_fn(ALLOC, null, size_of(T))
 	};
 
 	op realloc = fn (allocator: ^self, ptr: ^, size: uint): ^!Allocate_Error {

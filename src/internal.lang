@@ -46,6 +46,8 @@ def Type_Info = tagged_union {
 	Byte: struct {
 	},
 	Pointer: struct {
+	},
+	Boolean: struct {
 	}
 };
 

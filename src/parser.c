@@ -1158,11 +1158,9 @@ static Node *parse_run(Lexer *lexer) {
 static Node *parse_cast(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *cast = ast_new(CAST_NODE, first_token.location);
-	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
-		lexer_consume(lexer);
-		cast->cast.type = parse_expression(lexer);
-		lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-	}
+	lexer_consume_check(lexer, PARENTHESIS_OPEN);
+	cast->cast.type = parse_expression(lexer);
+	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 	cast->cast.node = parse_expression(lexer);
 	return cast;
 }
@@ -1501,9 +1499,10 @@ static Node *parse_expression(Lexer *lexer) {
 	return result;
 }
 
-Node *parse_source_expr(Data *data, char *source, size_t length, char *path) {
-	Lexer lexer = lexer_create(path, source, length, arrlen(data->source_files));
-	return parse_expression(&lexer);
+Node *parse_source_statement(Data *data, char *source, size_t length, char *path) {
+	(void) data;
+	Lexer lexer = lexer_create(path, source, length, -1);
+	return parse_statement(&lexer);
 }
 
 Node *parse_source(Data *data, char *source, size_t length, char *path) {

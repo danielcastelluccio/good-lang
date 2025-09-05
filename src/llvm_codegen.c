@@ -38,13 +38,15 @@ typedef struct {
 	LLVMValueRef binding;
 } Catch_Codegen_Data;
 
+typedef struct { Node *key; LLVMValueRef value; } *State_Variables;
+
 typedef struct {
 	LLVMModuleRef llvm_module;
 	LLVMBuilderRef llvm_builder;
 	LLVMTargetMachineRef llvm_target;
 	Context context;
 	struct { Value_Data *key; LLVMValueRef value; } *generated_cache; // stb_ds
-	struct { Node_Data *key; LLVMValueRef value; } *variables; // stb_ds
+	State_Variables variables; // stb_ds
 	struct { Node_Data *key; Block_Codegen_Data value; } *blocks; // stb_ds
 	struct { Node_Data *key; While_Codegen_Data value; } *whiles; // stb_ds
 	struct { Node_Data *key; For_Codegen_Data value; } *fors; // stb_ds
@@ -316,8 +318,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 	switch (identifier_data->identifier.kind) {
 		case IDENTIFIER_VARIABLE: {
 			Node *variable = get_data(&state->context, node)->identifier.variable;
-			Node_Data *variable_data = get_data(&state->context, variable);
-			LLVMValueRef variable_llvm_value = hmget(state->variables, variable_data);
+			LLVMValueRef variable_llvm_value = hmget(state->variables, variable);
 			if (identifier.assign_value != NULL) {
 				if (!identifier.assign_static) {
 					LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
@@ -653,7 +654,8 @@ static LLVMValueRef generate_deoptional(Node *node, State *state) {
 		}
 		return NULL;
 	} else {
-		assert(false);
+		LLVMValueRef value_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
+		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(deoptional_data.type.value, state), value_ptr, "");
 	}
 }
 
@@ -807,6 +809,8 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 	if (data.pointer_access) {
 		LLVMValueRef element_pointer = NULL;
 		if (structure_type->tag == STRUCT_TYPE_VALUE || structure_type->tag == ARRAY_VIEW_TYPE_VALUE) {
+			Node_Data *data2 = get_data(&state->context, structure_access.parent);
+			(void) data2;
 			element_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(structure_type, state), structure_llvm_value, index, "");
 		} else if (structure_type->tag == UNION_TYPE_VALUE) {
 			element_pointer = LLVMBuildBitCast(state->llvm_builder, structure_llvm_value, LLVMPointerType(create_llvm_type(item_type, state), 0), "");
@@ -951,6 +955,54 @@ static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValu
 		case POINTER_TYPE_VALUE: {
 			return LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1, value2, "");
 		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			LLVMBasicBlockRef compare_block = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef loop_block = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef loop_body_block = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef loop_increment_block = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef loop_done_block = LLVMAppendBasicBlock(state->current_function, "");
+			LLVMBasicBlockRef done_block = LLVMAppendBasicBlock(state->current_function, "");
+
+			LLVMValueRef result_storage = LLVMBuildAlloca(state->llvm_builder, LLVMInt1Type(), "");
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 0, false), result_storage);
+
+			LLVMValueRef value1_len = LLVMBuildExtractValue(state->llvm_builder, value1, 0, "");
+			LLVMValueRef value1_ptr = LLVMBuildExtractValue(state->llvm_builder, value1, 1, "");
+			LLVMValueRef value2_len = LLVMBuildExtractValue(state->llvm_builder, value2, 0, "");
+			LLVMValueRef value2_ptr = LLVMBuildExtractValue(state->llvm_builder, value2, 1, "");
+			LLVMValueRef lengths_equal = LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value1_len, value2_len, "");
+			LLVMBuildCondBr(state->llvm_builder, lengths_equal, compare_block, done_block);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, compare_block);
+
+			LLVMValueRef i = LLVMBuildAlloca(state->llvm_builder, LLVMInt64Type(), "");
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64Type(), 0, false), i);
+
+			LLVMBuildBr(state->llvm_builder, loop_block);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, loop_block);
+			LLVMValueRef continue_loop = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, ""), value1_len, "");
+			LLVMBuildCondBr(state->llvm_builder, continue_loop, loop_body_block, loop_done_block);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, loop_body_block);
+
+			LLVMValueRef indices[2] = {
+				LLVMConstInt(LLVMInt64Type(), 0, false),
+				LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, "")
+			};
+
+			LLVMValueRef value1_value = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type->array_view_type.inner.value, state), LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(create_llvm_type(type->array_view_type.inner.value, state), 0), value1_ptr, indices, 2, ""), "");
+			LLVMValueRef value2_value = LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type->array_view_type.inner.value, state), LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(create_llvm_type(type->array_view_type.inner.value, state), 0), value2_ptr, indices, 2, ""), "");
+			LLVMValueRef equal_values = values_equal(type->array_view_type.inner.value, value1_value, value2_value, state);
+			LLVMBuildCondBr(state->llvm_builder, equal_values, loop_increment_block, done_block);
+			LLVMPositionBuilderAtEnd(state->llvm_builder, loop_increment_block);
+			LLVMBuildStore(state->llvm_builder, LLVMBuildAdd(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, LLVMInt64Type(), i, ""), LLVMConstInt(LLVMInt64Type(), 1, false), ""), i);
+			LLVMBuildBr(state->llvm_builder, loop_block);
+
+			LLVMPositionBuilderAtEnd(state->llvm_builder, loop_done_block);
+			LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt1Type(), 1, false), result_storage);
+			LLVMBuildBr(state->llvm_builder, done_block);
+
+			LLVMPositionBuilderAtEnd(state->llvm_builder, done_block);
+			return LLVMBuildLoad2(state->llvm_builder, LLVMInt1Type(), result_storage, "");
+		}
 		default:
 			assert(false);
 	}
@@ -1067,8 +1119,7 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 		LLVMBuildStore(state->llvm_builder, llvm_value, allocated_variable_llvm);
 	}
 
-	Node_Data *node_data = get_data(&state->context, node);
-	hmput(state->variables, node_data, allocated_variable_llvm);
+	hmput(state->variables, node, allocated_variable_llvm);
 
 	return NULL;
 }
@@ -1479,12 +1530,20 @@ static LLVMValueRef generate_slice(Node *node, State *state) {
 
 			return LLVMBuildLoad2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, "");
 		}
+		case ARRAY_VIEW_TYPE_VALUE: {
+			LLVMTypeRef array_view_llvm_type = create_llvm_type(array_type.value, state);
+			LLVMValueRef pointer = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(create_llvm_type(array_type.value->array_view_type.inner.value, state), 0), LLVMBuildExtractValue(state->llvm_builder, array_llvm_value, 1, ""), indices, 2, "");
+			LLVMValueRef length = LLVMBuildSub(state->llvm_builder, end_llvm_value, start_llvm_value, "");
+
+			LLVMValueRef array_view_allocated_llvm_value = LLVMBuildAlloca(state->llvm_builder, array_view_llvm_type, "");
+			LLVMBuildStore(state->llvm_builder, length, LLVMBuildStructGEP2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, 0, ""));
+			LLVMBuildStore(state->llvm_builder, pointer, LLVMBuildStructGEP2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, 1, ""));
+
+			return LLVMBuildLoad2(state->llvm_builder, array_view_llvm_type, array_view_allocated_llvm_value, "");
+		}
 		default:
 			assert(false);
 	}
-
-	(void) slice;
-	assert(false);
 }
 
 static LLVMValueRef generate_node(Node *node, State *state) {
@@ -1598,7 +1657,10 @@ static LLVMValueRef generate_function(Value_Data *value, State *state) {
 			j++;
 		}
 
+		State_Variables variables = state->variables;
+		state->variables = NULL;
 		LLVMValueRef value = generate_node(function.body, state);
+		state->variables = variables;
 
 		if (!function_data.returned) {
 			if (function.type->function_type.return_type.value != NULL) {

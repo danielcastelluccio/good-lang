@@ -183,6 +183,10 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 					buffer += sprintf(buffer, "uint");
 					break;
 				}
+				case INTERNAL_UINT8: {
+					buffer += sprintf(buffer, "uint8");
+					break;
+				}
 				case INTERNAL_SINT: {
 					buffer += sprintf(buffer, "sint");
 					break;
@@ -460,6 +464,9 @@ static String_View expand_escapes(String_View sv, Value type) {
 					break;
 				case '0':
 					new_string[new_index] = '\0';
+					break;
+				case '"':
+					new_string[new_index] = '"';
 					break;
 				default:
 					assert(false);
@@ -1194,11 +1201,8 @@ static void process_cast(Context *context, Node *node) {
 	process_node(context, cast.node);
 	Value from_type = get_type(context, cast.node);
 
-	Value to_type = context->temporary_context.wanted_type;
-	if (cast.type != NULL) {
-		process_node(context, cast.type);
-		to_type = evaluate(context, cast.type);
-	}
+	process_node(context, cast.type);
+	Value to_type = evaluate(context, cast.type);
 
 	bool cast_ok = false;
 	if (is_simple_cast(from_type, to_type)) cast_ok = true;
@@ -1215,7 +1219,7 @@ static void process_cast(Context *context, Node *node) {
 	data->cast.to_type = to_type;
 
 	set_data(context, node, data);
-	set_type(context, node, context->temporary_context.wanted_type);
+	set_type(context, node, to_type);
 }
 
 static void process_call(Context *context, Node *node) {
@@ -2117,7 +2121,7 @@ static void process_internal(Context *context, Node *node) {
 				}
 			}
 
-			inner_node = parse_source_expr(context->data, source_string, index, "");
+			inner_node = parse_source_statement(context->data, source_string, index, "");
 			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
 			process_node_context(context, temporary_context, inner_node);
 
@@ -2395,6 +2399,12 @@ static void process_internal(Context *context, Node *node) {
 				}
 				case POINTER_TYPE_VALUE: {
 					enum_value->enum_.value = 10;
+
+					data = value_new(STRUCT_VALUE);
+					break;
+				}
+				case BOOLEAN_TYPE_VALUE: {
+					enum_value->enum_.value = 11;
 
 					data = value_new(STRUCT_VALUE);
 					break;

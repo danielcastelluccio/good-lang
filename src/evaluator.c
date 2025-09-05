@@ -62,7 +62,7 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case ARRAY_VIEW_VALUE: {
 			if (value1->array_view.length != value2->array_view.length) return false;
 
-			for (long int i = 0; i < arrlen(value1->array_view.values); i++) {
+			for (size_t i = 0; i < value1->array_view.length; i++) {
 				if (!value_equal(value1->array_view.values[i], value2->array_view.values[i])) return false;
 			}
 			return true;
