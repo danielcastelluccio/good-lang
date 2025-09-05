@@ -17,8 +17,7 @@ def Printer = struct {
 
 					var static end = i;
 
-					var static format = fmt[start, end];
-					printer:print_value(embed("args._", cast(byte) argument_index + 48), format);
+					printer:print_value(embed("args._", cast(byte) argument_index + 48), fmt[start, end]);
 					argument_index =static argument_index + 1;
 				} else {
 					printer:print_char(fmt[i]);
@@ -110,12 +109,11 @@ def Printer = struct {
 			case Struct |struct_| {
 				printer:print_chars(".{");
 				for static struct_.members |member, i| {
-					var static name = member.name;
 					printer:print_chars(" .");
-					printer:print_chars(name);
+					printer:print_chars(run member.name);
 					printer:print_chars(" = ");
 
-					printer:print_value(embed("t.", name), "");
+					printer:print_value(embed("t.", member.name), "");
 
 					if static i < struct_.members.len - 1 {
 						printer:print_chars(",");
@@ -129,9 +127,8 @@ def Printer = struct {
 				printer:print_chars(".{");
 
 				for static tagged_union_.members |member| {
-					var static name = member.name;
-					if t is embed(name) |value| {
-						printer:print_chars(name);
+					if t is embed(member.name) |value| {
+						printer:print_chars(run member.name);
 
 						printer:print_value(value, "");
 						printer:print_chars(" ");
@@ -157,13 +154,12 @@ def Printer = struct {
 			case Array |array| {
 				printer:print_chars(".{");
 
-				var static size = array.size;
-				for static 0..size |i| {
+				for static 0..run array.size |i| {
 					printer:print_chars(" ");
 
 					printer:print_value(t[i], "");
 
-					if i < size - 1 {
+					if i < run array.size - 1 {
 						printer:print_chars(",");
 					} else {
 						printer:print_chars(" ");

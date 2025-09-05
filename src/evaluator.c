@@ -1013,6 +1013,11 @@ static Value evaluate_null(State *state, Node *node) {
 	}
 }
 
+static Value evaluate_run(State *state, Node *node) {
+	Run_Data run_data = get_data(state->context, node)->run;
+	return run_data.value;
+}
+
 static Value evaluate_state(State *state, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE:          return evaluate_function(state, node);
@@ -1052,6 +1057,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case GLOBAL_NODE:            return evaluate_global(state, node);
 		case CONST_NODE:             return evaluate_const(state, node);
 		case NULL_NODE:              return evaluate_null(state, node);
+		case RUN_NODE:               return evaluate_run(state, node);
 		case DEFINE_NODE:            return (Value) {};
 		default:                     assert(false);
 	}
