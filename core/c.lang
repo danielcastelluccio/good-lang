@@ -13,6 +13,7 @@ def FILE = struct {};
 
 def printf = fn (s: ^[_, null]byte, ..): int extern "printf";
 def sprintf = fn (str: ^[_, null]byte, format: ^[_]byte, ..): int extern "sprintf";
+def putchar = fn (c: int): int extern "putchar";
 
 def malloc = fn (size: size_t): ?^ extern "malloc";
 def free = fn (ptr: ^) extern "free";

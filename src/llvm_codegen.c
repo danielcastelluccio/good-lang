@@ -717,10 +717,20 @@ static LLVMValueRef generate_catch(Node *node, State *state) {
 	LLVMBasicBlockRef error_block = LLVMAppendBasicBlock(state->current_function, "");
 	LLVMBasicBlockRef end_block = LLVMAppendBasicBlock(state->current_function, "");
 
-	LLVMTypeRef result_value_type = create_llvm_type(catch_data.type.value->result_type.value.value, state);
+	bool has_result_value = catch_data.type.value->result_type.value.value != NULL;
+
+	LLVMTypeRef result_value_type = NULL;
+	if (has_result_value) {
+		result_value_type = create_llvm_type(catch_data.type.value->result_type.value.value, state);
+	}
+
 	LLVMTypeRef result_error_type = create_llvm_type(catch_data.type.value->result_type.error.value, state);
 	
-	LLVMValueRef result = LLVMBuildAlloca(state->llvm_builder, result_value_type, "");
+	LLVMValueRef result = NULL;
+	if (has_result_value) {
+		result = LLVMBuildAlloca(state->llvm_builder, result_value_type, "");
+	}
+
 	LLVMValueRef value = generate_node(catch.value, state);
 	LLVMValueRef value_tag = LLVMBuildExtractValue(state->llvm_builder, value, 0, "");
 	LLVMValueRef cmp_result = LLVMBuildICmp(state->llvm_builder, LLVMIntEQ, value_tag, LLVMConstInt(LLVMInt64Type(), 0, false), "");
@@ -732,7 +742,9 @@ static LLVMValueRef generate_catch(Node *node, State *state) {
 	LLVMBuildCondBr(state->llvm_builder, cmp_result, value_block, error_block);
 
 	LLVMPositionBuilderAtEnd(state->llvm_builder, value_block);
-	LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, result_value_type, LLVMBuildBitCast(state->llvm_builder, value_data_ptr, LLVMPointerType(result_value_type, 0), ""), ""), result);
+	if (has_result_value) {
+		LLVMBuildStore(state->llvm_builder, LLVMBuildLoad2(state->llvm_builder, result_value_type, LLVMBuildBitCast(state->llvm_builder, value_data_ptr, LLVMPointerType(result_value_type, 0), ""), ""), result);
+	}
 	LLVMBuildBr(state->llvm_builder, end_block);
 
 	LLVMPositionBuilderAtEnd(state->llvm_builder, error_block);
@@ -752,7 +764,11 @@ static LLVMValueRef generate_catch(Node *node, State *state) {
 
 	LLVMPositionBuilderAtEnd(state->llvm_builder, end_block);
 
-	return LLVMBuildLoad2(state->llvm_builder, result_value_type, result, "");
+	if (has_result_value) {
+		return LLVMBuildLoad2(state->llvm_builder, result_value_type, result, "foo");
+	} else {
+		return NULL;
+	}
 }
 
 static LLVMValueRef generate_structure_access(Node *node, State *state) {

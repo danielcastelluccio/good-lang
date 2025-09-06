@@ -1,5 +1,5 @@
 def print_stdout_fn = fn (_: ^, char: byte) {
-	_ = c::printf("%c\0", char);
+	_ = c::putchar(cast(c::int) char);
 };
 
 def c = import("c.lang");
