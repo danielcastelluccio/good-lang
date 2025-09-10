@@ -1,10 +1,13 @@
 // Do not modify, is a global so a pointer can be taken.
-def* stdout_printer = global: print_::Printer => .{ io::print_stdout_fn };
+def* stdout_printer = global: print_::Printer => .{ print_stdout_fn };
+
+def print_stdout_fn = fn (_: ^, char: byte) {
+	_ = c::putchar(cast(c::int) char);
+};
 
 def print = fn [T]($fmt: []byte, args: T) {
 	stdout_printer:print(fmt, args);
 };
 
 def c = import("c.lang");
-def io = import("io.lang");
 def print_ = import("print.lang");

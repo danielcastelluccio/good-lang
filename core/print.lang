@@ -6,7 +6,7 @@ def Printer = struct {
 	op print = fn [T](printer: ^Printer, $fmt: []byte, args: T) {
 		var$ type_info = type_info_of(T);
 		if$ type_info is Tuple |tuple| {
-			var$ argument_index = 0;
+			var$ argument_index: uint = 0;
 			var$ i: uint = 0;
 			while$ i < fmt.len {
 				if$ fmt[i] == '{' {
@@ -16,6 +16,10 @@ def Printer = struct {
 					};
 
 					var$ end = i;
+
+					if$ argument_index >= tuple.members.len {
+						compile_error("Not enough arguments");
+					};
 
 					printer:print_value(embed("args._", cast(byte) argument_index + 48), fmt[start, end]);
 					argument_index =$ argument_index + 1;

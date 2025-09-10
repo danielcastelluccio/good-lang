@@ -1269,7 +1269,9 @@ static void process_call_method(Context *context, Node *node) {
 
 	Custom_Operator_Function custom_operator_function = find_custom_operator(context, argument1_type.value->pointer_type.inner, call_method.method);
 	if (custom_operator_function.function == NULL) {
-		handle_semantic_error(context, node->location, "Method '%.*s' not found", (int) call_method.method.len, call_method.method.ptr);
+		char type_string[64] = {};
+		print_type_outer(argument1_type.value->pointer_type.inner, type_string);
+		handle_semantic_error(context, node->location, "Method '%.*s' not found for %s", (int) call_method.method.len, call_method.method.ptr, type_string);
 	}
 
 	process_initial_argument_types(context, custom_operator_function.function, arguments);
@@ -2121,7 +2123,7 @@ static void process_internal(Context *context, Node *node) {
 				}
 			}
 
-			inner_node = parse_source_statement(context->data, source_string, index, "");
+			inner_node = parse_source_statement(context->data, source_string, index, node->location.path_ref, node->location.row, node->location.column);
 
 			if (internal.assign_value != NULL) {
 				set_assign_value(inner_node, internal.assign_value, internal.assign_static);

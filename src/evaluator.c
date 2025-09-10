@@ -639,6 +639,27 @@ static Value evaluate_binary_op(State *state, Node *node) {
 				return false_value;
 			}
 		}
+		case OP_LESS_EQUALS: {
+			if (left_value.value->integer.value <= right_value.value->integer.value) {
+				return true_value;
+			} else {
+				return false_value;
+			}
+		}
+		case OP_GREATER: {
+			if (left_value.value->integer.value > right_value.value->integer.value) {
+				return true_value;
+			} else {
+				return false_value;
+			}
+		}
+		case OP_GREATER_EQUALS: {
+			if (left_value.value->integer.value >= right_value.value->integer.value) {
+				return true_value;
+			} else {
+				return false_value;
+			}
+		}
 		case OP_ADD: {
 			return create_integer(left_value.value->integer.value + right_value.value->integer.value);
 		}

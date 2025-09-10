@@ -5,12 +5,11 @@
 
 #include "lexer.h"
 
-Lexer lexer_create(char *path, char *source, size_t source_length, uint32_t path_ref) {
+Lexer lexer_create(char *source, size_t source_length, uint32_t path_ref) {
 	return (Lexer) {
 		.source = source,
 		.source_length = source_length,
 		.position = 0,
-		.path = path,
 		.row = 1,
 		.column = 1,
 		.has_cached = false,
@@ -73,7 +72,9 @@ static double extract_decimal(char *source, size_t start, size_t end) {
 
 static void increment_position(Lexer *lexer) {
 	lexer->position++;
-	lexer->column++;
+	if (!lexer->constant_row_column) {
+		lexer->column++;
+	}
 }
 
 static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
@@ -164,8 +165,10 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 	bool is_current_comment = false;
 	while (is_whitespace(lexer->source[lexer->position]) || is_comment(lexer) || is_current_comment) {
 		if (lexer->source[lexer->position] == '\n') {
-			lexer->row++;
-			lexer->column = 0;
+			if (!lexer->constant_row_column) {
+				lexer->row++;
+				lexer->column = 0;
+			}
 			is_current_comment = false;
 		}
 
@@ -269,6 +272,11 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(LESS, lexer);
 			break;
 		case '>':
+			if (lexer->source[lexer->position] == '=') {
+				increment_position(lexer);
+				result = create_token(GREATER_EQUALS, lexer);
+				break;
+			}
 			result = create_token(GREATER, lexer);
 			break;
 		case '%':

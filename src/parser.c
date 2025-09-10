@@ -1476,14 +1476,17 @@ static Node *parse_expression(Lexer *lexer) {
 	return result;
 }
 
-Node *parse_source_statement(Data *data, char *source, size_t length, char *path) {
+Node *parse_source_statement(Data *data, char *source, size_t length, size_t path_ref, size_t row, size_t column) {
 	(void) data;
-	Lexer lexer = lexer_create(path, source, length, -1);
+	Lexer lexer = lexer_create(source, length, path_ref);
+	lexer.constant_row_column = true;
+	lexer.row = row;
+	lexer.column = column + 1;
 	return parse_statement(&lexer);
 }
 
 Node *parse_source(Data *data, char *source, size_t length, char *path) {
-	Lexer lexer = lexer_create(path, source, length, arrlen(data->source_files));
+	Lexer lexer = lexer_create(source, length, arrlen(data->source_files));
 	arrpush(data->source_files, path);
 
 	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
