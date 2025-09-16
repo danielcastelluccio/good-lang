@@ -119,6 +119,9 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 		case 'm':
 			if (strcmp(identifier, "mod") == 0) result = KEYWORD_MOD;
 			break;
+		case 'n':
+			if (strcmp(identifier, "not") == 0) result = KEYWORD_NOT;
+			break;
 		case 'o':
 			if (strcmp(identifier, "op") == 0) result = KEYWORD_OP;
 			else if (strcmp(identifier, "or") == 0) result = KEYWORD_OR;
@@ -463,6 +466,8 @@ char *token_to_string(Token_Kind kind) {
 			return "is";
 		case KEYWORD_MOD:
 			return "mod";
+		case KEYWORD_NOT:
+			return "not";
 		case KEYWORD_OP:
 			return "op";
 		case KEYWORD_RETURN:

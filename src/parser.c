@@ -1125,6 +1125,14 @@ static Node *parse_module_or_module_type(Lexer *lexer) {
 	return module;
 }
 
+static Node *parse_not(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *not = ast_new(NOT_NODE, first_token.location);
+	not->not.node = parse_expression(lexer);
+	return not;
+}
+
 static Node *parse_run(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *run = ast_new(RUN_NODE, first_token.location);
@@ -1348,6 +1356,10 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_module_or_module_type(lexer);
 			break;
 		}
+		case KEYWORD_NOT: {
+			result = parse_not(lexer);
+			break;
+		}
 		case KEYWORD_RETURN: {
 			result = parse_return(lexer);
 			break;
@@ -1488,6 +1500,7 @@ Node *parse_source_statement(Data *data, char *source, size_t length, size_t pat
 Node *parse_source(Data *data, char *source, size_t length, char *path) {
 	Lexer lexer = lexer_create(source, length, arrlen(data->source_files));
 	arrpush(data->source_files, path);
+	lexer.path = path;
 
 	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
 	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});

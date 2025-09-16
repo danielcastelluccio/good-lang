@@ -222,6 +222,10 @@ typedef struct {
 } Module_Node;
 
 typedef struct {
+	Node *node;
+} Not_Node;
+
+typedef struct {
 	enum {
 		INTEGER_NUMBER,
 		DECIMAL_NUMBER
@@ -361,6 +365,7 @@ typedef enum {
 	IS_NODE,
 	MODULE_NODE,
 	MODULE_TYPE_NODE,
+	NOT_NODE,
 	NULL_NODE,
 	NUMBER_NODE,
 	OPERATOR_NODE,
@@ -414,6 +419,7 @@ struct Node {
 		Internal_Node internal;
 		Is_Node is;
 		Module_Node module;
+		Not_Node not;
 		Number_Node number;
 		Operator_Node operator;
 		Optional_Type_Node optional_type;

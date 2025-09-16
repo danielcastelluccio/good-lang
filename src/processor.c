@@ -899,6 +899,7 @@ static bool is_trivially_evaluatable(Context *context, Node *node) {
 			return true;
 		}
 		case IDENTIFIER_NODE: {
+			assert(get_data(context, node) != NULL);
 			return get_data(context, node)->identifier.kind == IDENTIFIER_VALUE;
 		}
 		default:
@@ -2516,6 +2517,13 @@ static void process_module_type(Context *context, Node *node) {
 	set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
 }
 
+static void process_not(Context *context, Node *node) {
+	Not_Node not = node->not;
+	process_node(context, not.node);
+
+	set_type(context, node, create_value(BOOLEAN_TYPE_VALUE));
+}
+
 static void process_null(Context *context, Node *node) {
 	Value wanted_type = context->temporary_context.wanted_type;
 	if (wanted_type.value == NULL) {
@@ -3298,6 +3306,9 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 			break;
 		case MODULE_TYPE_NODE:
 			process_module_type(context, node);
+			break;
+		case NOT_NODE:
+			process_not(context, node);
 			break;
 		case NULL_NODE:
 			process_null(context, node);

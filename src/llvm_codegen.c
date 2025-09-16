@@ -1562,6 +1562,14 @@ static LLVMValueRef generate_slice(Node *node, State *state) {
 	}
 }
 
+static LLVMValueRef generate_not(Node *node, State *state) {
+	assert(node->kind == NOT_NODE);
+	Not_Node not = node->not;
+
+
+	return LLVMBuildNot(state->llvm_builder, generate_node(not.node, state), "");
+}
+
 static LLVMValueRef generate_node(Node *node, State *state) {
 	switch (node->kind) {
 		case DEFINE_NODE:
@@ -1627,6 +1635,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_internal(node, state);
 		case SLICE_NODE:
 			return generate_slice(node, state);
+		case NOT_NODE:
+			return generate_not(node, state);
 		default:
 			assert(false);
 	}
