@@ -1,6 +1,8 @@
 #include "common.h"
 
 typedef enum {
+	NONE_VALUE,
+
 	ARRAY_VALUE,
 	ARRAY_TYPE_VALUE,
 	ARRAY_VIEW_VALUE,
@@ -38,9 +40,7 @@ typedef enum {
 	TUPLE_TYPE_VALUE,
 	TYPE_TYPE_VALUE,
 	UNION_VALUE,
-	UNION_TYPE_VALUE,
-
-	NONE_VALUE
+	UNION_TYPE_VALUE
 } Value_Tag;
 
 typedef struct {

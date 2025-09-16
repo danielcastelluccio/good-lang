@@ -863,7 +863,6 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 }
 
 static void process_enforce_pointer(Context *context, Node *node) {
-	process_node(context, node);
 	Value structure_pointer_type = get_type(context, node);
 	if (structure_pointer_type.value->tag != POINTER_TYPE_VALUE) {
 		reset_node(context, node);
@@ -872,20 +871,6 @@ static void process_enforce_pointer(Context *context, Node *node) {
 		process_node_context(context, temporary_context, node);
 
 		structure_pointer_type = get_type(context, node);
-	}
-}
-
-static void process_enforce_pointer_sometimes(Context *context, Node *node, bool force_enforce, Node *parent_node) {
-	process_node(context, node);
-
-	Value real_structure_type = get_type(context, node);
-	if ((force_enforce || context->temporary_context.want_pointer || (real_structure_type.value->tag == STRUCT_TYPE_VALUE && parent_node->kind != STRUCTURE_ACCESS_NODE) || (real_structure_type.value->tag == ARRAY_TYPE_VALUE && parent_node->kind == SLICE_NODE)) && real_structure_type.value->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, node);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		process_node_context(context, temporary_context, node);
-
-		real_structure_type = get_type(context, node);
 	}
 }
 
@@ -924,10 +909,14 @@ static bool is_trivially_evaluatable(Context *context, Node *node) {
 static void process_array_access(Context *context, Node *node) {
 	Array_Access_Node array_access = node->array_access;
 
+	process_node(context, array_access.parent);
+	if (array_access.assign_value != NULL || (context->temporary_context.want_pointer && get_type(context, array_access.parent).value->tag == ARRAY_TYPE_VALUE)) {
+		process_enforce_pointer(context, array_access.parent);
+	}
+
 	Temporary_Context temporary_context = { .wanted_type = create_integer_type(false, context->codegen.default_integer_size) };
 	process_node_context(context, temporary_context, array_access.index);
 
-	process_enforce_pointer_sometimes(context, array_access.parent, array_access.assign_value != NULL, node);
 	Value raw_array_type = get_type(context, array_access.parent);
 	Value array_type = raw_array_type;
 	if (array_type.value->tag == POINTER_TYPE_VALUE) {
@@ -1372,6 +1361,7 @@ static void process_define(Context *context, Node *node) {
 static void process_deoptional(Context *context, Node *node) {
 	Deoptional_Node deoptional = node->deoptional;
 
+	process_node(context, deoptional.node);
 	process_enforce_pointer(context, deoptional.node);
 
 	Value type = get_type(context, deoptional.node);
@@ -2715,7 +2705,11 @@ static void process_slice(Context *context, Node *node) {
 
 	process_node_context(context, temporary_context, slice.end);
 
-	process_enforce_pointer_sometimes(context, slice.parent, false, node);
+	process_node(context, slice.parent);
+	if (get_type(context, slice.parent).value->tag == ARRAY_TYPE_VALUE) {
+		process_enforce_pointer(context, slice.parent);
+	}
+
 	Value raw_array_type = get_type(context, slice.parent);
 	Value array_type = raw_array_type;
 	if (array_type.value->tag == POINTER_TYPE_VALUE) {
@@ -2846,7 +2840,10 @@ static void process_structure(Context *context, Node *node) {
 static void process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
-	process_enforce_pointer_sometimes(context, structure_access.parent, structure_access.assign_value != NULL, node);
+	process_node(context, structure_access.parent);
+	if (context->temporary_context.want_pointer || structure_access.assign_value != NULL) {
+		process_enforce_pointer(context, structure_access.parent);
+	}
 
 	Value raw_structure_type = get_type(context, structure_access.parent);
 
