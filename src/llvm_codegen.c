@@ -654,8 +654,12 @@ static LLVMValueRef generate_deoptional(Node *node, State *state) {
 		}
 		return NULL;
 	} else {
-		LLVMValueRef value_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
-		return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(deoptional_data.type.value, state), value_ptr, "");
+		if (deoptional_data.type.value->tag == POINTER_TYPE_VALUE) {
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(deoptional_data.type.value, state), optional_llvm_value, "");
+		} else {
+			LLVMValueRef value_ptr = LLVMBuildStructGEP2(state->llvm_builder, optional_llvm_type, optional_llvm_value, 1, "");
+			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(deoptional_data.type.value, state), value_ptr, "");
+		}
 	}
 }
 
