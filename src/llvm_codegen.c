@@ -1,10 +1,11 @@
 #include <assert.h>
-#include <llvm-c/Analysis.h>
-#include <llvm-c/Types.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
+#include <llvm-c/Analysis.h>
+#include <llvm-c/Types.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/Target.h>
 #include <llvm-c/TargetMachine.h>
@@ -1963,15 +1964,20 @@ void build_llvm(Context context, Node *root, void *data) {
 	LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.o", LLVMObjectFile, NULL);
 	// LLVMTargetMachineEmitToFile(llvm_target_machine, llvm_module, "output.s", LLVMAssemblyFile, NULL);
 
-	char *args[] = {
-		"gcc",
-		"-no-pie",
-		"output.o",
-		"-o",
-		"output",
-		NULL
-	};
-	execvp(args[0], args);
+	pid_t pid = fork();
+	if (pid == 0) {
+		char *args[] = {
+			"gcc",
+			"-no-pie",
+			"output.o",
+			"-o",
+			"output",
+			NULL
+		};
+		execvp(args[0], args);
+	} else {
+		waitpid(pid, NULL, 0);
+	}
 }
 
 Codegen llvm_codegen() {

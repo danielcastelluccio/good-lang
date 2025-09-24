@@ -8,9 +8,9 @@
 #include "string_view.h"
 
 typedef struct {
-	uint32_t path_ref;
-	uint32_t row;
-	uint32_t column;
+	uint16_t path_ref;
+	uint16_t row;
+	uint16_t column;
 } Source_Location;
 
 typedef struct Node Node;

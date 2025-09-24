@@ -89,14 +89,18 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
 
-		Variable_Definition variable = hmget(scope->variables, sv_hash(identifier));
-		if (variable.node != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_VARIABLE, .variable = variable.node, .type = variable.node_data->variable.type };
-		}
-
-		Binding binding = hmget(scope->bindings, sv_hash(identifier));
-		if (binding.type.value != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_BINDING, .binding = { .node = scope->node, .index = binding.index }, .type = binding.type };
+		Scope_Identifier scope_identifier = hmget(scope->identifiers, sv_hash(identifier));
+		switch (scope_identifier.tag) {
+			case SCOPE_VARIABLE:
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_VARIABLE, .variable = scope_identifier.variable.node, .type = scope_identifier.variable.node_data->variable.type };
+			case SCOPE_BINDING:
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_BINDING, .binding = { .node = scope->node, .index = scope_identifier.binding.index }, .type = scope_identifier.binding.type };
+			case SCOPE_STATIC_BINDING:
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_BINDING, .static_binding = scope_identifier.static_binding.value, .type = scope_identifier.static_binding.type };
+			case SCOPE_STATIC_VARIABLE:
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = (Variable_Definition) { .node = scope_identifier.static_variable.node, .node_data = scope_identifier.static_variable.node_data }, .type = scope_identifier.static_variable.node_data->variable.type };
+			case SCOPE_INVALID:
+				break;
 		}
 
 		if (!found_function && scope->node->kind == FUNCTION_NODE) {
@@ -112,16 +116,6 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 					j++;
 				}
 			}
-		}
-
-		Typed_Value value = hmget(scope->static_bindings, sv_hash(identifier));
-		if (value.type.value != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_BINDING, .static_binding = value.value, .type = value.type };
-		}
-
-		variable = hmget(scope->static_variables, sv_hash(identifier));
-		if (variable.node != NULL) {
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = (Variable_Definition) { .node = variable.node, .node_data = variable.node_data }, .type = variable.node_data->variable.type };
 		}
 
 		Node *node = scope->node;
@@ -801,7 +795,11 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			arrpush(context->scopes, (Scope) { .node = node });
 
 			for (long int i = 0; i < arrlen(static_arguments); i++) {
-				hmput(arrlast(context->scopes).static_bindings, sv_hash(static_arguments[i].identifier), static_arguments[i].value);
+				Scope_Identifier scope_identifier = {
+					.tag = SCOPE_STATIC_BINDING,
+					.static_binding = static_arguments[i].value
+				};
+				hmput(arrlast(context->scopes).identifiers, sv_hash(static_arguments[i].identifier), scope_identifier);
 			}
 
 			assert(function_value.value->tag == FUNCTION_STUB_VALUE);
@@ -1303,7 +1301,11 @@ static void process_catch(Context *context, Node *node) {
 			.index = 0
 		};
 
-		hmput(arrlast(context->scopes).bindings, sv_hash(catch.binding), binding);
+		Scope_Identifier scope_identifier = {
+			.tag = SCOPE_BINDING,
+			.binding = binding
+		};
+		hmput(arrlast(context->scopes).identifiers, sv_hash(catch.binding), scope_identifier);
 	}
 	process_node(context, catch.error);
 	(void) arrpop(context->scopes);
@@ -1488,14 +1490,23 @@ static void process_for(Context *context, Node *node) {
 				default:
 					assert(false);
 			}
-			hmput(arrlast(context->scopes).static_bindings, sv_hash(for_.bindings[0]), typed_value);
+			Scope_Identifier scope_identifier = {
+				.tag = SCOPE_STATIC_BINDING,
+				.static_binding = typed_value
+			};
+			hmput(arrlast(context->scopes).identifiers, sv_hash(for_.bindings[0]), scope_identifier);
 
 			if (arrlen(for_.bindings) > 1) {
 				Typed_Value typed_value = {
 					.value = create_integer(i),
 					.type = create_integer_type(false, context->codegen.default_integer_size)
 				};
-				hmput(arrlast(context->scopes).static_bindings, sv_hash(for_.bindings[1]), typed_value);
+
+				scope_identifier = (Scope_Identifier) {
+					.tag = SCOPE_STATIC_BINDING,
+					.static_binding = typed_value
+				};
+				hmput(arrlast(context->scopes).identifiers, sv_hash(for_.bindings[1]), scope_identifier);
 			}
 
 			process_node(context, for_.body);
@@ -1509,7 +1520,12 @@ static void process_for(Context *context, Node *node) {
 				.type = element_types[i],
 				.index = i
 			};
-			hmput(arrlast(context->scopes).bindings, sv_hash(for_.bindings[i]), binding);
+
+			Scope_Identifier scope_identifier = {
+				.tag = SCOPE_BINDING,
+				.binding = binding
+			};
+			hmput(arrlast(context->scopes).identifiers, sv_hash(for_.bindings[i]), scope_identifier);
 		}
 
 		process_node(context, for_.body);
@@ -1732,6 +1748,7 @@ static void process_identifier(Context *context, Node *node) {
 		process_node_with_scopes(context, define_node, define_scopes);
 		Typed_Value typed_value = get_data(context, define_node)->define.typed_value;
 		context->static_id = saved_static_id;
+
 		type = typed_value.type;
 		value = typed_value.value;
 
@@ -1907,7 +1924,12 @@ static void process_if(Context *context, Node *node) {
 					.value = (Value) { .value = evaluated.value->optional.value },
 					.type = condition_type.value->optional_type.inner
 				};
-				hmput(arrlast(context->scopes).static_bindings, sv_hash(if_.bindings[0]), typed_value);
+
+				Scope_Identifier scope_identifier = {
+					.tag = SCOPE_STATIC_BINDING,
+					.static_binding = typed_value
+				};
+				hmput(arrlast(context->scopes).identifiers, sv_hash(if_.bindings[0]), scope_identifier);
 			}
 
 			process_node_context(context, temporary_context, if_.if_body);
@@ -1927,7 +1949,11 @@ static void process_if(Context *context, Node *node) {
 				.index = 0
 			};
 
-			hmput(arrlast(context->scopes).bindings, sv_hash(if_.bindings[0]), binding);
+			Scope_Identifier scope_identifier = {
+				.tag = SCOPE_BINDING,
+				.binding = binding
+			};
+			hmput(arrlast(context->scopes).identifiers, sv_hash(if_.bindings[0]), scope_identifier);
 		}
 		process_node(context, if_.if_body);
 		(void) arrpop(context->scopes);
@@ -3011,7 +3037,12 @@ static void process_switch(Context *context, Node *node) {
 					.value = (Value) { .value = switched_value->tagged_union.data },
 					.type = type.value->tagged_union_type.items[switched_enum_value->enum_.value].type
 				};
-				hmput(arrlast(context->scopes).static_bindings, sv_hash(switch_case.binding), typed_value);
+
+				Scope_Identifier scope_identifier = {
+					.tag = SCOPE_STATIC_BINDING,
+					.static_binding = typed_value
+				};
+				hmput(arrlast(context->scopes).identifiers, sv_hash(switch_case.binding), scope_identifier);
 			}
 
 			Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
@@ -3046,7 +3077,12 @@ static void process_switch(Context *context, Node *node) {
 					.type = binding_type,
 					.index = 0
 				};
-				hmput(arrlast(context->scopes).bindings, sv_hash(switch_case.binding), binding);
+
+				Scope_Identifier scope_identifier = {
+					.tag = SCOPE_BINDING,
+					.binding = binding
+				};
+				hmput(arrlast(context->scopes).identifiers, sv_hash(switch_case.binding), scope_identifier);
 			}
 
 			bool saved_previous_returned = context->returned;
@@ -3158,11 +3194,19 @@ static void process_variable(Context *context, Node *node) {
 		.node_data = data
 	};
 	if (variable.static_) {
-		hmput(arrlast(context->scopes).static_variables, sv_hash(variable.name), variable_definition);
+		Scope_Identifier scope_identifier = {
+			.tag = SCOPE_STATIC_VARIABLE,
+			.static_variable = variable_definition
+		};
+		hmput(arrlast(context->scopes).identifiers, sv_hash(variable.name), scope_identifier);
 		Value value = evaluate(context, variable.value);
 		hmput(context->static_variables, data, value);
 	} else {
-		hmput(arrlast(context->scopes).variables, sv_hash(variable.name), variable_definition);
+		Scope_Identifier scope_identifier = {
+			.tag = SCOPE_VARIABLE,
+			.variable = variable_definition
+		};
+		hmput(arrlast(context->scopes).identifiers, sv_hash(variable.name), scope_identifier);
 	}
 
 	data->variable.type = type;
@@ -3393,6 +3437,7 @@ void process_node_context(Context *context, Temporary_Context temporary_context,
 
 Context process(Data *data, Node *root, Codegen codegen) {
 	Context context = { .codegen = codegen, .data = data };
+	arrsetcap(context.scopes, 32);
 
 	process_node(&context, root);
 

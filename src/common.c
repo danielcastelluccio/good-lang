@@ -21,23 +21,27 @@ Node_Data *data_new(Node_Kind kind) {
 }
 
 Value get_type(Context *context, Node *node) {
-	Node_Types *types = hmget(context->types, context->static_id);
-	if (types == NULL) {
-		types = malloc(sizeof(Node_Types *));
-		*types = NULL;
-		hmput(context->types, context->static_id, types);
+	if ((long) context->static_id >= arrlen(context->types)) {
+		for (size_t i = arrlen(context->types); i < context->static_id + 1; i++) {
+			Node_Types *types = malloc(sizeof(Node_Types *));
+			*types = NULL;
+			arrpush(context->types, types);
+		}
 	}
-	return hmget(*types, node);
+
+	return hmget(*context->types[context->static_id], node);
 }
 
 void set_type(Context *context, Node *node, Value type) {
-	Node_Types *types = hmget(context->types, context->static_id);
-	if (types == NULL) {
-		types = malloc(sizeof(Node_Types *));
-		*types = NULL;
-		hmput(context->types, context->static_id, types);
+	if ((long) context->static_id >= arrlen(context->types)) {
+		for (size_t i = arrlen(context->types); i < context->static_id + 1; i++) {
+			Node_Types *types = malloc(sizeof(Node_Types *));
+			*types = NULL;
+			arrpush(context->types, types);
+		}
 	}
-	hmput(*types, node, type);
+
+	hmput(*context->types[context->static_id], node, type);
 }
 
 Node_Data *get_data(Context *context, Node *node) {
@@ -61,13 +65,15 @@ void set_data(Context *context, Node *node, Node_Data *value) {
 }
 
 void reset_node(Context *context, Node *node) {
-	Node_Types *types = hmget(context->types, context->static_id);
-	if (types == NULL) {
-		types = malloc(sizeof(Node_Types *));
-		*types = NULL;
-		hmput(context->types, context->static_id, types);
+	if ((long) context->static_id >= arrlen(context->types)) {
+		for (size_t i = arrlen(context->types); i < context->static_id + 1; i++) {
+			Node_Types *types = malloc(sizeof(Node_Types *));
+			*types = NULL;
+			arrpush(context->types, types);
+		}
 	}
-	(void) hmdel(*types, node);
+
+	(void) hmdel(*context->types[context->static_id], node);
 
 	Node_Datas *datas = hmget(context->datas, context->static_id);
 	if (datas == NULL) {

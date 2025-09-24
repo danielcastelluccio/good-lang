@@ -27,10 +27,23 @@ typedef struct {
 } Variable_Definition;
 
 typedef struct {
-	struct { size_t key; Variable_Definition value; } *variables; // stb_ds
-	struct { size_t key; Binding value; } *bindings; // stb_ds
-	struct { size_t key; Typed_Value value; } *static_bindings; // stb_ds
-	struct { size_t key; Variable_Definition value; } *static_variables; // stb_ds
+	enum {
+		SCOPE_INVALID,
+		SCOPE_VARIABLE,
+		SCOPE_BINDING,
+		SCOPE_STATIC_BINDING,
+		SCOPE_STATIC_VARIABLE
+	} tag;
+	union {
+		Variable_Definition variable;
+		Binding binding;
+		Typed_Value static_binding;
+		Variable_Definition static_variable;
+	};
+} Scope_Identifier;
+
+typedef struct {
+	struct { size_t key; Scope_Identifier value; } *identifiers;
 	Node *node;
 	Value node_type;
 	Value current_type;
@@ -307,7 +320,7 @@ typedef struct {
 } Data;
 
 struct Context {
-	struct { size_t key; Node_Types *value; } *types; // stb_ds
+	Node_Types **types; // stb_ds
 	struct { size_t key; Node_Datas *value; } *datas; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
 	struct { Node_Data *key; Value value; } *static_variables; // stb_ds
