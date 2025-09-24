@@ -45,23 +45,25 @@ void set_type(Context *context, Node *node, Value type) {
 }
 
 Node_Data *get_data(Context *context, Node *node) {
-	Node_Datas *datas = hmget(context->datas, context->static_id);
-	if (datas == NULL) {
-		datas = malloc(sizeof(Node_Datas *));
-		*datas = NULL;
-		hmput(context->datas, context->static_id, datas);
+	if ((long) context->static_id >= arrlen(context->datas)) {
+		for (size_t i = arrlen(context->datas); i < context->static_id + 1; i++) {
+			Node_Datas *datas = malloc(sizeof(Node_Data *));
+			*datas = NULL;
+			arrpush(context->datas, datas);
+		}
 	}
-	return hmget(*datas, node);
+	return hmget(*context->datas[context->static_id], node);
 }
 
 void set_data(Context *context, Node *node, Node_Data *value) {
-	Node_Datas *datas = hmget(context->datas, context->static_id);
-	if (datas == NULL) {
-		datas = malloc(sizeof(Node_Datas *));
-		*datas = NULL;
-		hmput(context->datas, context->static_id, datas);
+	if ((long) context->static_id >= arrlen(context->datas)) {
+		for (size_t i = arrlen(context->datas); i < context->static_id + 1; i++) {
+			Node_Datas *datas = malloc(sizeof(Node_Data *));
+			*datas = NULL;
+			arrpush(context->datas, datas);
+		}
 	}
-	hmput(*datas, node, value);
+	hmput(*context->datas[context->static_id], node, value);
 }
 
 void reset_node(Context *context, Node *node) {
@@ -75,11 +77,12 @@ void reset_node(Context *context, Node *node) {
 
 	(void) hmdel(*context->types[context->static_id], node);
 
-	Node_Datas *datas = hmget(context->datas, context->static_id);
-	if (datas == NULL) {
-		datas = malloc(sizeof(Node_Datas *));
-		*datas = NULL;
-		hmput(context->datas, context->static_id, datas);
+	if ((long) context->static_id >= arrlen(context->datas)) {
+		for (size_t i = arrlen(context->datas); i < context->static_id + 1; i++) {
+			Node_Datas *datas = malloc(sizeof(Node_Data *));
+			*datas = NULL;
+			arrpush(context->datas, datas);
+		}
 	}
-	(void) hmdel(*datas, node);
+	(void) hmdel(*context->datas[context->static_id], node);
 }
