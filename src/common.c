@@ -32,7 +32,7 @@ Value get_type(Context *context, Node *node) {
 	return hmget(*context->types[context->static_id], node);
 }
 
-void set_type(Context *context, Node *node, Value type) {
+Value set_type(Context *context, Node *node, Value type) {
 	if ((long) context->static_id >= arrlen(context->types)) {
 		for (size_t i = arrlen(context->types); i < context->static_id + 1; i++) {
 			Node_Types *types = malloc(sizeof(Node_Types *));
@@ -42,6 +42,8 @@ void set_type(Context *context, Node *node, Value type) {
 	}
 
 	hmput(*context->types[context->static_id], node, type);
+
+	return type;
 }
 
 Node_Data *get_data(Context *context, Node *node) {

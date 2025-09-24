@@ -32,13 +32,15 @@ typedef struct {
 		SCOPE_VARIABLE,
 		SCOPE_BINDING,
 		SCOPE_STATIC_BINDING,
-		SCOPE_STATIC_VARIABLE
+		SCOPE_STATIC_VARIABLE,
+		SCOPE_DEFINE
 	} tag;
 	union {
 		Variable_Definition variable;
 		Binding binding;
 		Typed_Value static_binding;
 		Variable_Definition static_variable;
+		Node *define;
 	};
 } Scope_Identifier;
 
@@ -337,7 +339,7 @@ struct Context {
 };
 
 Value get_type(Context *context, Node *node);
-void set_type(Context *context, Node *node, Value type);
+Value set_type(Context *context, Node *node, Value type);
 
 Node_Data *get_data(Context *context, Node *node);
 void set_data(Context *context, Node *node, Node_Data *data);
