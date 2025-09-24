@@ -2215,6 +2215,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 0;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *size_value = create_integer(type.value->integer_type.size).value;
 					arrpush(data->struct_.values, size_value);
@@ -2227,6 +2228,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 1;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->struct_type.members);
@@ -2267,6 +2269,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 2;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->union_type.items);
@@ -2297,6 +2300,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 3;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->tagged_union_type.items);
@@ -2327,6 +2331,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 4;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->enum_type.items);
@@ -2350,6 +2355,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 5;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *type_value = type.value->optional_type.inner.value;
 					arrpush(data->struct_.values, type_value);
@@ -2359,6 +2365,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 6;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *size_value = type.value->array_type.size.value;
 					arrpush(data->struct_.values, size_value);
@@ -2370,6 +2377,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 7;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *type_value = type.value->array_type.inner.value;
 					arrpush(data->struct_.values, type_value);
@@ -2379,6 +2387,7 @@ static void process_internal(Context *context, Node *node) {
 					enum_value->enum_.value = 8;
 
 					data = value_new(STRUCT_VALUE);
+					data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->tuple_type.members);
@@ -2793,7 +2802,12 @@ static void process_structure(Context *context, Node *node) {
 
 	Value wanted_type = context->temporary_context.wanted_type;
 
-	Value result_type = wanted_type.value == NULL ? create_value(TUPLE_TYPE_VALUE) : wanted_type;
+	Value result_type = wanted_type;
+	if (wanted_type.value == NULL) {
+		result_type = create_value(TUPLE_TYPE_VALUE);
+		result_type.value->tuple_type.members = NULL;
+	}
+
 	for (long int i = 0; i < arrlen(structure.values); i++) {
 		Value item_wanted_type = {};
 		if (wanted_type.value != NULL) {

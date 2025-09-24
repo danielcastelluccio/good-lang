@@ -14,7 +14,6 @@ Node *ast_new(Node_Kind kind, Source_Location location) {
 	}
 
 	Node *node = &nodes[node_index++];
-	memset(node, 0, sizeof(Node));
 	node->kind = kind;
 	node->location = location;
 	return node;

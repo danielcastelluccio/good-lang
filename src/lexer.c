@@ -77,77 +77,80 @@ static void increment_position(Lexer *lexer) {
 	}
 }
 
-static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
-	char saved = source[end];
-	source[end] = '\0';
+bool streq_len(char *s1, size_t l1, char *s2, size_t l2) {
+	if (l1 != l2) return false;
 
+	return strncmp(s1, s2, l1) == 0;
+}
+
+static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 	Token_Kind result = IDENTIFIER;
 	char *identifier = &source[start];
+	size_t len = end - start;
 	switch (identifier[0]) {
 		case 'a':
-			if (strcmp(identifier, "and") == 0) result = KEYWORD_AND;
+			if (streq_len(identifier, len, "and", 3)) result = KEYWORD_AND;
 			break;
 		case 'b':
-			if (strcmp(identifier, "break") == 0) result = KEYWORD_BREAK;
+			if (streq_len(identifier, len, "break", 5)) result = KEYWORD_BREAK;
 			break;
 		case 'c':
-			if (strcmp(identifier, "cast") == 0) result = KEYWORD_CAST;
-			else if (strcmp(identifier, "case") == 0) result = KEYWORD_CASE;
-			else if (strcmp(identifier, "catch") == 0) result = KEYWORD_CATCH;
-			else if (strcmp(identifier, "const") == 0) result = KEYWORD_CONST;
+			if (streq_len(identifier, len, "cast", 4)) result = KEYWORD_CAST;
+			else if (streq_len(identifier, len, "case", 4)) result = KEYWORD_CASE;
+			else if (streq_len(identifier, len, "catch", 5)) result = KEYWORD_CATCH;
+			else if (streq_len(identifier, len, "const", 5)) result = KEYWORD_CONST;
 			break;
 		case 'd':
-			if (strcmp(identifier, "def") == 0) result = KEYWORD_DEF;
-			else if (strcmp(identifier, "defer") == 0) result = KEYWORD_DEFER;
+			if (streq_len(identifier, len, "def", 3)) result = KEYWORD_DEF;
+			else if (streq_len(identifier, len, "defer", 5)) result = KEYWORD_DEFER;
 			break;
 		case 'e':
-			if (strcmp(identifier, "extern") == 0) result = KEYWORD_EXTERN;
-			else if (strcmp(identifier, "else") == 0) result = KEYWORD_ELSE;
-			else if (strcmp(identifier, "enum") == 0) result = KEYWORD_ENUM;
+			if (streq_len(identifier, len, "extern", 6)) result = KEYWORD_EXTERN;
+			else if (streq_len(identifier, len, "else", 4)) result = KEYWORD_ELSE;
+			else if (streq_len(identifier, len, "enum", 4)) result = KEYWORD_ENUM;
 			break;
 		case 'f':
-			if (strcmp(identifier, "fn") == 0) result = KEYWORD_FN;
-			else if (strcmp(identifier, "for") == 0) result = KEYWORD_FOR;
+			if (streq_len(identifier, len, "fn", 2)) result = KEYWORD_FN;
+			else if (streq_len(identifier, len, "for", 3)) result = KEYWORD_FOR;
 			break;
 		case 'g':
-			if (strcmp(identifier, "global") == 0) result = KEYWORD_GLOBAL;
+			if (streq_len(identifier, len, "global", 6)) result = KEYWORD_GLOBAL;
 			break;
 		case 'i':
-			if (strcmp(identifier, "if") == 0) result = KEYWORD_IF;
-			else if (strcmp(identifier, "is") == 0) result = KEYWORD_IS;
+			if (streq_len(identifier, len, "if", 2)) result = KEYWORD_IF;
+			else if (streq_len(identifier, len, "is", 2)) result = KEYWORD_IS;
 			break;
 		case 'm':
-			if (strcmp(identifier, "mod") == 0) result = KEYWORD_MOD;
+			if (streq_len(identifier, len, "mod", 3)) result = KEYWORD_MOD;
 			break;
 		case 'n':
-			if (strcmp(identifier, "not") == 0) result = KEYWORD_NOT;
+			if (streq_len(identifier, len, "not", 3)) result = KEYWORD_NOT;
 			break;
 		case 'o':
-			if (strcmp(identifier, "op") == 0) result = KEYWORD_OP;
-			else if (strcmp(identifier, "or") == 0) result = KEYWORD_OR;
+			if (streq_len(identifier, len, "op", 2)) result = KEYWORD_OP;
+			else if (streq_len(identifier, len, "or", 2)) result = KEYWORD_OR;
 			break;
 		case 'r':
-			if (strcmp(identifier, "return") == 0) result = KEYWORD_RETURN;
-			else if (strcmp(identifier, "run") == 0) result = KEYWORD_RUN;
+			if (streq_len(identifier, len, "return", 6)) result = KEYWORD_RETURN;
+			else if (streq_len(identifier, len, "run", 3)) result = KEYWORD_RUN;
 			break;
 		case 's':
-			if (strcmp(identifier, "struct") == 0) result = KEYWORD_STRUCT;
-			else if (strcmp(identifier, "switch") == 0) result = KEYWORD_SWITCH;
+			if (streq_len(identifier, len, "struct", 6)) result = KEYWORD_STRUCT;
+			else if (streq_len(identifier, len, "switch", 6)) result = KEYWORD_SWITCH;
 			break;
 		case 't':
-			if (strcmp(identifier, "tagged_union") == 0) result = KEYWORD_TAGGED_UNION;
+			if (streq_len(identifier, len, "tagged_union", 12)) result = KEYWORD_TAGGED_UNION;
 			break;
 		case 'u':
-			if (strcmp(identifier, "union") == 0) result = KEYWORD_UNION;
+			if (streq_len(identifier, len, "union", 5)) result = KEYWORD_UNION;
 			break;
 		case 'v':
-			if (strcmp(identifier, "var") == 0) result = KEYWORD_VAR;
+			if (streq_len(identifier, len, "var", 3)) result = KEYWORD_VAR;
 			break;
 		case 'w':
-			if (strcmp(identifier, "while") == 0) result = KEYWORD_WHILE;
+			if (streq_len(identifier, len, "while", 5)) result = KEYWORD_WHILE;
 			break;
 	}
-	source[end] = saved;
 	return result;
 }
 

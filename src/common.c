@@ -5,8 +5,16 @@
 
 #include "common.h"
 
+Node_Data *datas = NULL;
+size_t datas_index = 0;
+
 Node_Data *data_new(Node_Kind kind) {
-	Node_Data *data = malloc(sizeof(Node_Data));
+	if (datas == NULL || datas_index == 65536) {
+		datas = malloc(sizeof(Node_Data) * 65536);
+		datas_index = 0;
+	}
+
+	Node_Data *data = &datas[datas_index++];
 	memset(data, 0, sizeof(Node_Data));
 	data->kind = kind;
 	return data;

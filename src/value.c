@@ -3,9 +3,16 @@
 
 #include "value.h"
 
+Value_Data *values = NULL;
+size_t value_index = 0;
+
 Value_Data *value_new(Value_Tag tag) {
-	Value_Data *value = malloc(sizeof(Value_Data));
-	memset(value, 0, sizeof(Value_Data));
+	if (values == NULL || value_index == 65536) {
+		values = malloc(sizeof(Value_Data) * 65536);
+		value_index = 0;
+	}
+
+	Value_Data *value = &values[value_index++];
 	value->tag = tag;
 	return value;
 }

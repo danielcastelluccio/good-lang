@@ -390,6 +390,7 @@ static Value evaluate_pointer(State *state, Node *node) {
 	Pointer_Type_Node pointer = node->pointer_type;
 
 	Value_Data *pointer_type_value = value_new(POINTER_TYPE_VALUE);
+	pointer_type_value->pointer_type.inner = (Value) {};
 	if (pointer.inner) {
 		pointer_type_value->pointer_type.inner = evaluate_state(state, pointer.inner);
 	}
@@ -408,6 +409,7 @@ static Value evaluate_result(State *state, Node *node) {
 	Result_Type_Node result = node->result_type;
 
 	Value_Data *result_type_value = value_new(RESULT_TYPE_VALUE);
+	result_type_value->result_type.value = (Value) {};
 	if (result.value != NULL) {
 		result_type_value->result_type.value = evaluate_state(state, result.value);
 	}
