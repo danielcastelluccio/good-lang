@@ -269,6 +269,8 @@ static Value evaluate_function(State *state, Node *node) {
 	function_value->function.type = function_type_value.value;
 	if (function.body != NULL) {
 		function_value->function.body = function.body;
+	} else {
+		function_value->function.body = NULL;
 	}
 
 	function_value->function.static_id = state->context->static_id;
@@ -338,6 +340,7 @@ static Value evaluate_tagged_union_type(State *state, Node *node) {
 	tagged_union_value->tagged_union_type.node = node;
 	tagged_union_value->tagged_union_type.items = NULL;
 	Value_Data *enum_value = value_new(ENUM_TYPE_VALUE);
+	enum_value->enum_type.items = NULL;
 	tagged_union_value->tagged_union_type.enum_ = enum_value;
 	for (long int i = 0; i < arrlen(tagged_union_type.members); i++) {
 		Tagged_Union_Item_Value item = {
@@ -424,6 +427,8 @@ static Value evaluate_array_type(State *state, Node *node) {
 	array_type_value->array_type.size = evaluate_state(state, array_type.size);
 	if (array_type.sentinel != NULL) {
 		array_type_value->array_type.sentinel = evaluate_state(state, array_type.sentinel);
+	} else {
+		array_type_value->array_type.sentinel = (Value) {};
 	}
 	array_type_value->array_type.inner = evaluate_state(state, array_type.inner);
 	return create_value_data(array_type_value, node);
@@ -449,7 +454,7 @@ static Value evaluate_identifier(State *state, Node *node) {
 		case IDENTIFIER_ARGUMENT:
 			return function_arguments[identifier_data.argument_index];
 		case IDENTIFIER_UNDERSCORE:
-			return create_value_data(NULL, node);
+			return (Value) {};
 		case IDENTIFIER_VARIABLE: {
 			Node_Data *variable_data = get_data(state->context, identifier_data.variable);
 			if (identifier.assign_value != NULL) {
@@ -492,6 +497,7 @@ static Value evaluate_string(State *state, Node *node) {
 	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
 		Value_Data *string = value_new(ARRAY_VIEW_VALUE);
 		string->array_view.length = string_length;
+		string->array_view.values = NULL;
 		for (size_t i = 0; i < string_length; i++) {
 			Value_Data *byte_value = value_new(BYTE_VALUE);
 			byte_value->byte.value = string_value.ptr[i];
@@ -711,6 +717,7 @@ static Value evaluate_structure(State *state, Node *node) {
 	switch (structure_data.type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
 			Value result = create_value_data(value_new(STRUCT_VALUE), node);
+			result.value->struct_.values = NULL;
 			for (long int i = 0; i < arrlen(structure.values); i++) {
 				arrpush(result.value->struct_.values, evaluate_state(state, structure.values[i].node).value);
 			}

@@ -110,6 +110,7 @@ static Node *parse_structure(Lexer *lexer) {
 	Token_Data token = lexer_consume_check(lexer, PERIOD_CURLY_BRACE_OPEN);
 
 	Node *structure = ast_new(STRUCTURE_NODE, token.location);
+	structure->structure.values = NULL;
 
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
 		while (true) {
@@ -149,10 +150,12 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "bool")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_BOOL;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "byte")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_BYTE;
+					internal->internal.assign_value = NULL;
 					return internal;
 				}
 				break;
@@ -160,6 +163,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "compile_error")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_COMPILE_ERROR;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 					
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
@@ -172,18 +177,22 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "C_CHAR_SIZE")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_C_CHAR_SIZE;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "C_SHORT_SIZE")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_C_SHORT_SIZE;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "C_INT_SIZE")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_C_INT_SIZE;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "C_LONG_SIZE")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_C_LONG_SIZE;
+					internal->internal.assign_value = NULL;
 					return internal;
 				}
 				break;
@@ -191,6 +200,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "embed")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_EMBED;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					while (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
@@ -205,6 +216,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				} else if (sv_eq_cstr(token.string, "err")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_ERR;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
@@ -223,6 +236,7 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				} else if (sv_eq_cstr(token.string, "flt64")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_FLT64;
+					internal->internal.assign_value = NULL;
 					return internal;
 				}
 				break;
@@ -231,6 +245,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 					if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
 						Node *internal = ast_new(INTERNAL_NODE, token.location);
 						internal->internal.kind = INTERNAL_INT;
+						internal->internal.inputs = NULL;
+						internal->internal.assign_value = NULL;
 
 						lexer_consume_check(lexer, PARENTHESIS_OPEN);
 						arrpush(internal->internal.inputs, parse_expression(lexer));
@@ -243,6 +259,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				} else if (sv_eq_cstr(token.string, "import")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_IMPORT;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
@@ -260,6 +278,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "ok")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_OK;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
@@ -274,6 +294,7 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "OS")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_OS;
+					internal->internal.assign_value = NULL;
 					return internal;
 				}
 				break;
@@ -297,10 +318,13 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "self")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_SELF;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "size_of")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_SIZE_OF;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
@@ -317,10 +341,13 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				} else if (sv_eq_cstr(token.string, "type")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_TYPE;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "type_of")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_TYPE_OF;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
@@ -330,6 +357,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				} else if (sv_eq_cstr(token.string, "type_info_of")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_TYPE_INFO_OF;
+					internal->internal.inputs = NULL;
+					internal->internal.assign_value = NULL;
 
 					lexer_consume_check(lexer, PARENTHESIS_OPEN);
 					arrpush(internal->internal.inputs, parse_expression(lexer));
@@ -342,10 +371,12 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 				if (sv_eq_cstr(token.string, "uint")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_UINT;
+					internal->internal.assign_value = NULL;
 					return internal;
 				} else if (sv_eq_cstr(token.string, "uint8")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_UINT8;
+					internal->internal.assign_value = NULL;
 					return internal;
 				}
 				break;
@@ -357,6 +388,7 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
 	identifier->identifier.module = module;
 	identifier->identifier.value = token.string;
+	identifier->identifier.assign_value = NULL;
 
 	return identifier;
 }
@@ -366,6 +398,7 @@ static Node *parse_dereference(Lexer *lexer, Node *node) {
 
 	Node *derefence = ast_new(DEREFERENCE_NODE, token.location);
 	derefence->dereference.node = node;
+	derefence->dereference.assign_value = NULL;
 	return derefence;
 }
 
@@ -374,6 +407,7 @@ static Node *parse_deoptional(Lexer *lexer, Node *node) {
 
 	Node *deoptional = ast_new(DEOPTIONAL_NODE, token.location);
 	deoptional->deoptional.node = node;
+	deoptional->deoptional.assign_value = NULL;
 	return deoptional;
 }
 
@@ -412,6 +446,7 @@ static Node *parse_catch(Lexer *lexer, Node *node) {
 
 	Node *catch = ast_new(CATCH_NODE, token.location);
 	catch->catch.value = node;
+	catch->catch.binding = (String_View) {};
 
 	if (lexer_peek(lexer).kind == VERTICAL_BAR) {
 		lexer_consume(lexer);
@@ -429,6 +464,7 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 
 	Node *call = ast_new(CALL_NODE, first_token.location);
 	call->call.function = function;
+	call->call.arguments = NULL;
 
 	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
 		while (true) {
@@ -547,6 +583,7 @@ static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 	Node *structure_access = ast_new(STRUCTURE_ACCESS_NODE, first_token.location);
 	structure_access->structure_access.parent = structure;
 	structure_access->structure_access.name = lexer_consume_check(lexer, IDENTIFIER).string;
+	structure_access->structure_access.assign_value = NULL;
 
 	return structure_access;
 }
@@ -570,6 +607,7 @@ static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 		Node *array_access = ast_new(ARRAY_ACCESS_NODE, first_token.location);
 		array_access->array_access.parent = array;
 		array_access->array_access.index = first;
+		array_access->array_access.assign_value = NULL;
 		lexer_consume_check(lexer, BRACE_CLOSED);
 		return array_access;
 	}
@@ -582,6 +620,7 @@ static Node *parse_call_method(Lexer *lexer, Node *argument1) {
 	call_method->call_method.argument1 = argument1;
 	call_method->call_method.method = lexer_consume_check(lexer, IDENTIFIER).string;
 
+	call_method->call_method.arguments = NULL;
 	lexer_consume_check(lexer, PARENTHESIS_OPEN);
 	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
 		while (true) {
@@ -652,8 +691,11 @@ static Node *parse_struct_type(Lexer *lexer) {
 	if (lexer_peek(lexer).kind == AT) {
 		lexer_consume(lexer);
 		struct_->struct_type.inherit_function = true;
+	} else {
+		struct_->struct_type.inherit_function = false;
 	}
 
+	struct_->struct_type.members = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED && !lexer_peek_check(lexer, KEYWORD_OP)) {
 		while (true) {
@@ -681,6 +723,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 		}
 	}
 
+	struct_->struct_type.operators = NULL;
 	if (lexer_peek_check(lexer, KEYWORD_OP)) {
 		while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
 			arrpush(struct_->struct_type.operators, parse_operator(lexer));
@@ -731,6 +774,7 @@ static Node *parse_tagged_union_type(Lexer *lexer) {
 
 	Node *tagged_union = ast_new(TAGGED_UNION_TYPE_NODE, first_token.location);
 
+	tagged_union->tagged_union_type.members = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
 		while (true) {
@@ -764,6 +808,7 @@ static Node *parse_enum_type(Lexer *lexer) {
 
 	Node *enum_ = ast_new(ENUM_TYPE_NODE, first_token.location);
 
+	enum_->enum_type.items = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
 		while (true) {
@@ -794,6 +839,8 @@ static Node *parse_define(Lexer *lexer) {
 	if (lexer_peek_check(lexer, ASTERISK)) {
 		lexer_consume(lexer);
 		define->define.special = true;
+	} else {
+		define->define.special = false;
 	}
 
 	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
@@ -801,6 +848,8 @@ static Node *parse_define(Lexer *lexer) {
 	if (lexer_peek(lexer).kind == COLON) {
 		lexer_consume_check(lexer, COLON);
 		define->define.type = parse_expression(lexer);
+	} else {
+		define->define.type = NULL;
 	}
 
 	lexer_consume_check(lexer, EQUALS);
@@ -828,6 +877,8 @@ static Node *parse_variable(Lexer *lexer) {
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		variable->variable.static_ = true;
+	} else {
+		variable->variable.static_ = false;
 	}
 
 	variable->variable.name = lexer_consume_check(lexer, IDENTIFIER).string;
@@ -835,11 +886,15 @@ static Node *parse_variable(Lexer *lexer) {
 	if (lexer_peek(lexer).kind == COLON) {
 		lexer_consume_check(lexer, COLON);
 		variable->variable.type = parse_expression(lexer);
+	} else {
+		variable->variable.type = NULL;
 	}
 
 	if (lexer_peek(lexer).kind == EQUALS) {
 		lexer_consume_check(lexer, EQUALS);
 		variable->variable.value = parse_expression(lexer);
+	} else {
+		variable->variable.value = NULL;
 	}
 
 	return variable;
@@ -862,9 +917,12 @@ static Node *parse_if(Lexer *lexer) {
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		if_->if_.static_ = true;
+	} else {
+		if_->if_.static_ = false;
 	}
 
 	if_->if_.condition = parse_expression(lexer);
+	if_->if_.bindings = NULL;
 
 	if (lexer_peek(lexer).kind == VERTICAL_BAR) {
 		lexer_consume_check(lexer, VERTICAL_BAR);
@@ -890,7 +948,10 @@ static Node *parse_if(Lexer *lexer) {
 	if (lexer_peek_check(lexer, KEYWORD_ELSE)) {
 		lexer_consume(lexer);
 		if_->if_.else_body = parse_statement(lexer);
+	} else {
+		if_->if_.else_body = NULL;
 	}
+
 	return if_;
 }
 
@@ -901,6 +962,8 @@ static Node *parse_while(Lexer *lexer) {
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		while_->while_.static_ = true;
+	} else {
+		while_->while_.static_ = false;
 	}
 
 	while_->while_.condition = parse_expression(lexer);
@@ -909,6 +972,8 @@ static Node *parse_while(Lexer *lexer) {
 	if (lexer_peek_check(lexer, KEYWORD_ELSE)) {
 		lexer_consume(lexer);
 		while_->while_.else_body = parse_statement(lexer);
+	} else {
+		while_->while_.else_body = NULL;
 	}
 
 	return while_;
@@ -922,6 +987,8 @@ static Node *parse_for(Lexer *lexer) {
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		for_->for_.static_ = true;
+	} else {
+		for_->for_.static_ = false;
 	}
 
 	for_->for_.items = NULL;
@@ -937,6 +1004,7 @@ static Node *parse_for(Lexer *lexer) {
 		}
 	}
 
+	for_->for_.bindings = NULL;
 	if (lexer_peek(lexer).kind == VERTICAL_BAR) {
 		lexer_consume_check(lexer, VERTICAL_BAR);
 		while (true) {
@@ -968,11 +1036,15 @@ static Node *parse_global(Lexer *lexer) {
 	if (lexer_peek_check(lexer, COLON)) {
 		lexer_consume(lexer);
 		global->global.type = parse_expression(lexer);
+	} else {
+		global->global.type = NULL;
 	}
 
 	if (lexer_peek_check(lexer, KEYWORD_EXTERN)) {
 		lexer_consume(lexer);
 		global->global.extern_ = lexer_consume_check(lexer, STRING).string;
+	} else {
+		global->global.extern_ = (String_View) {};
 	}
 
 	global->global.value = parse_separated_statement_or_nothing(lexer);
@@ -997,12 +1069,14 @@ static Node *parse_switch(Lexer *lexer) {
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
 		switch_->switch_.static_ = true;
+	} else {
+		switch_->switch_.static_ = false;
 	}
 
 	switch_->switch_.condition = parse_expression(lexer);
 
+	switch_->switch_.cases = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
-
 	while (lexer_peek_check(lexer, KEYWORD_CASE)) {
 		lexer_consume(lexer);
 		Node *check = parse_expression(lexer);
@@ -1031,7 +1105,9 @@ static Node *parse_block(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 
 	Node *block = ast_new(BLOCK_NODE, first_token.location);
+	block->block.has_result = false;
 
+	block->block.statements = NULL;
 	while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
 		arrpush(block->block.statements, parse_statement(lexer));
 		if (lexer_peek(lexer).kind == CURLY_BRACE_CLOSED) {
@@ -1504,6 +1580,8 @@ Node *parse_source(Data *data, char *source, size_t length, char *path) {
 
 	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
 	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
+	block->block.has_result = false;
+	block->block.statements = NULL;
 	while (lexer_peek(&lexer).kind != END_OF_FILE) {
 		arrpush(block->block.statements, parse_expression(&lexer));
 		lexer_consume_check(&lexer, SEMICOLON);

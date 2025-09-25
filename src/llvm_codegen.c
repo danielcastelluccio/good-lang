@@ -1992,8 +1992,8 @@ Codegen llvm_codegen() {
 	LLVMTargetRef target;
 	LLVMGetTargetFromTriple(LLVMGetDefaultTargetTriple(), &target, NULL);
 	LLVMTargetMachineRef target_machine = LLVMCreateTargetMachine(
-    	target, LLVMGetDefaultTargetTriple(), "generic", "",
-    	LLVMCodeGenLevelDefault, LLVMRelocDefault, LLVMCodeModelDefault
+		target, LLVMGetDefaultTargetTriple(), "generic", "",
+		LLVMCodeGenLevelNone, LLVMRelocDefault, LLVMCodeModelDefault
 	);
 	LLVMSetTarget(llvm_module, LLVMGetDefaultTargetTriple());
 

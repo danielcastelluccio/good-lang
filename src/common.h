@@ -241,7 +241,6 @@ typedef struct {
 } Operator_Data;
 
 struct Node_Data {
-	Node_Kind kind;
 	union {
 		Identifier_Data identifier;
 		Variable_Data variable;
@@ -278,7 +277,7 @@ struct Node_Data {
 	};
 };
 
-Node_Data *data_new(Node_Kind kind);
+Node_Data *data_new();
 
 typedef struct { Node *key; Value value; } *Node_Types;
 
@@ -324,6 +323,7 @@ typedef struct {
 struct Context {
 	Node_Types **types; // stb_ds
 	Node_Datas **datas; // stb_ds
+	Node_Data **datas_new; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
 	struct { Node_Data *key; Value value; } *static_variables; // stb_ds
 	bool returned;
@@ -336,6 +336,7 @@ struct Context {
 	Cached_File *cached_files; // stb_ds
 	Node *internal_root;
 	Data *data;
+	size_t node_index;
 };
 
 Value get_type(Context *context, Node *node);

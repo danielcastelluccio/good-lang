@@ -36,6 +36,8 @@ Value create_optional_type(Value value) {
 Value create_array_type(Value value) {
 	Value array_type = create_value(ARRAY_TYPE_VALUE);
 	array_type.value->array_type.inner = value;
+	array_type.value->array_type.size = (Value) {};
+	array_type.value->array_type.sentinel = (Value) {};
 	return array_type;
 }
 
