@@ -881,14 +881,13 @@ void add_cached_file(Context *context, char *path, Value value) {
 	arrpush(context->cached_files, file);
 }
 
-static bool is_trivially_evaluatable(Context *context, Node *node) {
+static bool is_trivially_evaluatable(Node *node, Node_Data *data) {
 	switch (node->kind) {
 		case FUNCTION_NODE: {
 			return true;
 		}
 		case IDENTIFIER_NODE: {
-			assert(get_data(context, node) != NULL);
-			return get_data(context, node)->identifier.kind == IDENTIFIER_VALUE;
+			return data->identifier.kind == IDENTIFIER_VALUE;
 		}
 		default:
 			return false;
@@ -1218,15 +1217,13 @@ static Node_Data *process_cast(Context *context, Node *node) {
 static Node_Data *process_call(Context *context, Node *node) {
 	Call_Node call = node->call;
 
-	Value function_type = process_node(context, call.function)->type;
+	Node_Data *function_data = process_node(context, call.function);
+	Value function_type = function_data->type;
 
-	Node_Data *data = get_data(context, node);
-	if (data == NULL) {
-		data = context->temporary_context.data;
-	}
+	Node_Data *data = context->temporary_context.data;
 
 	Value function_value = {};
-	if (is_trivially_evaluatable(context, call.function)) {
+	if (is_trivially_evaluatable(call.function, function_data)) {
 		function_value = evaluate(context, call.function);
 
 		process_initial_argument_types(context, function_value.value, call.arguments);
@@ -1559,9 +1556,7 @@ static Node_Data *process_function(Context *context, Node *node, bool given_stat
 		return data;
 	}
 
-	process_function_type(context, function.function_type);
-
-	Node_Data *function_type_data = get_data(context, function.function_type);
+	Node_Data *function_type_data = process_function_type(context, function.function_type);
 
 	Value function_type_value = function_type_data->function_type.value;
 
