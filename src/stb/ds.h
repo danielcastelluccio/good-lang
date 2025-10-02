@@ -416,6 +416,7 @@ CREDITS
 
 #define hmput       stbds_hmput
 #define hmputs      stbds_hmputs
+#define hmgetinsertp stbds_hmgetinsertp
 #define hmget       stbds_hmget
 #define hmget_ts    stbds_hmget_ts
 #define hmgets      stbds_hmgets
@@ -533,6 +534,7 @@ extern void * stbds_shmode_func(size_t elemsize, int mode);
 
 #define stbds_header(t)  ((stbds_array_header *) (t) - 1)
 #define stbds_temp(t)    stbds_header(t)->temp
+#define stbds_temp2(t)    stbds_header(t)->temp2
 #define stbds_temp_key(t) (*(char **) stbds_header(t)->hash_table)
 
 #define stbds_arrsetcap(a,n)   (stbds_arrgrow(a,0,n))
@@ -568,6 +570,12 @@ extern void * stbds_shmode_func(size_t elemsize, int mode);
 #define stbds_hmputs(t, s) \
     ((t) = stbds_hmput_key_wrapper((t), sizeof *(t), &(s).key, sizeof (s).key, STBDS_HM_BINARY), \
      (t)[stbds_temp((t)-1)] = (s))
+
+// Added as an extension
+#define stbds_hmgetinsertp(t, k) \
+    ((t) = stbds_hmput_key_wrapper((t), sizeof *(t), (void*) STBDS_ADDRESSOF((t)->key, (k)), sizeof (t)->key, 0),   \
+	 stbds_temp2((t)-1) ? ((t)[stbds_temp((t)-1)].key = (k), (t)[stbds_temp((t)-1)].value = NULL) : ((void) 0),    \
+     &(t)[stbds_temp((t)-1)])
 
 #define stbds_hmgeti(t,k) \
     ((t) = stbds_hmget_key_wrapper((t), sizeof *(t), (void*) STBDS_ADDRESSOF((t)->key, (k)), sizeof (t)->key, STBDS_HM_BINARY), \
@@ -660,6 +668,7 @@ typedef struct
   size_t      capacity;
   void      * hash_table;
   ptrdiff_t   temp;
+  char temp2;
 } stbds_array_header;
 
 typedef struct stbds_string_block
@@ -1393,6 +1402,7 @@ void *stbds_hmput_key(void *a, size_t elemsize, void *key, size_t keysize, int m
             stbds_temp(a) = bucket->index[i];
             if (mode >= STBDS_HM_STRING)
               stbds_temp_key(a) = * (char **) ((char *) raw_a + elemsize*bucket->index[i] + keyoffset);
+			stbds_temp2(a) = false;
             return STBDS_ARR_TO_HASH(a,elemsize);
           }
         } else if (bucket->hash[i] == 0) {
@@ -1410,6 +1420,7 @@ void *stbds_hmput_key(void *a, size_t elemsize, void *key, size_t keysize, int m
         if (bucket->hash[i] == hash) {
           if (stbds_is_key_equal(raw_a, elemsize, key, keysize, keyoffset, mode, bucket->index[i])) {
             stbds_temp(a) = bucket->index[i];
+			stbds_temp2(a) = false;
             return STBDS_ARR_TO_HASH(a,elemsize);
           }
         } else if (bucket->hash[i] == 0) {
@@ -1454,6 +1465,7 @@ void *stbds_hmput_key(void *a, size_t elemsize, void *key, size_t keysize, int m
          default:                memcpy((char *) a + elemsize*i, key, keysize); break;
       }
     }
+	stbds_temp2(a) = true;
     return STBDS_ARR_TO_HASH(a,elemsize);
   }
 }

@@ -14,7 +14,7 @@
 
 Value process_node_context_internal(Context *context, Temporary_Context temporary_context, Node *node);
 Value process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
-	arrpush(context->datas_new, data_new());
+	// arrpush(context->datas_new, data_create(context, node));
 	Value result = process_node_context_internal(context, temporary_context, node);
 	context->node_index++;
 	return result;
@@ -749,9 +749,8 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		context->static_id = 0;
 		Node_Data *function_data = get_data(context, function_value.value->function_stub.node);
 		if (function_data == NULL) {
-			function_data = data_new();
+			function_data = data_create(context, function_value.value->function_stub.node);
 		}
-		set_data(context, function_value.value->function_stub.node, function_data);
 		context->static_id = saved_saved_static_id;
 
 		bool found_match = false;
@@ -945,13 +944,12 @@ static Value process_array_access(Context *context, Node *node) {
 		item_type = custom_operator_function.function_type.value->function_type.return_type.value->pointer_type.inner;
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->array_access.array_type = array_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
 	data->array_access.custom_operator_function = custom_operator_function;
 	data->array_access.item_type = item_type;
 	data->array_access.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
-	set_data(context, node, data);
 
 	if (array_access.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
@@ -967,7 +965,7 @@ static Value process_array_access(Context *context, Node *node) {
 			item_type = (Value) { .value = pointer_item_type };
 		}
 
-		return set_type(context, node, item_type);
+		return data->type = item_type;
 	}
 
 	return (Value) {};
@@ -988,13 +986,16 @@ static Value process_array_type(Context *context, Node *node) {
 
 	}
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static Value process_array_view_type(Context *context, Node *node) {
 	Array_View_Type_Node array_view_type = node->array_view_type;
 	process_node(context, array_view_type.inner);
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static bool can_compare(Value_Data *type) {
@@ -1061,16 +1062,15 @@ static Value process_binary_op(Context *context, Node *node) {
 			break;
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->binary_operator.type = left_type;
-	set_data(context, node, data);
-	return set_type(context, node, result_type);
+	return data->type = result_type;
 }
 
 static Value process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->block.defers = NULL;
 
 	arrpush(context->scopes, (Scope) { .node = node });
@@ -1095,7 +1095,7 @@ static Value process_block(Context *context, Node *node) {
 				Temporary_Context temporary_context = { .wanted_type = context->temporary_context.wanted_type };
 				Value statement_type = process_node_context(context, temporary_context, statement);
 				result_type = statement_type;
-				set_type(context, node, statement_type);
+				data->type = statement_type;
 			} else {
 				Value type = process_node(context, statement);
 				if (type.value != NULL) {
@@ -1111,13 +1111,13 @@ static Value process_block(Context *context, Node *node) {
 	}
 	(void) arrpop(context->scopes);
 
-	set_data(context, node, data);
-
 	return result_type;
 }
 
 static Value process_boolean(Context *context, Node *node) {
-	return set_type(context, node, create_value(BOOLEAN_TYPE_VALUE));
+	(void) node;
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(BOOLEAN_TYPE_VALUE);
 }
 
 static void process_break(Context *context, Node *node) {
@@ -1163,9 +1163,8 @@ static void process_break(Context *context, Node *node) {
 	while_data.type = type;
 	while_data.has_type = true;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->break_.while_ = while_;
-	set_data(context, node, data);
 }
 
 static bool is_simple_cast(Value from_type, Value to_type) {
@@ -1205,12 +1204,11 @@ static Value process_cast(Context *context, Node *node) {
 		handle_2type_error(node, "Cannot cast from %s to %s", from_type, to_type);
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->cast.from_type = from_type;
 	data->cast.to_type = to_type;
 
-	set_data(context, node, data);
-	return set_type(context, node, to_type);
+	return data->type = to_type;
 }
 
 static Value process_call(Context *context, Node *node) {
@@ -1220,7 +1218,7 @@ static Value process_call(Context *context, Node *node) {
 
 	Node_Data *data = get_data(context, node);
 	if (data == NULL) {
-		data = data_new();
+		data = context->temporary_context.data;
 	}
 
 	Value function_value = {};
@@ -1233,8 +1231,7 @@ static Value process_call(Context *context, Node *node) {
 
 	data->call.function_type = function_type;
 	data->call.function_value = function_value;
-	set_data(context, node, data);
-	return set_type(context, node, function_type.value->function_type.return_type);
+	return data->type = function_type.value->function_type.return_type;
 }
 
 static Value process_call_method(Context *context, Node *node) {
@@ -1264,11 +1261,10 @@ static Value process_call_method(Context *context, Node *node) {
 	process_initial_argument_types(context, custom_operator_function.function, arguments);
 	custom_operator_function.function = process_call_generic(context, node, (Value) { .value = custom_operator_function.function }, &custom_operator_function.function_type, arguments).value;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->call_method.arguments = arguments;
 	data->call_method.custom_operator_function = custom_operator_function;
-	set_data(context, node, data);
-	return set_type(context, node, custom_operator_function.function_type.value->function_type.return_type);
+	return data->type = custom_operator_function.function_type.value->function_type.return_type;
 }
 
 static Value process_character(Context *context, Node *node) {
@@ -1279,10 +1275,9 @@ static Value process_character(Context *context, Node *node) {
 		handle_semantic_error(context, node->location, "Expected only one character");
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->character.value = new_string.ptr[0];
-	set_data(context, node, data);
-	return set_type(context, node, create_value(BYTE_TYPE_VALUE));
+	return data->type = create_value(BYTE_TYPE_VALUE);
 }
 
 static Value process_catch(Context *context, Node *node) {
@@ -1307,15 +1302,14 @@ static Value process_catch(Context *context, Node *node) {
 	process_node(context, catch.error);
 	(void) arrpop(context->scopes);
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->switch_.returned = context->returned;
 
 	context->returned = saved_returned;
 
 	data->catch.type = result_type;
-	set_data(context, node, data);
 
-	return set_type(context, node, result_type.value->result_type.value);
+	return data->type = result_type.value->result_type.value;
 }
 
 static Value process_const(Context *context, Node *node) {
@@ -1325,16 +1319,13 @@ static Value process_const(Context *context, Node *node) {
 
 	Value const_type = create_value(CONST_TYPE_VALUE);
 	const_type.value->const_type.type = NUMBER;
-	return set_type(context, node, create_value(CONST_TYPE_VALUE));
+
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(CONST_TYPE_VALUE);
 }
 
 static void process_define(Context *context, Node *node) {
 	Define_Node define = node->define;
-
-	Node_Data *data = get_data(context, node);
-	if (data != NULL) {
-		return;
-	}
 
 	Value wanted_type = {};
 	if (define.type != NULL) {
@@ -1346,8 +1337,7 @@ static void process_define(Context *context, Node *node) {
 	Value type = process_node_context(context, temporary_context, define.expression);
 	Value value = evaluate(context, define.expression);
 
-	data = data_new();
-	set_data(context, node, data);
+	Node_Data *data = context->temporary_context.data;
 
 	data->define.typed_value = (Typed_Value) {
 		.value = value,
@@ -1367,10 +1357,9 @@ static Value process_deoptional(Context *context, Node *node) {
 		handle_type_error(node, "Expected optional, but got %s", type);
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	Value inner_type = type.value->pointer_type.inner.value->optional_type.inner;
 	data->deoptional.type = inner_type;
-	set_data(context, node, data);
 
 	if (deoptional.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = inner_type };
@@ -1380,7 +1369,7 @@ static Value process_deoptional(Context *context, Node *node) {
 			handle_expected_type_error(context, node, inner_type, value_type);
 		}
 	} else {
-		return set_type(context, node, inner_type);
+		return data->type = inner_type;
 	}
 
 	return (Value) {};
@@ -1394,10 +1383,9 @@ static Value process_dereference(Context *context, Node *node) {
 		handle_type_error(node, "Expected pointer, but got %s", type);
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	Value inner_type = type.value->pointer_type.inner;
 	data->dereference.type = inner_type;
-	set_data(context, node, data);
 
 	if (dereference.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = type.value->pointer_type.inner };
@@ -1407,14 +1395,16 @@ static Value process_dereference(Context *context, Node *node) {
 			handle_expected_type_error(context, node, inner_type, value_type);
 		}
 	} else {
-		return set_type(context, node, inner_type);
+		return data->type = inner_type;
 	}
 
 	return (Value) {};
 }
 
 static Value process_enum_type(Context *context, Node *node) {
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	(void) node;
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static void process_for(Context *context, Node *node) {
@@ -1442,7 +1432,7 @@ static void process_for(Context *context, Node *node) {
 		}
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	if (for_.static_) {
 		assert(arrlen(for_.items) == 1);
 
@@ -1532,7 +1522,6 @@ static void process_for(Context *context, Node *node) {
 	}
 
 	data->for_.types = item_types;
-	set_data(context, node, data);
 }
 
 static Value process_function_type(Context *context, Node *node);
@@ -1552,8 +1541,10 @@ static Value process_function(Context *context, Node *node, bool given_static_ar
 		}
 	}
 
+	Node_Data *data = data_create(context, node);
+
 	if (static_argument && !given_static_arguments) {
-		return set_type(context, node, create_value(FUNCTION_TYPE_STUB_VALUE));
+		return data->type = create_value(FUNCTION_TYPE_STUB_VALUE);
 	}
 
 	process_function_type(context, function.function_type);
@@ -1562,7 +1553,7 @@ static Value process_function(Context *context, Node *node, bool given_static_ar
 
 	Value function_type_value = function_type_data->function_type.value;
 
-	set_type(context, node, function_type_value);
+	data->type = function_type_value;
 
 	if (function.body != NULL) {
 		Scope scope = {
@@ -1583,14 +1574,12 @@ static Value process_function(Context *context, Node *node, bool given_static_ar
 		(void) arrpop(context->scopes);
 	}
 
-	Node_Data *data = data_new();
 	if (context->compile_only) {
 		data->function.compile_only = true;
 	}
 	if (context->returned) {
 		data->function.returned = true;
 	}
-	set_data(context, node, data);
 
 	context->compile_only = compile_only_parent;
 	context->returned = returned_parent;
@@ -1634,11 +1623,10 @@ static Value process_function_type(Context *context, Node *node) {
 	function_type_value->function_type.variadic = function_type.variadic;
 	function_type_value->function_type.node = node;
 
-	Node_Data *data = data_new();
+	Node_Data *data = data_create(context, node);
 	data->function_type.value.value = function_type_value;
-	set_data(context, node, data);
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static Value process_global(Context *context, Node *node) {
@@ -1657,13 +1645,15 @@ static Value process_global(Context *context, Node *node) {
 
 	Value global_type = create_value(GLOBAL_TYPE_VALUE);
 	global_type.value->global_type.type = type;
-	return set_type(context, node, global_type);
+
+	Node_Data *data = context->temporary_context.data;
+	return data->type = global_type;
 }
 
 static Value process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->identifier.want_pointer = context->temporary_context.want_pointer;
 
 	Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
@@ -1876,10 +1866,9 @@ static Value process_identifier(Context *context, Node *node) {
 	}
 
 	data->identifier.type = type;
-	set_data(context, node, data);
 
 	if (identifier.assign_value == NULL) {
-		return set_type(context, node, type);
+		return data->type = type;
 	}
 
 	return (Value) {};
@@ -1890,9 +1879,8 @@ static Value process_if(Context *context, Node *node) {
 
 	Value condition_type = process_node(context, if_.condition);
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->if_.type = condition_type;
-	set_data(context, node, data);
 
 	if (if_.static_) {
 		Value evaluated = evaluate(context, if_.condition);
@@ -1986,7 +1974,7 @@ static Value process_if(Context *context, Node *node) {
 				}
 
 				data->if_.result_type = if_type;
-				return set_type(context, node, if_type);
+				return data->type = if_type;
 			}
 		} else {
 			context->returned = saved_returned;
@@ -2004,8 +1992,7 @@ static Value process_if(Context *context, Node *node) {
 static Value process_internal(Context *context, Node *node) {
 	Internal_Node internal = node->internal;
 
-	Node_Data *data = data_new();
-	set_data(context, node, data);
+	Node_Data *data = context->temporary_context.data;
 
 	Value *value = &data->internal.value;
 	value->node = node;
@@ -2015,43 +2002,43 @@ static Value process_internal(Context *context, Node *node) {
 			value->value->integer_type.size = context->codegen.default_integer_size;
 			value->value->integer_type.signed_ = false;
 
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_UINT8: {
 			value->value = value_new(INTEGER_TYPE_VALUE);
 			value->value->integer_type.size = 8;
 			value->value->integer_type.signed_ = false;
 
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_SINT: {
 			value->value = value_new(INTEGER_TYPE_VALUE);
 			value->value->integer_type.size = context->codegen.default_integer_size;
 			value->value->integer_type.signed_ = true;
 
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_TYPE: {
 			value->value = value_new(TYPE_TYPE_VALUE);
 			context->compile_only = true;
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_BYTE: {
 			value->value = value_new(BYTE_TYPE_VALUE);
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_FLT64: {
 			value->value = value_new(FLOAT_TYPE_VALUE);
 			value->value->float_type.size = 64;
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_BOOL: {
 			value->value = value_new(BOOLEAN_TYPE_VALUE);
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_TYPE_OF: {
 			value->value = process_node(context, internal.inputs[0]).value;
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_INT: {
 			process_node(context, internal.inputs[0]);
@@ -2061,23 +2048,23 @@ static Value process_internal(Context *context, Node *node) {
 			value->value->integer_type.signed_ = evaluate(context, internal.inputs[0]).value->boolean.value;
 			value->value->integer_type.size = evaluate(context, internal.inputs[1]).value->integer.value;
 
-			return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+			return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 		}
 		case INTERNAL_C_CHAR_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_CHAR_SIZE));
-			return set_type(context, node, (Value) { .value = create_integer_type(false, 8).value });
+			return data->type = (Value) { .value = create_integer_type(false, 8).value };
 		}
 		case INTERNAL_C_SHORT_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_SHORT_SIZE));
-			return set_type(context, node, (Value) { .value = create_integer_type(false, 8).value });
+			return data->type = (Value) { .value = create_integer_type(false, 8).value };
 		}
 		case INTERNAL_C_INT_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_INT_SIZE));
-			return set_type(context, node, (Value) { .value = create_integer_type(false, 8).value });
+			return data->type = (Value) { .value = create_integer_type(false, 8).value };
 		}
 		case INTERNAL_C_LONG_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_LONG_SIZE));
-			return set_type(context, node, (Value) { .value = create_integer_type(false, 8).value });
+			return data->type = (Value) { .value = create_integer_type(false, 8).value };
 		}
 		case INTERNAL_EMBED: {
 			Value *values = NULL;
@@ -2128,7 +2115,7 @@ static Value process_internal(Context *context, Node *node) {
 			Temporary_Context temporary_context = context->temporary_context;
 			Value internal_type = process_node_context(context, temporary_context, data->internal.node);
 
-			return set_type(context, node, internal_type);
+			return data->type = internal_type;
 		}
 		case INTERNAL_PRINT: {
 			for (long int i = 0; i < arrlen(internal.inputs); i++) {
@@ -2143,7 +2130,7 @@ static Value process_internal(Context *context, Node *node) {
 				}
 			}
 
-			return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+			return data->type = create_value(TYPE_TYPE_VALUE);
 		}
 		case INTERNAL_SIZE_OF: {
 			process_node(context, internal.inputs[0]);
@@ -2153,7 +2140,7 @@ static Value process_internal(Context *context, Node *node) {
 			value->value = value_new(INTEGER_VALUE);
 			value->value->integer.value = context->codegen.size_fn(type.value, context->codegen.data);
 
-			return set_type(context, node, create_integer_type(false, context->codegen.default_integer_size));
+			return data->type = create_integer_type(false, context->codegen.default_integer_size);
 		}
 		case INTERNAL_IMPORT: {
 			process_node(context, internal.inputs[0]);
@@ -2200,7 +2187,7 @@ static Value process_internal(Context *context, Node *node) {
 				add_cached_file(context, source, *value);
 			}
 
-			return set_type(context, node, create_value(MODULE_TYPE_VALUE));
+			return data->type = create_value(MODULE_TYPE_VALUE);
 		}
 		case INTERNAL_TYPE_INFO_OF: {
 			process_node(context, internal.inputs[0]);
@@ -2210,26 +2197,26 @@ static Value process_internal(Context *context, Node *node) {
 			*value = create_value(TAGGED_UNION_VALUE);
 
 			Value_Data *enum_value = value_new(ENUM_VALUE);
-			Value_Data *data = NULL;
+			Value_Data *value_data = NULL;
 			switch (type.value->tag) {
 				case INTEGER_TYPE_VALUE: {
 					enum_value->enum_.value = 0;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *size_value = create_integer(type.value->integer_type.size).value;
-					arrpush(data->struct_.values, size_value);
+					arrpush(value_data->struct_.values, size_value);
 
 					Value_Data *signed_value = create_boolean(type.value->integer_type.signed_).value;
-					arrpush(data->struct_.values, signed_value);
+					arrpush(value_data->struct_.values, signed_value);
 					break;
 				}
 				case STRUCT_TYPE_VALUE: {
 					enum_value->enum_.value = 1;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.values = NULL;
@@ -2266,14 +2253,14 @@ static Value process_internal(Context *context, Node *node) {
 
 						arrpush(items_value->array_view.values, struct_item_value);
 					}
-					arrpush(data->struct_.values, items_value);
+					arrpush(value_data->struct_.values, items_value);
 					break;
 				}
 				case UNION_TYPE_VALUE: {
 					enum_value->enum_.value = 2;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->union_type.items);
@@ -2297,14 +2284,14 @@ static Value process_internal(Context *context, Node *node) {
 
 						arrpush(items_value->array_view.values, struct_item_value);
 					}
-					arrpush(data->struct_.values, items_value);
+					arrpush(value_data->struct_.values, items_value);
 					break;
 				}
 				case TAGGED_UNION_TYPE_VALUE: {
 					enum_value->enum_.value = 3;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->tagged_union_type.items);
@@ -2328,14 +2315,14 @@ static Value process_internal(Context *context, Node *node) {
 
 						arrpush(items_value->array_view.values, struct_item_value);
 					}
-					arrpush(data->struct_.values, items_value);
+					arrpush(value_data->struct_.values, items_value);
 					break;
 				}
 				case ENUM_TYPE_VALUE: {
 					enum_value->enum_.value = 4;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.length = arrlen(type.value->enum_type.items);
@@ -2352,46 +2339,46 @@ static Value process_internal(Context *context, Node *node) {
 						}
 						arrpush(items_value->array_view.values, name_value);
 					}
-					arrpush(data->struct_.values, items_value);
+					arrpush(value_data->struct_.values, items_value);
 					break;
 				}
 				case OPTIONAL_TYPE_VALUE: {
 					enum_value->enum_.value = 5;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *type_value = type.value->optional_type.inner.value;
-					arrpush(data->struct_.values, type_value);
+					arrpush(value_data->struct_.values, type_value);
 					break;
 				}
 				case ARRAY_TYPE_VALUE: {
 					enum_value->enum_.value = 6;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *size_value = type.value->array_type.size.value;
-					arrpush(data->struct_.values, size_value);
+					arrpush(value_data->struct_.values, size_value);
 					Value_Data *type_value = type.value->array_type.inner.value;
-					arrpush(data->struct_.values, type_value);
+					arrpush(value_data->struct_.values, type_value);
 					break;
 				}
 				case ARRAY_VIEW_TYPE_VALUE: {
 					enum_value->enum_.value = 7;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *type_value = type.value->array_type.inner.value;
-					arrpush(data->struct_.values, type_value);
+					arrpush(value_data->struct_.values, type_value);
 					break;
 				}
 				case TUPLE_TYPE_VALUE: {
 					enum_value->enum_.value = 8;
 
-					data = value_new(STRUCT_VALUE);
-					data->struct_.values = NULL;
+					value_data = value_new(STRUCT_VALUE);
+					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.values = NULL;
@@ -2400,25 +2387,25 @@ static Value process_internal(Context *context, Node *node) {
 						Value_Data *type_value = type.value->tuple_type.members[i].value;
 						arrpush(items_value->array_view.values, type_value);
 					}
-					arrpush(data->struct_.values, items_value);
+					arrpush(value_data->struct_.values, items_value);
 					break;
 				}
 				case BYTE_TYPE_VALUE: {
 					enum_value->enum_.value = 9;
 
-					data = value_new(STRUCT_VALUE);
+					value_data = value_new(STRUCT_VALUE);
 					break;
 				}
 				case POINTER_TYPE_VALUE: {
 					enum_value->enum_.value = 10;
 
-					data = value_new(STRUCT_VALUE);
+					value_data = value_new(STRUCT_VALUE);
 					break;
 				}
 				case BOOLEAN_TYPE_VALUE: {
 					enum_value->enum_.value = 11;
 
-					data = value_new(STRUCT_VALUE);
+					value_data = value_new(STRUCT_VALUE);
 					break;
 				}
 				default:
@@ -2426,13 +2413,13 @@ static Value process_internal(Context *context, Node *node) {
 			}
 
 			value->value->tagged_union.tag = enum_value;
-			value->value->tagged_union.data = data;
+			value->value->tagged_union.data = value_data;
 
 			size_t saved_static_id = context->static_id;
 			context->static_id = 0;
 			Value type_info_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Type_Info")))->define.typed_value.value;
 			context->static_id = saved_static_id;
-			return set_type(context, node, type_info_type);
+			return data->type = type_info_type;
 		}
 		case INTERNAL_OS: {
 			Value operating_system_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Operating_System")))->define.typed_value.value;
@@ -2447,7 +2434,7 @@ static Value process_internal(Context *context, Node *node) {
 
 			value->value = value_new(ENUM_VALUE);
 			value->value->enum_.value = os_value;
-			return set_type(context, node, operating_system_type);
+			return data->type = operating_system_type;
 		}
 		case INTERNAL_OK: {
 			Value wanted_type = context->temporary_context.wanted_type;
@@ -2458,7 +2445,7 @@ static Value process_internal(Context *context, Node *node) {
 				process_node_context(context, temporary_context, internal.inputs[0]);
 			}
 
-			return set_type(context, node, wanted_type);
+			return data->type = wanted_type;
 		}
 		case INTERNAL_ERR: {
 			Value wanted_type = context->temporary_context.wanted_type;
@@ -2469,7 +2456,7 @@ static Value process_internal(Context *context, Node *node) {
 				process_node_context(context, temporary_context, internal.inputs[0]);
 			}
 
-			return set_type(context, node, wanted_type);
+			return data->type = wanted_type;
 		}
 		case INTERNAL_COMPILE_ERROR: {
 			process_node(context, internal.inputs[0]);
@@ -2504,41 +2491,45 @@ static Value process_is(Context *context, Node *node) {
 
 	Value tagged_type = type.value->tagged_union_type.items[check_value.value->enum_.value].type;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->is.value = check_value;
 	data->is.type = create_optional_type(tagged_type);
-	set_data(context, node, data);
 
-	return set_type(context, node, create_optional_type(tagged_type));
+	return data->type = create_optional_type(tagged_type);
 }
 
 static Value process_module(Context *context, Node *node) {
 	Module_Node module = node->module;
 	process_node(context, module.body);
-	return set_type(context, node, (Value) { .value = value_new(MODULE_TYPE_VALUE) });
+
+	Node_Data *data = context->temporary_context.data;
+	return data->type = (Value) { .value = value_new(MODULE_TYPE_VALUE) };
 }
 
 static Value process_module_type(Context *context, Node *node) {
-	return set_type(context, node, (Value) { .value = value_new(TYPE_TYPE_VALUE) });
+	(void) node;
+	Node_Data *data = context->temporary_context.data;
+	return data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 }
 
 static Value  process_not(Context *context, Node *node) {
 	Not_Node not = node->not;
 	process_node(context, not.node);
 
-	return set_type(context, node, create_value(BOOLEAN_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(BOOLEAN_TYPE_VALUE);
 }
 
 static Value process_null(Context *context, Node *node) {
+	(void) node;
 	Value wanted_type = context->temporary_context.wanted_type;
 	if (wanted_type.value == NULL) {
 		assert(false);
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->null_.type = wanted_type;
-	set_data(context, node, data);
-	return set_type(context, node, wanted_type);
+	return data->type = wanted_type;
 }
 
 Node *sint_node;
@@ -2566,10 +2557,9 @@ static Value process_number(Context *context, Node *node) {
 		}
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->number.type = wanted_type;
-	set_data(context, node, data);
-	return set_type(context, node, wanted_type);
+	return data->type = wanted_type;
 }
 
 static void process_operator(Context *context, Node *node) {
@@ -2578,19 +2568,19 @@ static void process_operator(Context *context, Node *node) {
 
 	Value value = evaluate(context, operator.expression);
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->operator.typed_value = (Typed_Value) {
 		.type = expression_type,
 		.value = value
 	};
-	set_data(context, node, data);
 }
 
 static Value process_optional(Context *context, Node *node) {
 	Optional_Type_Node optional = node->optional_type;
 	process_node(context, optional.inner);
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static Value process_pointer(Context *context, Node *node) {
@@ -2599,7 +2589,8 @@ static Value process_pointer(Context *context, Node *node) {
 		process_node(context, pointer.inner);
 	}
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static Value process_range(Context *context, Node *node) {
@@ -2642,7 +2633,8 @@ static Value process_range(Context *context, Node *node) {
 		}
 	}
 
-	return set_type(context, node, create_range_type(wanted_type));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_range_type(wanted_type);
 }
 
 static Value process_reference(Context *context, Node *node) {
@@ -2651,7 +2643,8 @@ static Value process_reference(Context *context, Node *node) {
 	Temporary_Context temporary_context = { .want_pointer = true };
 	Value type = process_node_context(context, temporary_context, reference.node);
 
-	return set_type(context, node, type);
+	Node_Data *data = context->temporary_context.data;
+	return data->type = type;
 }
 
 static Value process_result(Context *context, Node *node) {
@@ -2661,7 +2654,8 @@ static Value process_result(Context *context, Node *node) {
 	}
 	process_node(context, result.error);
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static void process_return(Context *context, Node *node) {
@@ -2680,7 +2674,7 @@ static void process_return(Context *context, Node *node) {
 
 	Value return_type = get_data(context, current_function->function.function_type)->function_type.value.value->function_type.return_type;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	if (return_.value != NULL) {
 		Value wanted_type = return_type;
 
@@ -2692,7 +2686,6 @@ static void process_return(Context *context, Node *node) {
 	}
 
 	data->return_.type = return_type;
-	set_data(context, node, data);
 }
 
 static Value process_run(Context *context, Node *node) {
@@ -2702,10 +2695,9 @@ static Value process_run(Context *context, Node *node) {
 	Value type = process_node_context(context, temporary_context, run.node);
 	Value value = evaluate(context, run.node);
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->run.value = value;
-	set_data(context, node, data);
-	return set_type(context, node, type);
+	return data->type = type;
 }
 
 static Value process_slice(Context *context, Node *node) {
@@ -2745,16 +2737,15 @@ static Value process_slice(Context *context, Node *node) {
 			assert(false);
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->slice.array_type = array_type;
 	data->slice.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
 	data->slice.item_type = item_type;
-	set_data(context, node, data);
 
 	Value array_view_type = create_value(ARRAY_VIEW_TYPE_VALUE);
 	array_view_type.value->array_view_type.inner = item_type;
 
-	return set_type(context, node, array_view_type);
+	return data->type = array_view_type;
 }
 
 static Value process_string(Context *context, Node *node) {
@@ -2773,11 +2764,10 @@ static Value process_string(Context *context, Node *node) {
 
 	String_View new_string = expand_escapes(string.value, type);
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->string.type = type;
 	data->string.value = new_string;
-	set_data(context, node, data);
-	return set_type(context, node, type);
+	return data->type = type;
 }
 
 static Value process_struct_type(Context *context, Node *node) {
@@ -2786,8 +2776,8 @@ static Value process_struct_type(Context *context, Node *node) {
 		process_node(context, struct_type.members[i].type);
 	}
 
-	Value value = create_value(TYPE_TYPE_VALUE);
-	return set_type(context, node, value);
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static Value process_structure(Context *context, Node *node) {
@@ -2846,10 +2836,9 @@ static Value process_structure(Context *context, Node *node) {
 		}
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->structure.type = result_type;
-	set_data(context, node, data);
-	return set_type(context, node, result_type);
+	return data->type = result_type;
 }
 
 static Value process_structure_access(Context *context, Node *node) {
@@ -2919,13 +2908,12 @@ static Value process_structure_access(Context *context, Node *node) {
 		handle_semantic_error(context, node->location, "Item '%.*s' not found", (int) structure_access.name.len, structure_access.name.ptr);
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->structure_access.structure_type = structure_type;
 	data->structure_access.want_pointer = context->temporary_context.want_pointer;
 	data->structure_access.item_type = item_type;
 	data->structure_access.pointer_access = raw_structure_type.value->tag == POINTER_TYPE_VALUE;
 
-	set_data(context, node, data);
 	if (structure_access.assign_value != NULL) {
 		Temporary_Context temporary_context = { .wanted_type = item_type };
 		Value value_type = process_node_context(context, temporary_context, structure_access.assign_value);
@@ -2941,7 +2929,7 @@ static Value process_structure_access(Context *context, Node *node) {
 			item_type = (Value) { .value = pointer_item_type };
 		}
 
-		return set_type(context, node, item_type);
+		return data->type = item_type;
 	}
 }
 
@@ -2950,7 +2938,7 @@ static void process_switch(Context *context, Node *node) {
 
 	Value type = process_node(context, switch_.condition);
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 
 	bool saved_returned = context->returned;
 
@@ -3087,7 +3075,7 @@ static void process_switch(Context *context, Node *node) {
 				}
 
 				data->switch_.type = switch_type;
-				set_type(context, node, switch_type);
+				data->type = switch_type;
 			}
 		}
 
@@ -3101,7 +3089,6 @@ static void process_switch(Context *context, Node *node) {
 		}
 	}
 
-	set_data(context, node, data);
 }
 
 static Value process_tagged_union_type(Context *context, Node *node) {
@@ -3110,7 +3097,8 @@ static Value process_tagged_union_type(Context *context, Node *node) {
 		process_node(context, tagged_union_type.members[i].type);
 	}
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static Value process_union_type(Context *context, Node *node) {
@@ -3119,7 +3107,8 @@ static Value process_union_type(Context *context, Node *node) {
 		process_node(context, union_type.members[i].type);
 	}
 
-	return set_type(context, node, create_value(TYPE_TYPE_VALUE));
+	Node_Data *data = context->temporary_context.data;
+	return data->type = create_value(TYPE_TYPE_VALUE);
 }
 
 static void process_variable(Context *context, Node *node) {
@@ -3148,7 +3137,7 @@ static void process_variable(Context *context, Node *node) {
 		handle_semantic_error(context, node->location, "Expected value");
 	}
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 
 	Variable_Definition variable_definition = {
 		.node = node,
@@ -3171,16 +3160,14 @@ static void process_variable(Context *context, Node *node) {
 	}
 
 	data->variable.type = type;
-	set_data(context, node, data);
 }
 
 static void process_while(Context *context, Node *node) {
 	While_Node while_ = node->while_;
 
-	Node_Data *data = data_new();
+	Node_Data *data = context->temporary_context.data;
 	data->while_.wanted_type = context->temporary_context.wanted_type;
 	data->while_.type = (Value) {};
-	set_data(context, node, data);
 
 	arrpush(context->scopes, (Scope) { .node = node });
 
@@ -3226,7 +3213,7 @@ static void process_while(Context *context, Node *node) {
 		}
 
 		if (data->while_.has_type && while_.else_body != NULL) {
-			set_type(context, node, while_type);
+			data->type = while_type;
 		}
 	}
 
@@ -3234,128 +3221,171 @@ static void process_while(Context *context, Node *node) {
 }
 
 Value process_node_context_internal(Context *context, Temporary_Context temporary_context, Node *node) {
-	Node_Data *data = context->datas_new[context->node_index];
-	Value type = get_type(context, node);
-	if (type.value != NULL) {
-		return type;
+	Node_Data **data = get_data_ref(context, node);
+	if (*data != NULL) {
+		return (*data)->type;
 	}
 
-	(void) data;
-	// printf("%p\n", data);
+	*data = data_new();
+
+	temporary_context.data = *data;
 
 	Temporary_Context saved_temporary_context = context->temporary_context;
 	context->temporary_context = temporary_context;
 
+	Value value = {};
 	switch (node->kind) {
 		case ARRAY_ACCESS_NODE:
-			return process_array_access(context, node);
+			value = process_array_access(context, node);
+			break;
 		case ARRAY_TYPE_NODE:
-			return process_array_type(context, node);
+			value = process_array_type(context, node);
+			break;
 		case ARRAY_VIEW_TYPE_NODE:
-			return process_array_view_type(context, node);
+			value = process_array_view_type(context, node);
+			break;
 		case BINARY_OP_NODE:
-			return process_binary_op(context, node);
+			value = process_binary_op(context, node);
+			break;
 		case BLOCK_NODE:
-			return process_block(context, node);
+			value = process_block(context, node);
+			break;
 		case BOOLEAN_NODE:
-			return process_boolean(context, node);
+			value = process_boolean(context, node);
+			break;
 		case BREAK_NODE:
 			process_break(context, node);
-			return (Value) {};
+			break;
 		case CAST_NODE:
-			return process_cast(context, node);
+			value = process_cast(context, node);
+			break;
 		case CALL_NODE:
-			return process_call(context, node);
+			value = process_call(context, node);
+			break;
 		case CALL_METHOD_NODE:
-			return process_call_method(context, node);
+			value = process_call_method(context, node);
+			break;
 		case CHARACTER_NODE:
-			return process_character(context, node);
+			value = process_character(context, node);
+			break;
 		case CATCH_NODE:
-			return process_catch(context, node);
+			value = process_catch(context, node);
+			break;
 		case CONST_NODE:
-			return process_const(context, node);
+			value = process_const(context, node);
+			break;
 		case DEFINE_NODE:
 			process_define(context, node);
-			return (Value) {};
+			break;
 		case DEOPTIONAL_NODE:
-			return process_deoptional(context, node);
+			value = process_deoptional(context, node);
+			break;
 		case DEREFERENCE_NODE:
-			return process_dereference(context, node);
+			value = process_dereference(context, node);
+			break;
 		case ENUM_TYPE_NODE:
-			return process_enum_type(context, node);
+			value = process_enum_type(context, node);
+			break;
 		case FOR_NODE:
 			process_for(context, node);
-			return (Value) {};
+			break;
 		case FUNCTION_NODE:
-			return process_function(context, node, false);
+			value = process_function(context, node, false);
+			break;
 		case FUNCTION_TYPE_NODE:
-			return process_function_type(context, node);
+			value = process_function_type(context, node);
+			break;
 		case GLOBAL_NODE:
-			return process_global(context, node);
+			value = process_global(context, node);
+			break;
 		case IDENTIFIER_NODE:
-			return process_identifier(context, node);
+			value = process_identifier(context, node);
+			break;
 		case IF_NODE:
-			return process_if(context, node);
+			value = process_if(context, node);
+			break;
 		case INTERNAL_NODE:
-			return process_internal(context, node);
+			value = process_internal(context, node);
+			break;
 		case IS_NODE:
-			return process_is(context, node);
+			value = process_is(context, node);
+			break;
 		case MODULE_NODE:
-			return process_module(context, node);
+			value = process_module(context, node);
+			break;
 		case MODULE_TYPE_NODE:
-			return process_module_type(context, node);
+			value = process_module_type(context, node);
+			break;
 		case NOT_NODE:
-			return process_not(context, node);
+			value = process_not(context, node);
+			break;
 		case NULL_NODE:
-			return process_null(context, node);
+			value = process_null(context, node);
+			break;
 		case NUMBER_NODE:
-			return process_number(context, node);
+			value = process_number(context, node);
+			break;
 		case OPERATOR_NODE:
 			process_operator(context, node);
-			return (Value) {};
+			break;
 		case OPTIONAL_NODE:
-			return process_optional(context, node);
+			value = process_optional(context, node);
+			break;
 		case POINTER_NODE:
-			return process_pointer(context, node);
+			value = process_pointer(context, node);
+			break;
 		case RANGE_NODE:
-			return process_range(context, node);
+			value = process_range(context, node);
+			break;
 		case REFERENCE_NODE:
-			return process_reference(context, node);
+			value = process_reference(context, node);
+			break;
 		case RESULT_NODE:
-			return process_result(context, node);
+			value = process_result(context, node);
+			break;
 		case RETURN_NODE:
 			process_return(context, node);
-			return (Value) {};
+			break;
 		case RUN_NODE:
-			return process_run(context, node);
+			value = process_run(context, node);
+			break;
 		case SLICE_NODE:
-			return process_slice(context, node);
+			value = process_slice(context, node);
+			break;
 		case STRING_NODE:
-			return process_string(context, node);
+			value = process_string(context, node);
+			break;
 		case STRUCT_TYPE_NODE:
-			return process_struct_type(context, node);
+			value = process_struct_type(context, node);
+			break;
 		case STRUCTURE_NODE:
-			return process_structure(context, node);
+			value = process_structure(context, node);
+			break;
 		case STRUCTURE_ACCESS_NODE:
-			return process_structure_access(context, node);
+			value = process_structure_access(context, node);
+			break;
 		case SWITCH_NODE:
 			process_switch(context, node);
-			return (Value) {};
+			break;
 		case TAGGED_UNION_TYPE_NODE:
-			return process_tagged_union_type(context, node);
+			value = process_tagged_union_type(context, node);
+			break;
 		case UNION_TYPE_NODE:
-			return process_union_type(context, node);
+			value = process_union_type(context, node);
+			break;
 		case VARIABLE_NODE:
 			process_variable(context, node);
-			return (Value) {};
+			break;
 		case WHILE_NODE:
 			process_while(context, node);
-			return (Value) {};
+			break;
 		default:
 			assert(false);
 	}
 
 	context->temporary_context = saved_temporary_context;
+	
+	return value;
 }
 
 Context process(Data *data, Node *root, Codegen codegen) {

@@ -967,7 +967,7 @@ static Value evaluate_is(State *state, Node *node) {
 	Is_Node is = node->is;
 
 	Value value = evaluate_state(state, is.node);
-	Value type = get_type(state->context, is.node);
+	Value type = get_data(state->context, is.node)->type;
 	assert(type.value->tag == TAGGED_UNION_TYPE_VALUE);
 
 	Value check = evaluate_state(state, is.check);

@@ -275,6 +275,7 @@ struct Node_Data {
 		Internal_Data internal;
 		Operator_Data operator;
 	};
+	Value type;
 };
 
 Node_Data *data_new();
@@ -314,6 +315,7 @@ typedef struct {
 	bool want_pointer;
 	Value *call_argument_types;
 	Value call_wanted_type;
+	Node_Data *data;
 } Temporary_Context;
 
 typedef struct {
@@ -321,7 +323,6 @@ typedef struct {
 } Data;
 
 struct Context {
-	Node_Types **types; // stb_ds
 	Node_Datas **datas; // stb_ds
 	Node_Data **datas_new; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
@@ -340,11 +341,12 @@ struct Context {
 };
 
 Value get_type(Context *context, Node *node);
-Value set_type(Context *context, Node *node, Value type);
 
 Node_Data *get_data(Context *context, Node *node);
-void set_data(Context *context, Node *node, Node_Data *data);
+Node_Data **get_data_ref(Context *context, Node *node);
 
 void reset_node(Context *context, Node *node);
+
+Node_Data *data_create(Context *context, Node *node);
 
 #endif
