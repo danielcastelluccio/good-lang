@@ -416,7 +416,6 @@ CREDITS
 
 #define hmput       stbds_hmput
 #define hmputs      stbds_hmputs
-#define hmgetinsertp stbds_hmgetinsertp
 #define hmget       stbds_hmget
 #define hmget_ts    stbds_hmget_ts
 #define hmgets      stbds_hmgets
@@ -570,12 +569,6 @@ extern void * stbds_shmode_func(size_t elemsize, int mode);
 #define stbds_hmputs(t, s) \
     ((t) = stbds_hmput_key_wrapper((t), sizeof *(t), &(s).key, sizeof (s).key, STBDS_HM_BINARY), \
      (t)[stbds_temp((t)-1)] = (s))
-
-// Added as an extension
-#define stbds_hmgetinsertp(t, k) \
-    ((t) = stbds_hmput_key_wrapper((t), sizeof *(t), (void*) STBDS_ADDRESSOF((t)->key, (k)), sizeof (t)->key, 0),   \
-	 stbds_temp2((t)-1) ? ((t)[stbds_temp((t)-1)].key = (k), (t)[stbds_temp((t)-1)].value = NULL) : ((void) 0),    \
-     &(t)[stbds_temp((t)-1)])
 
 #define stbds_hmgeti(t,k) \
     ((t) = stbds_hmget_key_wrapper((t), sizeof *(t), (void*) STBDS_ADDRESSOF((t)->key, (k)), sizeof (t)->key, STBDS_HM_BINARY), \

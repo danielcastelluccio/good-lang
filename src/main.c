@@ -17,18 +17,20 @@ int main(int argc, char **argv) {
 
 	Data data = {};
 
-	char *source_file = argv[1];
-	Node *root = parse_file(&data, realpath(source_file, NULL));
+	for (int i = 0; i < 200; i++) {
+		char *source_file = argv[1];
+		Node *root = parse_file(&data, realpath(source_file, NULL));
 
-	Node *internal_root = parse_source(&data, (char *) src_internal_lang, src_internal_lang_len, "internal");
+		Node *internal_root = parse_source(&data, (char *) src_internal_lang, src_internal_lang_len, "internal");
 
-	Codegen codegen = llvm_codegen();
+		Codegen codegen = llvm_codegen();
 
-	Context context = process(&data, internal_root, codegen);
-	context.internal_root = internal_root;
-	process_node(&context, root);
+		Context context = process(&data, internal_root, codegen);
+		context.internal_root = internal_root;
+		process_node(&context, root);
 
-	codegen.build_fn(context, root, codegen.data);
+		// codegen.build_fn(context, root, codegen.data);
+	}
 
 	return 0;
 }

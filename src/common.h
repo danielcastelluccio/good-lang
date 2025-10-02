@@ -3,7 +3,6 @@
 
 #include "ast.h"
 
-typedef struct Node_Data Node_Data;
 typedef struct Value_Data Value_Data;
 
 typedef struct {
@@ -323,20 +322,17 @@ typedef struct {
 } Data;
 
 struct Context {
-	Node_Datas **datas; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
 	struct { Node_Data *key; Value value; } *static_variables; // stb_ds
 	bool returned;
 	Scope *scopes; // stb_ds
 	bool compile_only;
 	size_t static_id;
-	size_t static_id_counter;
 	Temporary_Context temporary_context;
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
 	Node *internal_root;
 	Data *data;
-	size_t node_index;
 };
 
 Value get_type(Context *context, Node *node);

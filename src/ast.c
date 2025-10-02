@@ -16,6 +16,8 @@ Node *ast_new(Node_Kind kind, Source_Location location) {
 	Node *node = &nodes[node_index++];
 	node->kind = kind;
 	node->location = location;
+	node->data_count = 0;
+	node->data = NULL;
 	return node;
 }
 

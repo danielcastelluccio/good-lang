@@ -12,13 +12,7 @@
 #include "util.h"
 #include "value.h"
 
-Node_Data *process_node_context_internal(Context *context, Temporary_Context temporary_context, Node *node);
-Node_Data *process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
-	// arrpush(context->datas_new, data_create(context, node));
-	Node_Data *result = process_node_context_internal(context, temporary_context, node);
-	context->node_index++;
-	return result;
-}
+Node_Data *process_node_context(Context *context, Temporary_Context temporary_context, Node *node);
 
 Node_Data *process_node(Context *context, Node *node) {
 	return process_node_context(context, (Temporary_Context) {}, node);
@@ -3281,7 +3275,7 @@ static Node_Data *process_while(Context *context, Node *node) {
 	return data;
 }
 
-Node_Data *process_node_context_internal(Context *context, Temporary_Context temporary_context, Node *node) {
+Node_Data *process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
 	Node_Data **data = get_data_ref(context, node);
 	if (*data != NULL) {
 		return *data;

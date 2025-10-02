@@ -391,6 +391,7 @@ typedef enum {
 	WHILE_NODE
 } Node_Kind;
 
+typedef struct Node_Data Node_Data;
 struct Node {
 	Node_Kind kind;
 	Source_Location location;
@@ -442,6 +443,12 @@ struct Node {
 		Union_Type_Node union_type;
 		Variable_Node variable;
 		While_Node while_;
+	};
+
+	size_t data_count;
+	union {
+		Node_Data **datas;
+		Node_Data *data;
 	};
 };
 
