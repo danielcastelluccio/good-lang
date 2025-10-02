@@ -324,7 +324,6 @@ typedef struct {
 
 struct Context {
 	Node_Datas **datas; // stb_ds
-	Node_Data **datas_new; // stb_ds
 	struct { Node *key; Define_Operators *value; } *operators; // stb_ds
 	struct { Node_Data *key; Value value; } *static_variables; // stb_ds
 	bool returned;

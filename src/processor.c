@@ -642,10 +642,8 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 	String_View *inferred_arguments = NULL;
 
 	if (function_value.value != NULL && function_value.value->tag == FUNCTION_STUB_VALUE) {
-		Node *function_type_node = function_value.value->function_stub.node->function.function_type;
-
-		size_t saved_static_id = context->static_id;
-		size_t new_static_id = ++context->static_id_counter;
+		Node *function_node = function_value.value->function_stub.node;
+		Node *function_type_node = function_node->function.function_type;
 
 		bool pattern_match_fail = false;
 		bool compile_only_parent = context->compile_only;
@@ -673,10 +671,14 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 
 			Value wanted_type = {};
 			if (!function_arguments[function_arg_index].inferred) {
-				context->static_id = new_static_id;
+				bool compile_only_saved = context->compile_only;
+				size_t saved_static_id = context->static_id;
+				context->static_id = 0;
+				reset_node(context, function_arguments[function_arg_index].type);
 				process_node(context, function_arguments[function_arg_index].type);
 				wanted_type = evaluate(context, function_arguments[function_arg_index].type);
 				context->static_id = saved_static_id;
+				context->compile_only = compile_only_saved;
 			}
 
 			Temporary_Context temporary_context = { .wanted_type = wanted_type };
@@ -776,6 +778,9 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		}
 
 		if (!found_match) {
+			size_t saved_static_id = context->static_id;
+			size_t new_static_id = function_node->function.static_id_counter++;
+
 			context->static_id = new_static_id;
 
 			reset_node(context, function_value.value->function_stub.node);
@@ -1462,9 +1467,8 @@ static Node_Data *process_for(Context *context, Node *node) {
 
 		size_t saved_static_id = context->static_id;
 		for (size_t i = 0; i < length; i++) {
-			size_t static_id = ++context->static_id_counter;
-			context->static_id = static_id;
-			arrpush(data->for_.static_ids, static_id);
+			context->static_id = node->for_.static_id_counter++;
+			arrpush(data->for_.static_ids, context->static_id);
 
 			Typed_Value typed_value;
 			switch (looped_value_type.value->tag) {
@@ -1607,12 +1611,18 @@ static Node_Data *process_function_type(Context *context, Node *node) {
 				.inferred = true
 			};
 		} else {
+			bool saved_compile_only = context->compile_only;
+
 			process_node(context, function_type.arguments[i].type);
 			argument = (Function_Argument_Value) {
 				.identifier = function_type.arguments[i].identifier,
 				.type = evaluate(context, function_type.arguments[i].type),
 				.static_ = function_type.arguments[i].static_
 			};
+
+			if (function_type.arguments[i].static_) {
+				context->compile_only = saved_compile_only;
+			}
 		}
 
 		arrpush(argument_type_values, argument);
@@ -2008,7 +2018,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->integer_type.signed_ = false;
 
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_UINT8: {
 			value->value = value_new(INTEGER_TYPE_VALUE);
@@ -2016,7 +2026,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->integer_type.signed_ = false;
 
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_SINT: {
 			value->value = value_new(INTEGER_TYPE_VALUE);
@@ -2024,34 +2034,34 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->integer_type.signed_ = true;
 
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_TYPE: {
 			value->value = value_new(TYPE_TYPE_VALUE);
 			context->compile_only = true;
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_BYTE: {
 			value->value = value_new(BYTE_TYPE_VALUE);
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_FLT64: {
 			value->value = value_new(FLOAT_TYPE_VALUE);
 			value->value->float_type.size = 64;
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_BOOL: {
 			value->value = value_new(BOOLEAN_TYPE_VALUE);
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_TYPE_OF: {
 			value->value = process_node(context, internal.inputs[0])->type.value;
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_INT: {
 			process_node(context, internal.inputs[0]);
@@ -2062,27 +2072,27 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->integer_type.size = evaluate(context, internal.inputs[1]).value->integer.value;
 
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-		return data;
+			return data;
 		}
 		case INTERNAL_C_CHAR_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_CHAR_SIZE));
 			data->type = (Value) { .value = create_integer_type(false, 8).value };
-		return data;
+			return data;
 		}
 		case INTERNAL_C_SHORT_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_SHORT_SIZE));
 			data->type = (Value) { .value = create_integer_type(false, 8).value };
-		return data;
+			return data;
 		}
 		case INTERNAL_C_INT_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_INT_SIZE));
 			data->type = (Value) { .value = create_integer_type(false, 8).value };
-		return data;
+			return data;
 		}
 		case INTERNAL_C_LONG_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_LONG_SIZE));
 			data->type = (Value) { .value = create_integer_type(false, 8).value };
-		return data;
+			return data;
 		}
 		case INTERNAL_EMBED: {
 			Value *values = NULL;
@@ -2134,7 +2144,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			Value internal_type = process_node_context(context, temporary_context, data->internal.node)->type;
 
 			data->type = internal_type;
-		return data;
+			return data;
 		}
 		case INTERNAL_PRINT: {
 			for (long int i = 0; i < arrlen(internal.inputs); i++) {
@@ -2150,7 +2160,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			}
 
 			data->type = create_value(TYPE_TYPE_VALUE);
-		return data;
+			return data;
 		}
 		case INTERNAL_SIZE_OF: {
 			process_node(context, internal.inputs[0]);
@@ -2161,7 +2171,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->integer.value = context->codegen.size_fn(type.value, context->codegen.data);
 
 			data->type = create_integer_type(false, context->codegen.default_integer_size);
-		return data;
+			return data;
 		}
 		case INTERNAL_IMPORT: {
 			process_node(context, internal.inputs[0]);
@@ -2209,7 +2219,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			}
 
 			data->type = create_value(MODULE_TYPE_VALUE);
-		return data;
+			return data;
 		}
 		case INTERNAL_TYPE_INFO_OF: {
 			process_node(context, internal.inputs[0]);
@@ -3219,23 +3229,25 @@ static Node_Data *process_while(Context *context, Node *node) {
 
 	arrpush(context->scopes, (Scope) { .node = node });
 
-	process_node(context, while_.condition);
-
 	if (while_.static_) {
 		assert(while_.else_body == NULL);
 
 		size_t saved_static_id = context->static_id;
+		context->static_id = node->while_.static_id_counter++;
+		process_node(context, while_.condition);
 		while (evaluate(context, while_.condition).value->boolean.value) {
-			size_t static_id = ++context->static_id_counter;
-			context->static_id = static_id;
-			arrpush(data->while_.static_ids, static_id);
+			arrpush(data->while_.static_ids, context->static_id);
 
 			process_node(context, while_.body);
+
+			context->static_id = node->while_.static_id_counter++;
 
 			process_node(context, while_.condition);
 		}
 		context->static_id = saved_static_id;
 	} else {
+		process_node(context, while_.condition);
+
 		process_node(context, while_.body);
 
 		Value while_type = data->while_.type;

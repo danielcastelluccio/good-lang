@@ -958,6 +958,7 @@ static Node *parse_if(Lexer *lexer) {
 static Node *parse_while(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *while_ = ast_new(WHILE_NODE, first_token.location);
+	while_->while_.static_id_counter = 0;
 
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
@@ -983,6 +984,7 @@ static Node *parse_for(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
 	Node *for_ = ast_new(FOR_NODE, first_token.location);
+	for_->for_.static_id_counter = 0;
 
 	if (lexer_peek_check(lexer, DOLLAR)) {
 		lexer_consume(lexer);
@@ -1338,6 +1340,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		function->function.function_type = function_type;
 		function->function.body = body;
 		function->function.extern_ = extern_;
+		function->function.static_id_counter = 0;
 		return function;
 	} else {
 		return function_type;

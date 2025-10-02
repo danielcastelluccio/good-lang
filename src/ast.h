@@ -138,12 +138,14 @@ typedef struct {
 	Node *body;
 	String_View *bindings;
 	bool static_;
+	uint32_t static_id_counter;
 } For_Node;
 
 typedef struct {
 	Node *function_type;
 	Node *body;
 	String_View extern_;
+	uint32_t static_id_counter;
 } Function_Node;
 
 typedef struct {
@@ -334,6 +336,7 @@ typedef struct {
 	Node *body;
 	Node *else_body;
 	bool static_;
+	uint32_t static_id_counter;
 } While_Node;
 
 typedef enum {
