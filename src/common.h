@@ -332,6 +332,7 @@ struct Context {
 	Codegen codegen;
 	Cached_File *cached_files; // stb_ds
 	Node *internal_root;
+	Scope internal_scope;
 	Data *data;
 };
 

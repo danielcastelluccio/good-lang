@@ -76,25 +76,20 @@ typedef struct {
 } Lookup_Result;
 
 static Lookup_Result lookup(Context *context, String_View identifier) {
+	size_t hash = sv_hash(identifier);
 	if (context->internal_root != NULL) {
-		Node *internal_block = context->internal_root->module.body;
-
-		Node *define = find_define(internal_block->block, identifier);
-		if (define != NULL) {
-			Scope *scope = malloc(sizeof(Scope));
-			*scope = (Scope) {
-				.node = internal_block
-			};
-
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = { .node = define, .scope = scope } };
+		Scope_Identifier scope_identifier = hmget(context->internal_scope.identifiers, hash);
+		if (scope_identifier.tag == SCOPE_DEFINE) {
+			return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = { .node = scope_identifier.define, .scope = &context->internal_scope } };
 		}
+		assert(scope_identifier.tag == SCOPE_INVALID);
 	}
 
 	bool found_function = false;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
 
-		Scope_Identifier scope_identifier = hmget(scope->identifiers, sv_hash(identifier));
+		Scope_Identifier scope_identifier = hmget(scope->identifiers, hash);
 		switch (scope_identifier.tag) {
 			case SCOPE_VARIABLE:
 				return (Lookup_Result) { .tag = LOOKUP_RESULT_VARIABLE, .variable = scope_identifier.variable.node, .type = scope_identifier.variable.node_data->variable.type };
