@@ -806,6 +806,8 @@ static Use_Internal parse_use_internal(Lexer *lexer) {
 		}
 
 		lexer_consume(lexer);
+	} else if (token.kind == ASTERISK) {
+		result.kind = USE_INTERNAL_ALL;
 	} else {
 		assert(false);
 	}

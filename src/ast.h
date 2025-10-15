@@ -341,7 +341,8 @@ struct Use_Internal {
 	enum {
 		USE_INTERNAL_MULTIPLE,
 		USE_INTERNAL_SINGLE,
-		USE_INTERNAL_SOLO
+		USE_INTERNAL_SOLO,
+		USE_INTERNAL_ALL
 	} kind;
 };
 

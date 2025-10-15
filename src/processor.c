@@ -1070,23 +1070,24 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 	return data;
 }
 
-static void add_uses(Context *context, Node *use_node, Use_Internal internal) {
-	Scope_Identifier scope_identifier;
+static void add_uses(Context *context, Node *use_node, Use_Internal internal, Use_Data_Internal data_internal) {
+	Scope_Identifier scope_identifier = {
+		.tag = SCOPE_USE,
+		.use = use_node
+	};
+
 	switch (internal.kind) {
-		case USE_INTERNAL_SINGLE:
-			add_uses(context, use_node, *internal.single.internal);
+		case USE_INTERNAL_SINGLE: {
+			add_uses(context, use_node, *internal.single.internal, *data_internal.single);
 			break;
-		case USE_INTERNAL_MULTIPLE:
+		}
+		case USE_INTERNAL_MULTIPLE: {
 			for (long int i = 0; i < arrlen(internal.multiple); i++) {
-				add_uses(context, use_node, internal.multiple[i]);
+				add_uses(context, use_node, internal.multiple[i], data_internal.multiple[i]);
 			}
 			break;
-		case USE_INTERNAL_SOLO:
-			scope_identifier = (Scope_Identifier) {
-				.tag = SCOPE_USE,
-				.use = use_node
-			};
-
+		}
+		case USE_INTERNAL_SOLO: {
 			String_View binding = internal.solo.binding;
 			if (binding.ptr == NULL) {
 				binding = internal.solo.value;
@@ -1094,8 +1095,13 @@ static void add_uses(Context *context, Node *use_node, Use_Internal internal) {
 
 			hmput(arrlast(context->scopes).identifiers, sv_hash(binding), scope_identifier);
 			break;
-		default:
-			assert(false);
+		}
+		case USE_INTERNAL_ALL: {
+			for (long int i = 0; i < arrlen(data_internal.all); i++) {
+				hmput(arrlast(context->scopes).identifiers, sv_hash(data_internal.all[i].identifier), scope_identifier);
+			}
+			break;
+		}
 	}
 }
 
@@ -1114,7 +1120,8 @@ static Node_Data *process_block(Context *context, Node *node) {
 			};
 			hmput(arrlast(context->scopes).identifiers, sv_hash(block.statements[i]->define.identifier), scope_identifier);
 		} else if (block.statements[i]->kind == USE_NODE) {
-			add_uses(context, block.statements[i], block.statements[i]->use.internal);
+			Node_Data *data = process_node(context, block.statements[i]);
+			add_uses(context, block.statements[i], block.statements[i]->use.internal, data->use.internal);
 		}
 	}
 
@@ -1719,6 +1726,15 @@ static Typed_Value find_use_identifier(String_View identifier, Use_Internal use_
 
 			if (sv_eq(identifier, binding)) {
 				return use_data_internal.solo;
+			}
+			break;
+		}
+		case USE_INTERNAL_ALL: {
+			for (long int i = 0; i < arrlen(use_data_internal.all); i++) {
+				String_View binding = use_data_internal.all[i].identifier;
+				if (sv_eq(identifier, binding)) {
+					return use_data_internal.all[i].typed_value;
+				}
 			}
 			break;
 		}
@@ -3288,8 +3304,27 @@ static Use_Data_Internal process_use_internal(Context *context, Node *node, Use_
 			result.solo = lookup_resolve_define(context, module, node, lookup_result, internal.solo.value, &define_scopes, false, NULL, &define_node);
 			break;
 		}
-		default:
-			assert(false);
+		case USE_INTERNAL_ALL: {
+			result.all = NULL;
+			for (long int i = 0; i < arrlen(module.value->module.body->block.statements); i++) {
+				Node *statement = module.value->module.body->block.statements[i];
+
+				if (statement->kind == DEFINE_NODE) {
+					Scope *scopes = NULL;
+					for (long i = 0; i < arrlen(module.value->module.scopes); i++) {
+						arrpush(scopes, module.value->module.scopes[i]);
+					}
+
+					Use_Data_Internal_All all_data = {
+						.identifier = statement->define.identifier,
+						.typed_value = process_node_with_scopes(context, statement, scopes)->define.typed_value
+					};
+
+					arrpush(result.all, all_data);
+				}
+			}
+			break;
+		}
 	}
 
 	return result;

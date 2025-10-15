@@ -241,6 +241,11 @@ typedef struct {
 	Typed_Value typed_value;
 } Operator_Data;
 
+typedef struct {
+	String_View identifier;
+	Typed_Value typed_value;
+} Use_Data_Internal_All;
+
 typedef struct Use_Data_Internal Use_Data_Internal;
 
 struct Use_Data_Internal {
@@ -248,6 +253,7 @@ struct Use_Data_Internal {
 		Use_Data_Internal *multiple; // stb_ds
 		Use_Data_Internal *single;
 		Typed_Value solo;
+		Use_Data_Internal_All *all; // stb_ds
 	};
 };
 
