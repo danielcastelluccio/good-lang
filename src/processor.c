@@ -1076,6 +1076,11 @@ static void add_uses(Context *context, Node *use_node, Use_Internal internal) {
 		case USE_INTERNAL_SINGLE:
 			add_uses(context, use_node, *internal.single.internal);
 			break;
+		case USE_INTERNAL_MULTIPLE:
+			for (long int i = 0; i < arrlen(internal.multiple); i++) {
+				add_uses(context, use_node, internal.multiple[i]);
+			}
+			break;
 		case USE_INTERNAL_SOLO:
 			scope_identifier = (Scope_Identifier) {
 				.tag = SCOPE_USE,
@@ -1695,6 +1700,16 @@ static Typed_Value find_use_identifier(String_View identifier, Use_Internal use_
 	switch (use_internal.kind) {
 		case USE_INTERNAL_SINGLE: {
 			return find_use_identifier(identifier, *use_internal.single.internal, *use_data_internal.single);
+		}
+		case USE_INTERNAL_MULTIPLE: {
+			for (long int i = 0; i < arrlen(use_internal.multiple); i++) {
+				Typed_Value typed_value = find_use_identifier(identifier, use_internal.multiple[i], use_data_internal.multiple[i]);
+
+				if (typed_value.type.value != NULL) {
+					return typed_value;
+				}
+			}
+			break;
 		}
 		case USE_INTERNAL_SOLO: {
 			String_View binding = use_internal.solo.binding;
@@ -3257,6 +3272,13 @@ static Use_Data_Internal process_use_internal(Context *context, Node *node, Use_
 
 			result.single = malloc(sizeof(Use_Data_Internal));
 			*result.single = process_use_internal(context, node, *internal.single.internal, module);
+			break;
+		}
+		case USE_INTERNAL_MULTIPLE: {
+			result.multiple = NULL;
+			for (long int i = 0; i < arrlen(internal.multiple); i++) {
+				arrpush(result.multiple, process_use_internal(context, node, internal.multiple[i], module));
+			}
 			break;
 		}
 		case USE_INTERNAL_SOLO: {

@@ -328,10 +328,7 @@ typedef struct Use_Internal Use_Internal;
 
 struct Use_Internal {
 	union {
-		struct {
-			Use_Internal *internal;
-			String_View value;
-		} *multiple; // stb_ds
+		Use_Internal *multiple; // stb_ds
 		struct {
 			Use_Internal *internal;
 			String_View value;

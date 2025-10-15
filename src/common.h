@@ -245,7 +245,7 @@ typedef struct Use_Data_Internal Use_Data_Internal;
 
 struct Use_Data_Internal {
 	union {
-		Use_Data_Internal **multiple; // stb_ds
+		Use_Data_Internal *multiple; // stb_ds
 		Use_Data_Internal *single;
 		Typed_Value solo;
 	};

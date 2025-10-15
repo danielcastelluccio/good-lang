@@ -794,7 +794,18 @@ static Use_Internal parse_use_internal(Lexer *lexer) {
 			}
 		}
 	} else if (token.kind == CURLY_BRACE_OPEN) {
-		assert(false);
+		result.kind = USE_INTERNAL_MULTIPLE;
+		result.multiple = NULL;
+
+		while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
+			arrpush(result.multiple, parse_use_internal(lexer));
+
+			if (lexer_peek(lexer).kind == COMMA) {
+				lexer_consume(lexer);
+			}
+		}
+
+		lexer_consume(lexer);
 	} else {
 		assert(false);
 	}
