@@ -324,6 +324,35 @@ typedef struct {
 	Structure_Member *members; // stb_ds
 } Union_Type_Node;
 
+typedef struct Use_Internal Use_Internal;
+
+struct Use_Internal {
+	union {
+		struct {
+			Use_Internal *internal;
+			String_View value;
+		} *multiple; // stb_ds
+		struct {
+			Use_Internal *internal;
+			String_View value;
+		} single;
+		struct {
+			String_View value;
+			String_View binding;
+		} solo;
+	};
+	enum {
+		USE_INTERNAL_MULTIPLE,
+		USE_INTERNAL_SINGLE,
+		USE_INTERNAL_SOLO
+	} kind;
+};
+
+typedef struct {
+	Node *node;
+	Use_Internal internal;
+} Use_Node;
+
 typedef struct {
 	String_View name;
 	Node *type;
@@ -387,6 +416,7 @@ typedef enum {
 	SWITCH_NODE,
 	TAGGED_UNION_TYPE_NODE,
 	UNION_TYPE_NODE,
+	USE_NODE,
 	VARIABLE_NODE,
 	WHILE_NODE
 } Node_Kind;
@@ -441,6 +471,7 @@ struct Node {
 		Switch_Node switch_;
 		Tagged_Union_Type_Node tagged_union_type;
 		Union_Type_Node union_type;
+		Use_Node use;
 		Variable_Node variable;
 		While_Node while_;
 	};

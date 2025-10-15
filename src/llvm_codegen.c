@@ -1642,6 +1642,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_slice(node, state);
 		case NOT_NODE:
 			return generate_not(node, state);
+		case USE_NODE:
+			return NULL;
 		default:
 			assert(false);
 	}

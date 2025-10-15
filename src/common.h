@@ -32,7 +32,8 @@ typedef struct {
 		SCOPE_BINDING,
 		SCOPE_STATIC_BINDING,
 		SCOPE_STATIC_VARIABLE,
-		SCOPE_DEFINE
+		SCOPE_DEFINE,
+		SCOPE_USE
 	} tag;
 	union {
 		Variable_Definition variable;
@@ -40,6 +41,7 @@ typedef struct {
 		Typed_Value static_binding;
 		Variable_Definition static_variable;
 		Node *define;
+		Node *use;
 	};
 } Scope_Identifier;
 
@@ -239,6 +241,20 @@ typedef struct {
 	Typed_Value typed_value;
 } Operator_Data;
 
+typedef struct Use_Data_Internal Use_Data_Internal;
+
+struct Use_Data_Internal {
+	union {
+		Use_Data_Internal **multiple; // stb_ds
+		Use_Data_Internal *single;
+		Typed_Value solo;
+	};
+};
+
+typedef struct {
+	Use_Data_Internal internal;
+} Use_Data;
+
 struct Node_Data {
 	union {
 		Identifier_Data identifier;
@@ -273,6 +289,7 @@ struct Node_Data {
 		For_Data for_;
 		Internal_Data internal;
 		Operator_Data operator;
+		Use_Data use;
 	};
 	Value type;
 };

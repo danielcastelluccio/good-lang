@@ -90,6 +90,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 	switch (identifier[0]) {
 		case 'a':
 			if (streq_len(identifier, len, "and", 3)) result = KEYWORD_AND;
+			else if (streq_len(identifier, len, "as", 2)) result = KEYWORD_AS;
 			break;
 		case 'b':
 			if (streq_len(identifier, len, "break", 5)) result = KEYWORD_BREAK;
@@ -143,6 +144,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case 'u':
 			if (streq_len(identifier, len, "union", 5)) result = KEYWORD_UNION;
+			else if (streq_len(identifier, len, "use", 3)) result = KEYWORD_USE;
 			break;
 		case 'v':
 			if (streq_len(identifier, len, "var", 3)) result = KEYWORD_VAR;
@@ -437,6 +439,8 @@ char *token_to_string(Token_Kind kind) {
 			return "Decimal";
 		case KEYWORD_AND:
 			return "and";
+		case KEYWORD_AS:
+			return "as";
 		case KEYWORD_BREAK:
 			return "break";
 		case KEYWORD_CAST:
@@ -487,6 +491,8 @@ char *token_to_string(Token_Kind kind) {
 			return "or";
 		case KEYWORD_UNION:
 			return "union";
+		case KEYWORD_USE:
+			return "use";
 		case KEYWORD_VAR:
 			return "var";
 		case KEYWORD_WHILE:

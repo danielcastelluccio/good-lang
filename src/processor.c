@@ -52,6 +52,10 @@ typedef struct {
 			Scope *scope;
 			bool var;
 		} define;
+		struct {
+			Node *node;
+			Scope *scope;
+		} use;
 		Node *variable;
 		Variable_Definition static_variable;
 		struct {
@@ -66,6 +70,7 @@ typedef struct {
 	enum {
 		LOOKUP_RESULT_FAIL,
 		LOOKUP_RESULT_DEFINE,
+		LOOKUP_RESULT_USE,
 		LOOKUP_RESULT_DEFINE_INTERNAL,
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_BINDING,
@@ -101,6 +106,8 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 				return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = { .node = scope_identifier.static_variable.node, .node_data = scope_identifier.static_variable.node_data }, .type = scope_identifier.static_variable.node_data->variable.type };
 			case SCOPE_DEFINE:
 				return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE, .define = { .node = scope_identifier.define, .scope = scope } };
+			case SCOPE_USE:
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_USE, .use = { .node = scope_identifier.use, .scope = scope } };
 			case SCOPE_INVALID:
 				break;
 		}
@@ -1063,6 +1070,30 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 	return data;
 }
 
+static void add_uses(Context *context, Node *use_node, Use_Internal internal) {
+	Scope_Identifier scope_identifier;
+	switch (internal.kind) {
+		case USE_INTERNAL_SINGLE:
+			add_uses(context, use_node, *internal.single.internal);
+			break;
+		case USE_INTERNAL_SOLO:
+			scope_identifier = (Scope_Identifier) {
+				.tag = SCOPE_USE,
+				.use = use_node
+			};
+
+			String_View binding = internal.solo.binding;
+			if (binding.ptr == NULL) {
+				binding = internal.solo.value;
+			}
+
+			hmput(arrlast(context->scopes).identifiers, sv_hash(binding), scope_identifier);
+			break;
+		default:
+			assert(false);
+	}
+}
+
 static Node_Data *process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
 
@@ -1077,6 +1108,8 @@ static Node_Data *process_block(Context *context, Node *node) {
 				.define = block.statements[i]
 			};
 			hmput(arrlast(context->scopes).identifiers, sv_hash(block.statements[i]->define.identifier), scope_identifier);
+		} else if (block.statements[i]->kind == USE_NODE) {
+			add_uses(context, block.statements[i], block.statements[i]->use.internal);
 		}
 	}
 
@@ -1658,98 +1691,82 @@ static Node_Data *process_global(Context *context, Node *node) {
 	return data;
 }
 
-static Node_Data *process_identifier(Context *context, Node *node) {
-	Identifier_Node identifier = node->identifier;
-
-	Node_Data *data = context->temporary_context.data;
-	data->identifier.want_pointer = context->temporary_context.want_pointer;
-
-	Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
-
-	Value value = {};
-	Value type = {};
-	Node *define_node = NULL;
-	Scope *define_scopes = NULL;
-	if (identifier.module != NULL) {
-		Value module_type = process_node(context, identifier.module)->type;
-		if (module_type.value->tag != MODULE_TYPE_VALUE) {
-			handle_type_error(node, "Expected module, but got %s", module_type);
+static Typed_Value find_use_identifier(String_View identifier, Use_Internal use_internal, Use_Data_Internal use_data_internal) {
+	switch (use_internal.kind) {
+		case USE_INTERNAL_SINGLE: {
+			return find_use_identifier(identifier, *use_internal.single.internal, *use_data_internal.single);
 		}
+		case USE_INTERNAL_SOLO: {
+			String_View binding = use_internal.solo.binding;
+			if (binding.ptr == NULL) {
+				binding = use_internal.solo.value;
+			}
 
-		Value module_value = evaluate(context, identifier.module);
+			if (sv_eq(identifier, binding)) {
+				return use_data_internal.solo;
+			}
+			break;
+		}
+		default:
+			assert(false);
+	}
 
+	return (Typed_Value) {};
+}
+
+static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, bool want_pointer, Node *assign_value, Node **define_node) {
+	if (module_value.value != NULL) {
 		for (long int i = 0; i < arrlen(module_value.value->module.body->block.statements); i++) {
 			Node *statement = module_value.value->module.body->block.statements[i];
-			if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier.value)) {
-				define_node = statement;
+			if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+				*define_node = statement;
 
 				for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
-					arrpush(define_scopes, module_value.value->module.scopes[i]);
+					arrpush(*define_scopes, module_value.value->module.scopes[i]);
 				}
 				break;
-			}
-		}
-	} else {
-		Value wanted_type = context->temporary_context.wanted_type;
-		if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
-			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
-				if (sv_eq(identifier.value, wanted_type.value->enum_type.items[i])) {
-					value.value = value_new(ENUM_VALUE);
-					value.value->enum_.value = i;
-					type = context->temporary_context.wanted_type;
-				}
-			}
-		}
-
-		if (type.value == NULL) {
-			if (sv_eq_cstr(identifier.value, "_")) {
-				data->identifier.kind = IDENTIFIER_UNDERSCORE;
-				type = create_value(NONE_VALUE);
-
-				if (identifier.assign_value != NULL) {
-					process_node(context, identifier.assign_value);
-				}
-			} else {
-				lookup_result = lookup(context, identifier.value);
 			}
 		}
 	}
 
 	if (lookup_result.tag == LOOKUP_RESULT_DEFINE_INTERNAL) {
-		arrpush(define_scopes, *lookup_result.define.scope);
-		define_node = lookup_result.define.node;
+		arrpush(*define_scopes, *lookup_result.define.scope);
+		*define_node = lookup_result.define.node;
 	}
 
 	if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
 		for (long i = 0; i < arrlen(context->scopes); i++) {
-			arrpush(define_scopes, context->scopes[i]);
+			arrpush(*define_scopes, context->scopes[i]);
 
 			if (lookup_result.define.scope == &context->scopes[i]) break;
 		}
 
-		define_node = lookup_result.define.node;
+		*define_node = lookup_result.define.node;
 	}
 
-	if (define_node != NULL) {
-		Typed_Value typed_value = process_node_with_scopes(context, define_node, define_scopes)->define.typed_value;
+	Value type = {};
+	Value value = {};
+
+	if (*define_node != NULL) {
+		Typed_Value typed_value = process_node_with_scopes(context, *define_node, *define_scopes)->define.typed_value;
 
 		type = typed_value.type;
 		value = typed_value.value;
 
-		if (define_node->define.special) {
+		if ((*define_node)->define.special) {
 			switch (type.value->tag) {
 				case GLOBAL_TYPE_VALUE: {
 					type = type.value->global_type.type;
 
-					if (data->identifier.want_pointer) {
+					if (want_pointer) {
 						Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
 						pointer_type->pointer_type.inner = type;
 						type = (Value) { .value = pointer_type };
 					}
 
-					if (identifier.assign_value != NULL) {
+					if (assign_value != NULL) {
 						Temporary_Context temporary_context = { .wanted_type = type };
-						Value value_type = process_node_context(context, temporary_context, identifier.assign_value)->type;
+						Value value_type = process_node_context(context, temporary_context, assign_value)->type;
 						if (!type_assignable(type.value, value_type.value)) {
 							handle_expected_type_error(context, node, type, value_type);
 						}
@@ -1776,6 +1793,64 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 					assert(false);
 			}
 		}
+	}
+
+	return (Typed_Value) { .type = type, .value = value };
+}
+
+static Node_Data *process_identifier(Context *context, Node *node) {
+	Identifier_Node identifier = node->identifier;
+
+	Node_Data *data = context->temporary_context.data;
+	data->identifier.want_pointer = context->temporary_context.want_pointer;
+
+	Lookup_Result lookup_result = { .tag = LOOKUP_RESULT_FAIL };
+
+	Value value = {};
+	Value type = {};
+	if (identifier.module == NULL) {
+		Value wanted_type = context->temporary_context.wanted_type;
+		if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
+			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
+				if (sv_eq(identifier.value, wanted_type.value->enum_type.items[i])) {
+					value.value = value_new(ENUM_VALUE);
+					value.value->enum_.value = i;
+					type = context->temporary_context.wanted_type;
+				}
+			}
+		}
+
+		if (type.value == NULL) {
+			if (sv_eq_cstr(identifier.value, "_")) {
+				data->identifier.kind = IDENTIFIER_UNDERSCORE;
+				type = create_value(NONE_VALUE);
+
+				if (identifier.assign_value != NULL) {
+					process_node(context, identifier.assign_value);
+				}
+			} else {
+				lookup_result = lookup(context, identifier.value);
+			}
+		}
+	}
+
+	Value module_value = {};
+
+	if (identifier.module != NULL) {
+		Value module_type = process_node(context, identifier.module)->type;
+		if (module_type.value->tag != MODULE_TYPE_VALUE) {
+			handle_type_error(node, "Expected module, but got %s", module_type);
+		}
+
+		module_value = evaluate(context, identifier.module);
+	}
+
+	Node *define_node = NULL;
+	Scope *define_scopes = NULL;
+	Typed_Value typed_value = lookup_resolve_define(context, module_value, node, lookup_result, identifier.value, &define_scopes, data->identifier.want_pointer, identifier.assign_value, &define_node);
+	if (typed_value.type.value != NULL) {
+		type = typed_value.type;
+		value = typed_value.value;
 	}
 
 	switch (lookup_result.tag) {
@@ -1845,6 +1920,20 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 			} else {
 				value = hmget(context->static_variables, lookup_result.static_variable.node_data);
 			}
+			break;
+		}
+		case LOOKUP_RESULT_USE: {
+			Scope *use_scopes = NULL;
+			for (long i = 0; i < arrlen(context->scopes); i++) {
+				arrpush(use_scopes, context->scopes[i]);
+
+				if (lookup_result.use.scope == &context->scopes[i]) break;
+			}
+			Node_Data *data = process_node_with_scopes(context, lookup_result.use.node, use_scopes);
+
+			Typed_Value typed_value = find_use_identifier(identifier.value, lookup_result.use.node->use.internal, data->use.internal);
+			type = typed_value.type;
+			value = typed_value.value;
 			break;
 		}
 		case LOOKUP_RESULT_DEFINE:
@@ -3157,6 +3246,42 @@ static Node_Data *process_union_type(Context *context, Node *node) {
 	return data;
 }
 
+static Use_Data_Internal process_use_internal(Context *context, Node *node, Use_Internal internal, Value module) {
+	Use_Data_Internal result;
+	switch (internal.kind) {
+		case USE_INTERNAL_SINGLE: {
+			Scope *define_scopes = NULL;
+			Node *define_node = NULL;
+			Lookup_Result lookup_result = lookup(context, internal.single.value);
+			module = lookup_resolve_define(context, module, node, lookup_result, internal.single.value, &define_scopes, false, NULL, &define_node).value;
+
+			result.single = malloc(sizeof(Use_Data_Internal));
+			*result.single = process_use_internal(context, node, *internal.single.internal, module);
+			break;
+		}
+		case USE_INTERNAL_SOLO: {
+			Scope *define_scopes = NULL;
+			Node *define_node = NULL;
+			Lookup_Result lookup_result = lookup(context, internal.solo.value);
+			result.solo = lookup_resolve_define(context, module, node, lookup_result, internal.solo.value, &define_scopes, false, NULL, &define_node);
+			break;
+		}
+		default:
+			assert(false);
+	}
+
+	return result;
+}
+
+static Node_Data *process_use(Context *context, Node *node) {
+	Use_Node use = node->use;
+	process_node(context, use.node);
+
+	Node_Data *data = context->temporary_context.data;
+	data->use.internal = process_use_internal(context, node, use.internal, evaluate(context, use.node));
+	return data;
+}
+
 static Node_Data *process_variable(Context *context, Node *node) {
 	Variable_Node variable = node->variable;
 
@@ -3422,6 +3547,9 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			break;
 		case UNION_TYPE_NODE:
 			value = process_union_type(context, node);
+			break;
+		case USE_NODE:
+			value = process_use(context, node);
 			break;
 		case VARIABLE_NODE:
 			value = process_variable(context, node);

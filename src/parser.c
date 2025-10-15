@@ -769,6 +769,51 @@ static Node *parse_union_type(Lexer *lexer) {
 	return union_;
 }
 
+static Use_Internal parse_use_internal(Lexer *lexer) {
+	Use_Internal result;
+	Token_Data token = lexer_consume(lexer);
+	if (token.kind == IDENTIFIER) {
+		if (lexer_peek(lexer).kind == COLON_COLON) {
+			result.kind = USE_INTERNAL_SINGLE;
+
+			result.single.value = token.string;
+
+			lexer_consume(lexer);
+
+			result.single.internal = malloc(sizeof(Use_Internal));
+			*result.single.internal = parse_use_internal(lexer);
+		} else {
+			result.kind = USE_INTERNAL_SOLO;
+
+			result.solo.value = token.string;
+
+			result.solo.binding = (String_View) {};
+			if (lexer_peek(lexer).kind == KEYWORD_AS) {
+				lexer_consume(lexer);
+				result.solo.binding = lexer_consume_check(lexer, IDENTIFIER).string;
+			}
+		}
+	} else if (token.kind == CURLY_BRACE_OPEN) {
+		assert(false);
+	} else {
+		assert(false);
+	}
+
+	return result;
+}
+
+static Node *parse_use(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *use = ast_new(USE_NODE, first_token.location);
+
+	use->use.node = parse_identifier(lexer, NULL);
+	lexer_consume_check(lexer, COLON_COLON);
+	use->use.internal = parse_use_internal(lexer);
+
+	return use;
+}
+
 static Node *parse_tagged_union_type(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
@@ -1461,6 +1506,10 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_UNION: {
 			result = parse_union_type(lexer);
+			break;
+		}
+		case KEYWORD_USE: {
+			result = parse_use(lexer);
 			break;
 		}
 		case KEYWORD_VAR: {
