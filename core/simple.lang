@@ -5,7 +5,7 @@ def print_stdout_fn = fn (_: ^, char: byte) {
 	_ = c::putchar(cast(c::int) char);
 };
 
-def print = fn [T]($fmt: []byte, args: T) {
+def! print = fn [T]($fmt: []byte, args: T) {
 	stdout_printer:print(fmt, args);
 };
 

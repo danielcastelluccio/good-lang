@@ -894,6 +894,13 @@ static Node *parse_define(Lexer *lexer) {
 
 	Node *define = ast_new(DEFINE_NODE, first_token.location);
 
+	if (lexer_peek_check(lexer, EXCLAMATION)) {
+		lexer_consume(lexer);
+		define->define.public = true;
+	} else {
+		define->define.public = false;
+	}
+
 	if (lexer_peek_check(lexer, ASTERISK)) {
 		lexer_consume(lexer);
 		define->define.special = true;

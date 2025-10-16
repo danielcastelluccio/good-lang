@@ -44,7 +44,7 @@ def List = fn (T: type): type {
 	};
 };
 
-def new = fn ($T: type, allocator: allocate::Allocator): List(T) {
+def! new = fn ($T: type, allocator: allocate::Allocator): List(T) {
 	.{ null, 0, 0, allocator }
 };
 

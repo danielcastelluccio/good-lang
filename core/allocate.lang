@@ -1,4 +1,4 @@
-def Allocate_Error = enum {
+def! Allocate_Error = enum {
 	OUT_OF_MEMORY
 };
 
@@ -9,7 +9,7 @@ def Allocate_Mode = enum {
 };
 def Allocate_Fn = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Allocate_Error;
 
-def Allocator = struct {
+def! Allocator = struct {
 	allocate_fn: Allocate_Fn;
 
 	op new = fn (allocator: ^Allocator, $T: type): ^T!Allocate_Error {
@@ -32,7 +32,7 @@ def C_Allocator = struct {
 };
 
 // Do not modify, is a global so a pointer can be taken.
-def* c_allocator = global: C_Allocator => .{};
+def!* c_allocator = global: C_Allocator => .{};
 
 def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Allocate_Error {
 	switch mode {

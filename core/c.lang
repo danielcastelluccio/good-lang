@@ -1,25 +1,25 @@
-def char = int(true, C_CHAR_SIZE);
-def unsigned_char = int(false, C_CHAR_SIZE);
-def short = int(true, C_SHORT_SIZE);
-def unsigned_short = int(false, C_SHORT_SIZE);
-def int = int(true, C_INT_SIZE);
-def unsigned_int = int(false, C_INT_SIZE);
-def long = int(true, C_LONG_SIZE);
-def unsigned_long = int(false, C_LONG_SIZE);
+def! char = int(true, C_CHAR_SIZE);
+def! unsigned_char = int(false, C_CHAR_SIZE);
+def! short = int(true, C_SHORT_SIZE);
+def! unsigned_short = int(false, C_SHORT_SIZE);
+def! int = int(true, C_INT_SIZE);
+def! unsigned_int = int(false, C_INT_SIZE);
+def! long = int(true, C_LONG_SIZE);
+def! unsigned_long = int(false, C_LONG_SIZE);
 
-def size_t = unsigned_long;
+def! size_t = unsigned_long;
 
-def FILE = struct {};
+def! FILE = struct {};
 
-def printf = fn (s: ^[_, null]byte, ..): int extern "printf";
-def sprintf = fn (str: ^[_, null]byte, format: ^[_]byte, ..): int extern "sprintf";
-def putchar = fn (c: int): int extern "putchar";
+def! printf = fn (s: ^[_, null]byte, ..): int extern "printf";
+def! sprintf = fn (str: ^[_, null]byte, format: ^[_]byte, ..): int extern "sprintf";
+def! putchar = fn (c: int): int extern "putchar";
 
-def malloc = fn (size: size_t): ?^ extern "malloc";
-def free = fn (ptr: ^) extern "free";
-def realloc = fn (ptr: ^, size: size_t): ?^ extern "realloc";
+def! malloc = fn (size: size_t): ?^ extern "malloc";
+def! free = fn (ptr: ^) extern "free";
+def! realloc = fn (ptr: ^, size: size_t): ?^ extern "realloc";
 
-def fopen = fn (path: ^[_, null]byte, mode: ^[_, null]byte): ^FILE extern "fopen";
-def fread = fn (buffer: ^[_, null]byte, size: size_t, count: size_t, stream: ^FILE): size_t extern "fread";
+def! fopen = fn (path: ^[_, null]byte, mode: ^[_, null]byte): ^FILE extern "fopen";
+def! fread = fn (buffer: ^[_, null]byte, size: size_t, count: size_t, stream: ^FILE): size_t extern "fread";
 
-def strlen = fn (s: ^[_]byte): size_t extern "strlen";
+def! strlen = fn (s: ^[_]byte): size_t extern "strlen";

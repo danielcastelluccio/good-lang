@@ -117,6 +117,7 @@ typedef struct {
 	Node *type;
 	Node *expression;
 	bool special;
+	bool public;
 } Define_Node;
 
 typedef struct {

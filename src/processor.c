@@ -1749,7 +1749,7 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 	if (module_value.value != NULL) {
 		for (long int i = 0; i < arrlen(module_value.value->module.body->block.statements); i++) {
 			Node *statement = module_value.value->module.body->block.statements[i];
-			if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+			if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
 				*define_node = statement;
 
 				for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
@@ -3278,6 +3278,8 @@ static Node_Data *process_union_type(Context *context, Node *node) {
 }
 
 static Use_Data_Internal process_use_internal(Context *context, Node *node, Use_Internal internal, Value module) {
+	assert(module.value != NULL);
+
 	Use_Data_Internal result;
 	switch (internal.kind) {
 		case USE_INTERNAL_SINGLE: {
@@ -3309,7 +3311,7 @@ static Use_Data_Internal process_use_internal(Context *context, Node *node, Use_
 			for (long int i = 0; i < arrlen(module.value->module.body->block.statements); i++) {
 				Node *statement = module.value->module.body->block.statements[i];
 
-				if (statement->kind == DEFINE_NODE) {
+				if (statement->kind == DEFINE_NODE && statement->define.public) {
 					Scope *scopes = NULL;
 					for (long i = 0; i < arrlen(module.value->module.scopes); i++) {
 						arrpush(scopes, module.value->module.scopes[i]);

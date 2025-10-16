@@ -1,6 +1,6 @@
 def Output_Fn = fn (data: ^, char: byte);
 
-def Printer = struct {
+def! Printer = struct {
 	output_fn: Output_Fn;
 
 	op print = fn [T](printer: ^Printer, $fmt: []byte, args: T) {
