@@ -42,6 +42,7 @@ static Token_Data lexer_consume_check(Lexer *lexer, Token_Kind kind) {
 }
 
 static Node *parse_expression(Lexer *lexer);
+static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon);
 static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
@@ -139,6 +140,15 @@ static Node *parse_structure(Lexer *lexer) {
 	lexer_consume_check(lexer, CURLY_BRACE_CLOSED);
 
 	return structure;
+}
+
+static Node *parse_actual_identifier(Node *module, Token_Data token) {
+	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
+	identifier->identifier.module = module;
+	identifier->identifier.value = token.string;
+	identifier->identifier.assign_value = NULL;
+
+	return identifier;
 }
 
 static Node *parse_identifier(Lexer *lexer, Node *module) {
@@ -385,12 +395,7 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		}
 	}
 
-	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
-	identifier->identifier.module = module;
-	identifier->identifier.value = token.string;
-	identifier->identifier.assign_value = NULL;
-
-	return identifier;
+	return parse_actual_identifier(module, token);
 }
 
 static Node *parse_dereference(Lexer *lexer, Node *node) {
@@ -820,7 +825,8 @@ static Node *parse_use(Lexer *lexer) {
 
 	Node *use = ast_new(USE_NODE, first_token.location);
 
-	use->use.node = parse_identifier(lexer, NULL);
+	use->use.node = parse_expression_internal(lexer, true);
+
 	lexer_consume_check(lexer, COLON_COLON);
 	use->use.internal = parse_use_internal(lexer);
 
@@ -1431,7 +1437,7 @@ static Node *parse_statement(Lexer *lexer) {
 	return result;
 }
 
-static Node *parse_expression(Lexer *lexer) {
+static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 	Token_Data token = lexer_peek(lexer);
 	Node *result = NULL;
 	switch (token.kind) {
@@ -1606,8 +1612,13 @@ static Node *parse_expression(Lexer *lexer) {
 				result = parse_call_method(lexer, result);
 				break;
 			case COLON_COLON:
-				lexer_consume_check(lexer, COLON_COLON);
-				result = parse_identifier(lexer, result);
+				if (!skip_colon_colon) {
+					lexer_consume_check(lexer, COLON_COLON);
+					Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
+					result = parse_actual_identifier(result, token);
+				} else {
+					operating = false;
+				}
 				break;
 			case CARET:
 				result = parse_dereference(lexer, result);
@@ -1634,6 +1645,10 @@ static Node *parse_expression(Lexer *lexer) {
 	}
 
 	return result;
+}
+
+static Node *parse_expression(Lexer *lexer) {
+	return parse_expression_internal(lexer, false);
 }
 
 Node *parse_source_statement(Data *data, char *source, size_t length, size_t path_ref, size_t row, size_t column) {
