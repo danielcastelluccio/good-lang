@@ -1759,18 +1759,18 @@ static LLVMValueRef generate_array_view(Value_Data *value, Value_Data *type, Sta
 	Value_Data *inner_type = type->array_view_type.inner.value;
 	LLVMTypeRef inner_llvm_type = create_llvm_type(inner_type, state);
 
-	LLVMValueRef array_value = LLVMGetUndef(LLVMArrayType(inner_llvm_type, array_view.length));
-	for (size_t i = 0; i < array_view.length; i++) {
+	LLVMValueRef array_value = LLVMGetUndef(LLVMArrayType(inner_llvm_type, array_view.length->integer.value));
+	for (long int i = 0; i < array_view.length->integer.value; i++) {
 		array_value = LLVMBuildInsertValue(state->llvm_builder, array_value, generate_value(array_view.values[i], inner_type, state), i, "");
 	}
-	LLVMValueRef global_array = LLVMAddGlobal(state->llvm_module, LLVMArrayType(inner_llvm_type, array_view.length), "");
+	LLVMValueRef global_array = LLVMAddGlobal(state->llvm_module, LLVMArrayType(inner_llvm_type, array_view.length->integer.value), "");
 	LLVMSetLinkage(global_array, LLVMPrivateLinkage);
 	LLVMSetGlobalConstant(global_array, true);
 	LLVMSetUnnamedAddr(global_array, true);
 	LLVMSetInitializer(global_array, array_value);
 
 	LLVMValueRef struct_value = LLVMGetUndef(create_llvm_type(type, state));
-	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMConstInt(LLVMInt64Type(), array_view.length, false), 0, "");
+	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMConstInt(LLVMInt64Type(), array_view.length->integer.value, false), 0, "");
 	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMBuildPointerCast(state->llvm_builder, global_array, LLVMPointerType(inner_llvm_type, 0), ""), 1, "");
 
 	return struct_value;

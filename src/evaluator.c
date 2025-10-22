@@ -60,9 +60,9 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 			return value_equal(value1->array_view_type.inner.value, value2->array_view_type.inner.value);
 		}
 		case ARRAY_VIEW_VALUE: {
-			if (value1->array_view.length != value2->array_view.length) return false;
+			if (!value_equal(value1->array_view.length, value2->array_view.length)) return false;
 
-			for (size_t i = 0; i < value1->array_view.length; i++) {
+			for (long int i = 0; i < value1->array_view.length->integer.value; i++) {
 				if (!value_equal(value1->array_view.values[i], value2->array_view.values[i])) return false;
 			}
 			return true;
@@ -150,7 +150,8 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		}
 		case BYTE_TYPE_VALUE:
 		case BOOLEAN_TYPE_VALUE:
-		case TYPE_TYPE_VALUE: {
+		case TYPE_TYPE_VALUE:
+		case MODULE_TYPE_VALUE: {
 			return true;
 		}
 		case INTEGER_VALUE: {
@@ -213,20 +214,20 @@ static Value initialize_value(Value type) {
 static Value clone_value(Value input) {
 	Value result = {};
 	switch (input.value->tag) {
-		case BOOLEAN_VALUE: {
-			result = create_boolean(input.value->boolean.value);
+		case ARRAY_VALUE: {
+			result = create_value(ARRAY_VALUE);
+			result.value->array.length = input.value->array.length;
+
+			result.value->array.values = NULL;
+			for (long int i = 0; i < arrlen(input.value->array.values); i++) {
+				arrpush(result.value->array.values, input.value->array.values[i]);
+			}
 			break;
 		}
-		case BOOLEAN_TYPE_VALUE: {
-			result = create_value(BOOLEAN_TYPE_VALUE);
-			break;
-		}
-		case INTEGER_VALUE: {
-			result = create_integer(input.value->integer.value);
-			break;
-		}
-		case INTEGER_TYPE_VALUE: {
-			result = create_integer_type(input.value->integer_type.signed_, input.value->integer_type.size);
+		case ARRAY_VIEW_VALUE: {
+			result = create_value(ARRAY_VIEW_VALUE);
+			result.value->array_view.length = clone_value((Value) { .value = input.value->array_view.length }).value;
+			result.value->array_view.values = input.value->array_view.values;
 			break;
 		}
 		case STRUCT_VALUE: {
@@ -236,6 +237,22 @@ static Value clone_value(Value input) {
 			}
 			break;
 		}
+		case TAGGED_UNION_VALUE: {
+			result = create_value(TAGGED_UNION_VALUE);
+			result.value->tagged_union.tag = clone_value((Value) { .value = input.value->tagged_union.tag }).value;
+			result.value->tagged_union.data = clone_value((Value) { .value = input.value->tagged_union.data }).value;
+			break;
+		}
+		case BOOLEAN_VALUE:
+		case BOOLEAN_TYPE_VALUE:
+		case INTEGER_VALUE:
+		case INTEGER_TYPE_VALUE:
+		case FUNCTION_TYPE_VALUE:
+		case MODULE_VALUE:
+		case STRUCT_TYPE_VALUE:
+		case POINTER_TYPE_VALUE:
+			result = input;
+			break;
 		default:
 			assert(false);
 	}
@@ -496,7 +513,7 @@ static Value evaluate_string(State *state, Node *node) {
 
 	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
 		Value_Data *string = value_new(ARRAY_VIEW_VALUE);
-		string->array_view.length = string_length;
+		string->array_view.length = create_integer(string_length).value;
 		string->array_view.values = NULL;
 		for (size_t i = 0; i < string_length; i++) {
 			Value_Data *byte_value = value_new(BYTE_VALUE);
@@ -610,7 +627,7 @@ static Value evaluate_call(State *state, Node *node) {
 	function_node = saved_function_node;
 	state->context->static_id = saved_static_argument_id;
 
-	return create_value_data(result, node);
+	return clone_value(create_value_data(result, node));
 }
 
 static Value evaluate_binary_op(State *state, Node *node) {
@@ -746,7 +763,7 @@ static void print_value(Value_Data *value) {
 			break;
 		}
 		case ARRAY_VIEW_VALUE: {
-			for (size_t i = 0; i < value->array_view.length; i++) {
+			for (long int i = 0; i < value->array_view.length->integer.value; i++) {
 				print_value(value->array_view.values[i]);
 			}
 			break;
@@ -821,7 +838,7 @@ static Value evaluate_structure_access(State *state, Node *node) {
 			if (sv_eq_cstr(structure_access.name, "ptr")) {
 				assert(false);
 			} else if (sv_eq_cstr(structure_access.name, "len")) {
-				return (Value) { .value = create_integer(array_view_value.length).value };
+				return (Value) { .value = array_view_value.length };
 			} else {
 				assert(false);
 			}
@@ -884,7 +901,7 @@ static Value evaluate_slice(State *state, Node *node) {
 
 			Value result = create_value(ARRAY_VIEW_VALUE);
 			result.value->array_view.values = values;
-			result.value->array_view.length = end - start;
+			result.value->array_view.length = create_integer(end - start).value;
 
 			return result;
 		}
@@ -922,7 +939,7 @@ static Value evaluate_for(State *state, Node *node) {
 
 	assert(arrlen(for_.items) == 1);
 	Value value = evaluate_state(state, for_.items[0]);
-	for (size_t i = 0; i < value.value->array_view.length; i++) {
+	for (long int i = 0; i < value.value->array_view.length->integer.value; i++) {
 		Value_Data *item_value = value.value->array_view.values[i];
 
 		Value *values = NULL;

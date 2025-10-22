@@ -55,7 +55,7 @@ typedef struct {
 } Array_Type_Value;
 
 typedef struct {
-	size_t length;
+	Value_Data *length;
 	Value_Data **values;
 } Array_View_Value;
 

@@ -1488,7 +1488,7 @@ static Node_Data *process_for(Context *context, Node *node) {
 		size_t length;
 		switch (looped_value_type.value->tag) {
 			case ARRAY_VIEW_TYPE_VALUE: {
-				length = looped_value.value->array_view.length;
+				length = looped_value.value->array_view.length->integer.value;
 				break;
 			}
 			case RANGE_TYPE_VALUE: {
@@ -1591,6 +1591,8 @@ static Node_Data *process_function(Context *context, Node *node, bool given_stat
 
 	if (static_argument && !given_static_arguments) {
 		data->type = create_value(FUNCTION_TYPE_STUB_VALUE);
+		context->compile_only = compile_only_parent;
+		context->returned = returned_parent;
 		return data;
 	}
 
@@ -2214,7 +2216,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			for (long int i = 0; i < arrlen(values); i++) {
 				switch (values[i].value->tag) {
 					case ARRAY_VIEW_VALUE:
-						total_length += values[i].value->array_view.length;
+						total_length += values[i].value->array_view.length->integer.value;
 						break;
 					case BYTE_VALUE:
 						total_length += 1;
@@ -2231,7 +2233,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			for (long int i = 0; i < arrlen(values); i++) {
 				switch (values[i].value->tag) {
 					case ARRAY_VIEW_VALUE:
-						for (size_t j = 0; j < values[i].value->array_view.length; j++) {
+						for (long int j = 0; j < values[i].value->array_view.length->integer.value; j++) {
 							source_string[index++] = values[i].value->array_view.values[j]->byte.value;
 						}
 						break;
@@ -2287,9 +2289,9 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 			Value string = evaluate(context, internal.inputs[0]);
 
-			char *source = malloc(string.value->array_view.length + 1);
-			source[string.value->array_view.length] = '\0';
-			for (size_t i = 0; i < string.value->array_view.length; i++) {
+			char *source = malloc(string.value->array_view.length->integer.value + 1);
+			source[string.value->array_view.length->integer.value] = '\0';
+			for (long int i = 0; i < string.value->array_view.length->integer.value; i++) {
 				source[i] = string.value->array_view.values[i]->byte.value;
 			}
 
@@ -2361,7 +2363,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.values = NULL;
-					items_value->array_view.length = arrlen(type.value->struct_type.members);
+					items_value->array_view.length = create_integer(arrlen(type.value->struct_type.members)).value;
 					for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 						struct_item_value->struct_.values = NULL;
@@ -2381,7 +2383,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.values = NULL;
-						name_value->array_view.length = name_string_length;
+						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
 							byte_value->byte.value = name_string.ptr[i];
@@ -2404,7 +2406,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->union_type.items);
+					items_value->array_view.length = create_integer(arrlen(type.value->union_type.items)).value;
 					for (long int i = 0; i < arrlen(type.value->union_type.items); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 
@@ -2412,7 +2414,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
+						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
 							byte_value->byte.value = name_string.ptr[i];
@@ -2435,7 +2437,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->tagged_union_type.items);
+					items_value->array_view.length = create_integer(arrlen(type.value->tagged_union_type.items)).value;
 					for (long int i = 0; i < arrlen(type.value->tagged_union_type.items); i++) {
 						Value_Data *struct_item_value = value_new(STRUCT_VALUE);
 
@@ -2443,7 +2445,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
+						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
 							byte_value->byte.value = name_string.ptr[i];
@@ -2466,13 +2468,13 @@ static Node_Data *process_internal(Context *context, Node *node) {
 					value_data->struct_.values = NULL;
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
-					items_value->array_view.length = arrlen(type.value->enum_type.items);
+					items_value->array_view.length = create_integer(arrlen(type.value->enum_type.items)).value;
 					for (long int i = 0; i < arrlen(type.value->enum_type.items); i++) {
 						String_View name_string = type.value->enum_type.items[i];
 						size_t name_string_length = name_string.len;
 
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
-						name_value->array_view.length = name_string_length;
+						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
 							Value_Data *byte_value = value_new(BYTE_VALUE);
 							byte_value->byte.value = name_string.ptr[i];
@@ -2523,7 +2525,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 					Value_Data *items_value = value_new(ARRAY_VIEW_VALUE);
 					items_value->array_view.values = NULL;
-					items_value->array_view.length = arrlen(type.value->tuple_type.members);
+					items_value->array_view.length = create_integer(arrlen(type.value->tuple_type.members)).value;
 					for (long int i = 0; i < arrlen(type.value->tuple_type.members); i++) {
 						Value_Data *type_value = type.value->tuple_type.members[i].value;
 						arrpush(items_value->array_view.values, type_value);
@@ -2608,13 +2610,13 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 			Value string = evaluate(context, internal.inputs[0]);
 
-			char *message = malloc(string.value->array_view.length + 1);
-			message[string.value->array_view.length] = '\0';
-			for (size_t i = 0; i < string.value->array_view.length; i++) {
+			char *message = malloc(string.value->array_view.length->integer.value + 1);
+			message[string.value->array_view.length->integer.value] = '\0';
+			for (long int i = 0; i < string.value->array_view.length->integer.value; i++) {
 				message[i] = string.value->array_view.values[i]->byte.value;
 			}
 
-			handle_semantic_error(context, node->location, "%.*s", (int) string.value->array_view.length, message);
+			handle_semantic_error(context, node->location, "%.*s", (int) string.value->array_view.length->integer.value, message);
 			return data;
 		}
 		default:
