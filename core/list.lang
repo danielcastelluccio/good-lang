@@ -1,5 +1,5 @@
-def List = fn (T: type): type {
-	return struct {
+def! List = fn (T: type): type {
+	return struct@ {
 		items: ^[_]T,
 		length: uint,
 		capacity: uint,

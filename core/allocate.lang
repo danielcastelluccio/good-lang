@@ -57,4 +57,27 @@ def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Alloc
 	};
 };
 
+def Failing_Allocator = struct {
+	op allocator = fn (_: ^self): Allocator {
+		return .{ failing_allocator_allocate };
+	};
+};
+
+// Do not modify, is a global so a pointer can be taken.
+def!* failing_allocator = global: Failing_Allocator => .{};
+
+def failing_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Allocate_Error {
+	switch mode {
+		case ALLOC => {
+			return err(OUT_OF_MEMORY);
+		}
+		case REALLOC => {
+			return err(OUT_OF_MEMORY);
+		}
+		case FREE => {
+			return ok(null);
+		}
+	};
+};
+
 def c = import("c.lang");

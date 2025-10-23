@@ -410,31 +410,31 @@ static int print_type_outer(Value type, char *buffer) {
 }
 
 static void handle_expected_type_error(Context *context, Node *node, Value wanted, Value given) {
-	char wanted_string[64] = {};
+	char wanted_string[128] = {};
 	print_type_outer(wanted, wanted_string);
-	char given_string[64] = {};
+	char given_string[128] = {};
 	print_type_outer(given, given_string);
 	handle_semantic_error(context, node->location, "Expected %s, but got %s", wanted_string, given_string);
 }
 
 static void handle_mismatched_type_error(Context *context, Node *node, Value type1, Value type2) {
-	char type1_string[64] = {};
+	char type1_string[128] = {};
 	print_type_outer(type1, type1_string);
-	char type2_string[64] = {};
+	char type2_string[128] = {};
 	print_type_outer(type2, type2_string);
 	handle_semantic_error(context, node->location, "Mismatched types %s and %s", type1_string, type2_string);
 }
 
 #define handle_type_error(/* Node * */ node, /* char * */ message, /* Value */ type) { \
-	char type_string[64] = {}; \
+	char type_string[128] = {}; \
 	print_type_outer(type, type_string); \
 	handle_semantic_error(context, node->location, message, type_string); \
 }
 
 #define handle_2type_error(/* Node * */ node, /* char * */ message, /* Value */ type1, /* Value */ type2) { \
-	char type1_string[64] = {}; \
+	char type1_string[128] = {}; \
 	print_type_outer(type1, type1_string); \
-	char type2_string[64] = {}; \
+	char type2_string[128] = {}; \
 	print_type_outer(type2, type2_string); \
 	handle_semantic_error(context, node->location, message, type1_string, type2_string); \
 }
@@ -536,26 +536,28 @@ static bool pattern_match(Node *node, Value value, Context *context, String_View
 	return true;
 }
 
-static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments) {
+static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments, String_View **used_inferred_arguments) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (node->pointer_type.inner == NULL) return false;
-			return uses_inferred_arguments(node->pointer_type.inner, inferred_arguments);
+			return uses_inferred_arguments(node->pointer_type.inner, inferred_arguments, used_inferred_arguments);
 		}
 		case ARRAY_TYPE_NODE: {
-			return uses_inferred_arguments(node->array_type.inner, inferred_arguments) || uses_inferred_arguments(node->array_type.size, inferred_arguments);
+			return uses_inferred_arguments(node->array_type.inner, inferred_arguments, used_inferred_arguments) || uses_inferred_arguments(node->array_type.size, inferred_arguments, used_inferred_arguments);
 		}
 		case CALL_NODE: {
+			bool uses = false;
 			for (long int i = 0; i < arrlen(node->call.arguments); i++) {
-				if (uses_inferred_arguments(node->call.arguments[i], inferred_arguments)) {
-					return true;
+				if (uses_inferred_arguments(node->call.arguments[i], inferred_arguments, used_inferred_arguments)) {
+					uses = true;
 				}
 			}
-			return false;
+			return uses;
 		}
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
 				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
+					if (used_inferred_arguments != NULL) arrpush(*used_inferred_arguments, node->identifier.value);
 					return true;
 				}
 			}
@@ -563,43 +565,6 @@ static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments)
 		}
 		default:
 			return false;
-	}
-}
-
-static void process_initial_argument_types(Context *context, Value_Data *function_value, Node **arguments) {
-	Node *function_type_node = NULL;
-	switch (function_value->tag) {
-		case FUNCTION_STUB_VALUE:
-			function_type_node = function_value->function_stub.node->function.function_type;
-			break;
-		case FUNCTION_VALUE:
-			return;
-		default:
-			assert(false);
-	}
-
-	String_View *inferred_arguments = NULL;
-	if (function_type_node != NULL) {
-		Function_Argument *function_node_arguments = function_type_node->function_type.arguments;
-
-		for (long int k = 0; k < arrlen(function_node_arguments); k++) {
-			if (function_node_arguments[k].inferred) {
-				arrpush(inferred_arguments, function_node_arguments[k].identifier);
-			}
-		}
-
-		for (long int i = 0; i < arrlen(arguments); i++) {
-			Value type = get_type(context, arguments[i]);
-			if (type.value == NULL) {
-				if (function_type_node != NULL) {
-					Function_Argument *function_node_arguments = function_type_node->function_type.arguments;
-					long int function_argument_index = i + arrlen(inferred_arguments);
-					if (function_argument_index < arrlen(function_node_arguments) && uses_inferred_arguments(function_node_arguments[function_argument_index].type, inferred_arguments)) {
-						process_node(context, arguments[i]);
-					}
-				}
-			}
-		}
 	}
 }
 
@@ -629,6 +594,17 @@ static Custom_Operator_Function find_custom_operator(Context *context, Value typ
 
 static Node_Data *process_function(Context *context, Node *node, bool given_static_arguments);
 
+static bool is_literal(Node *node) {
+	switch (node->kind) {
+		case NUMBER_NODE:
+		case STRING_NODE:
+		case BOOLEAN_NODE:
+			return true;
+		default:
+			return false;
+	}
+}
+
 static Value process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Node **call_arguments) {
 	typedef struct {
 		String_View identifier;
@@ -653,6 +629,27 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 
 				if (function_arguments[k].default_value != NULL) {
 					process_node(context, function_arguments[k].default_value);
+				}
+			}
+		}
+
+		String_View *used_inferred_arguments = NULL;
+		for (long int i = 0; i < arrlen(call_arguments); i++) {
+			Value type = get_type(context, call_arguments[i]);
+			if (type.value == NULL) {
+				long int function_argument_index = i + arrlen(inferred_arguments);
+				if (function_argument_index < arrlen(function_arguments) && !is_literal(call_arguments[i]) && uses_inferred_arguments(function_arguments[function_argument_index].type, inferred_arguments, &used_inferred_arguments)) {
+					process_node(context, call_arguments[i]);
+				}
+			}
+		}
+
+		for (long int i = 0; i < arrlen(call_arguments); i++) {
+			Value type = get_type(context, call_arguments[i]);
+			if (type.value == NULL) {
+				long int function_argument_index = i + arrlen(inferred_arguments);
+				if (function_argument_index < arrlen(function_arguments) && is_literal(call_arguments[i]) && uses_inferred_arguments(function_arguments[function_argument_index].type, inferred_arguments, NULL) && !uses_inferred_arguments(function_arguments[function_argument_index].type, used_inferred_arguments, NULL)) {
+					process_node(context, call_arguments[i]);
 				}
 			}
 		}
@@ -938,7 +935,6 @@ static Node_Data *process_array_access(Context *context, Node *node) {
 		arrpush(arguments, array_access.parent);
 		arrpush(arguments, array_access.index);
 
-		process_initial_argument_types(context, custom_operator_function.function, arguments);
 		custom_operator_function.function = process_call_generic(context, node, (Value) { .value = custom_operator_function.function }, &custom_operator_function.function_type, arguments).value;
 
 		item_type = custom_operator_function.function_type.value->function_type.return_type.value->pointer_type.inner;
@@ -1264,8 +1260,6 @@ static Node_Data *process_call(Context *context, Node *node) {
 	Value function_value = {};
 	if (is_trivially_evaluatable(call.function, function_data)) {
 		function_value = evaluate(context, call.function);
-
-		process_initial_argument_types(context, function_value.value, call.arguments);
 	}
 	function_value = process_call_generic(context, node, function_value, &function_type, call.arguments);
 
@@ -1294,12 +1288,11 @@ static Node_Data *process_call_method(Context *context, Node *node) {
 
 	Custom_Operator_Function custom_operator_function = find_custom_operator(context, argument1_type.value->pointer_type.inner, call_method.method);
 	if (custom_operator_function.function == NULL) {
-		char type_string[64] = {};
+		char type_string[128] = {};
 		print_type_outer(argument1_type.value->pointer_type.inner, type_string);
 		handle_semantic_error(context, node->location, "Method '%.*s' not found for %s", (int) call_method.method.len, call_method.method.ptr, type_string);
 	}
 
-	process_initial_argument_types(context, custom_operator_function.function, arguments);
 	custom_operator_function.function = process_call_generic(context, node, (Value) { .value = custom_operator_function.function }, &custom_operator_function.function_type, arguments).value;
 
 	Node_Data *data = context->temporary_context.data;

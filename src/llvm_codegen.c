@@ -761,7 +761,7 @@ static LLVMValueRef generate_catch(Node *node, State *state) {
 	}
 
 	LLVMValueRef error_result = generate_node(catch.error, state);
-	if (error_result != NULL) {
+	if (has_result_value && error_result != NULL) {
 		LLVMBuildStore(state->llvm_builder, error_result, result);
 	}
 
