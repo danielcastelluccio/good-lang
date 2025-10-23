@@ -700,6 +700,36 @@ static Node *parse_struct_type(Lexer *lexer) {
 		struct_->struct_type.inherit_function = false;
 	}
 
+	struct_->struct_type.arguments = NULL;
+	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
+		lexer_consume(lexer);
+
+		if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
+			while (true) {
+				Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+				lexer_consume_check(lexer, COLON);
+				Node *type = parse_expression(lexer);
+
+				Struct_Argument argument = {
+					.identifier = identifier.string,
+					.type = type
+				};
+				arrpush(struct_->struct_type.arguments, argument);
+
+				Token_Data token = lexer_peek(lexer);
+				if (token.kind == COMMA) {
+					lexer_consume(lexer);
+				} else if (token.kind == PARENTHESIS_CLOSED) {
+					break;
+				} else {
+					handle_token_error_no_expected(lexer, token);
+				}
+			}
+		}
+
+		lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+	}
+
 	struct_->struct_type.members = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED && !lexer_peek_check(lexer, KEYWORD_OP)) {

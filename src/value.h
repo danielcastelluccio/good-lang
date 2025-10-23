@@ -35,6 +35,8 @@ typedef enum {
 	RESULT_TYPE_VALUE,
 	STRUCT_VALUE,
 	STRUCT_TYPE_VALUE,
+	STRUCT_TYPE_STUB_VALUE,
+	STRUCT_TYPE_TYPE_STUB_VALUE,
 	TAGGED_UNION_VALUE,
 	TAGGED_UNION_TYPE_VALUE,
 	TUPLE_TYPE_VALUE,
@@ -125,6 +127,20 @@ typedef struct {
 	Node *inherited_node;
 	Scope *scopes;
 } Struct_Type_Value;
+
+typedef struct {
+	String_View identifier;
+	Value type;
+} Struct_Argument_Value;
+
+typedef struct {
+	Node *node;
+	Scope *scopes;
+} Struct_Type_Stub_Value;
+
+typedef struct {
+	Struct_Argument_Value *arguments; // stb_ds
+} Struct_Type_Type_Stub_Value;
 
 typedef struct {
 	String_View identifier;
@@ -249,6 +265,8 @@ struct Value_Data {
 		Result_Type_Value result_type;
 		Struct_Value struct_;
 		Struct_Type_Value struct_type;
+		Struct_Type_Stub_Value struct_type_stub;
+		Struct_Type_Type_Stub_Value struct_type_type_stub;
 		Tagged_Union_Value tagged_union;
 		Tagged_Union_Type_Value tagged_union_type;
 		Tuple_Type_Value tuple_type;

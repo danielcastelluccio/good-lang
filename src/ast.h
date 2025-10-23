@@ -285,6 +285,12 @@ typedef struct {
 } String_Node;
 
 typedef struct {
+	String_View identifier;
+	Node *type;
+} Struct_Argument;
+
+typedef struct {
+	Struct_Argument *arguments; // stb_ds
 	Structure_Member *members; // stb_ds
 	Node **operators; // stb_ds
 	bool inherit_function;

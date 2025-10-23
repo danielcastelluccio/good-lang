@@ -351,6 +351,10 @@ static int print_type(Value type, char *buffer) {
 			buffer += sprintf(buffer, "fn[]()");
 			break;
 		}
+		case STRUCT_TYPE_TYPE_STUB_VALUE: {
+			buffer += sprintf(buffer, "struct()");
+			break;
+		}
 		case GLOBAL_TYPE_VALUE: {
 			buffer += sprintf(buffer, "global:");
 			buffer += print_type(type.value->global_type.type, buffer);
@@ -574,6 +578,8 @@ static void process_initial_argument_types(Context *context, Value_Data *functio
 			break;
 		case FUNCTION_VALUE:
 			return;
+		case STRUCT_TYPE_STUB_VALUE:
+			return;
 		default:
 			assert(false);
 	}
@@ -628,6 +634,7 @@ static Custom_Operator_Function find_custom_operator(Context *context, Value typ
 }
 
 static Node_Data *process_function(Context *context, Node *node, bool given_static_arguments);
+static Node_Data *process_struct_type(Context *context, Node *node, bool given_arguments);
 
 static Value process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Node **call_arguments) {
 	typedef struct {
@@ -637,6 +644,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 
 	String_View *inferred_arguments = NULL;
 
+	long int real_argument_count = 0;
 	if (function_value.value != NULL && function_value.value->tag == FUNCTION_STUB_VALUE) {
 		Node *function_node = function_value.value->function_stub.node;
 		Node *function_type_node = function_node->function.function_type;
@@ -730,7 +738,7 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 			handle_semantic_error(context, node->location, "Pattern matching failed");
 		}
 
-		struct { size_t key; Typed_Value value; } *static_arguments_map = NULL;;
+		struct { size_t key; Typed_Value value; } *static_arguments_map = NULL;
 		for (long int i = 0; i < arrlen(static_arguments); i++) {
 			hmput(static_arguments_map, sv_hash(static_arguments[i].identifier), static_arguments[i].value);
 		}
@@ -815,38 +823,64 @@ static Value process_call_generic(Context *context, Node *node, Value function_v
 		}
 
 		context->compile_only = compile_only_parent;
+
+		for (long int i = 0; i < arrlen(function_type->value->function_type.arguments); i++) {
+			if (!function_type->value->function_type.arguments[i].inferred) real_argument_count++;
+		}
+	} else if (function_value.value == NULL || function_value.value->tag == FUNCTION_VALUE) {
+		for (long int i = 0; i < arrlen(function_type->value->function_type.arguments); i++) {
+			if (!function_type->value->function_type.arguments[i].inferred) real_argument_count++;
+		}
+	} else if (function_value.value != NULL && function_value.value->tag == STRUCT_TYPE_STUB_VALUE) {
+		Node *struct_node = function_value.value->struct_type_stub.node;
+		Struct_Argument *struct_arguments = struct_node->struct_type.arguments;
+
+		real_argument_count = arrlen(struct_arguments);
 	}
 
-	if (function_type->value->tag != FUNCTION_TYPE_VALUE) {
-		handle_type_error(node, "Expected function, but got %s", *function_type);
+	if (function_type->value->tag != FUNCTION_TYPE_VALUE && function_type->value->tag != STRUCT_TYPE_TYPE_STUB_VALUE) {
+		handle_type_error(node, "Expected function or struct type, but got %s", *function_type);
 	}
 
-	assert(function_type->value->tag == FUNCTION_TYPE_VALUE);
-	long int real_argument_count = 0;
-	for (long int i = 0; i < arrlen(function_type->value->function_type.arguments); i++) {
-		if (!function_type->value->function_type.arguments[i].inferred) real_argument_count++;
-	}
-	if (arrlen(call_arguments) != real_argument_count && !function_type->value->function_type.variadic) {
+	assert(function_type->value->tag == FUNCTION_TYPE_VALUE || function_type->value->tag == STRUCT_TYPE_TYPE_STUB_VALUE);
+	if (arrlen(call_arguments) != real_argument_count && (function_type->value->tag != FUNCTION_TYPE_VALUE || !function_type->value->function_type.variadic)) {
 		handle_semantic_error(context, node->location, "Expected %li arguments, but got %li arguments", real_argument_count, arrlen(call_arguments));
 	}
 
-	Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
-	for (long int argument_index = 0; argument_index < arrlen(call_arguments); argument_index++) {
-		long int function_argument_index = argument_index + arrlen(inferred_arguments);
-		if (function_argument_index < arrlen(function_type_arguments) && function_type_arguments[function_argument_index].static_) continue;
+	if (function_type->value->tag == FUNCTION_TYPE_VALUE) {
+		Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
+		for (long int argument_index = 0; argument_index < arrlen(call_arguments); argument_index++) {
+			long int function_argument_index = argument_index + arrlen(inferred_arguments);
+			if (function_argument_index < arrlen(function_type_arguments) && function_type_arguments[function_argument_index].static_) continue;
 
-		Value wanted_type = {};
-		if (function_argument_index < arrlen(function_type_arguments) || !function_type->value->function_type.variadic) {
-			wanted_type = function_type_arguments[function_argument_index].type;
+			Value wanted_type = {};
+			if (function_argument_index < arrlen(function_type_arguments) || !function_type->value->function_type.variadic) {
+				wanted_type = function_type_arguments[function_argument_index].type;
+			}
+
+			Temporary_Context temporary_context = { .wanted_type = wanted_type };
+			Value type = process_node_context(context, temporary_context, call_arguments[argument_index])->type;
+
+			if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
+				handle_expected_type_error(context, node, wanted_type, type);
+			}
+			function_argument_index++;
 		}
+	} else {
+		Struct_Argument_Value *struct_type_arguments = function_type->value->struct_type_type_stub.arguments;
+		for (long int argument_index = 0; argument_index < arrlen(call_arguments); argument_index++) {
+			long int function_argument_index = argument_index + arrlen(inferred_arguments);
 
-		Temporary_Context temporary_context = { .wanted_type = wanted_type };
-		Value type = process_node_context(context, temporary_context, call_arguments[argument_index])->type;
+			Value wanted_type = struct_type_arguments[function_argument_index].type;
 
-		if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
-			handle_expected_type_error(context, node, wanted_type, type);
+			Temporary_Context temporary_context = { .wanted_type = wanted_type };
+			Value type = process_node_context(context, temporary_context, call_arguments[argument_index])->type;
+
+			if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
+				handle_expected_type_error(context, node, wanted_type, type);
+			}
+			function_argument_index++;
 		}
-		function_argument_index++;
 	}
 
 	return function_value;
@@ -2933,13 +2967,30 @@ static Node_Data *process_string(Context *context, Node *node) {
 	return data;
 }
 
-static Node_Data *process_struct_type(Context *context, Node *node) {
+static Node_Data *process_struct_type(Context *context, Node *node, bool given_arguments) {
 	Struct_Type_Node struct_type = node->struct_type;
+
+	Node_Data *data = context->temporary_context.data;
+	if (struct_type.arguments != NULL && !given_arguments) {
+		data->type = create_value(STRUCT_TYPE_TYPE_STUB_VALUE);
+
+		data->type.value->struct_type_type_stub.arguments = NULL;
+		for (long int i = 0; i < arrlen(struct_type.arguments); i++) {
+			process_node(context, struct_type.arguments[i].type);
+			Struct_Argument_Value argument = {
+				.identifier = struct_type.arguments[i].identifier,
+				.type = evaluate(context, struct_type.arguments[i].type)
+			};
+			arrpush(data->type.value->struct_type_type_stub.arguments, argument);
+		}
+		
+		return data;
+	}
+
 	for (long int i = 0; i < arrlen(struct_type.members); i++) {
 		process_node(context, struct_type.members[i].type);
 	}
 
-	Node_Data *data = context->temporary_context.data;
 	data->type = create_value(TYPE_TYPE_VALUE);
 	return data;
 }
@@ -3592,7 +3643,7 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			value = process_string(context, node);
 			break;
 		case STRUCT_TYPE_NODE:
-			value = process_struct_type(context, node);
+			value = process_struct_type(context, node, false);
 			break;
 		case STRUCTURE_NODE:
 			value = process_structure(context, node);

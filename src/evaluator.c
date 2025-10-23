@@ -303,6 +303,19 @@ static Value evaluate_function_type(State *state, Node *node) {
 static Value evaluate_struct_type(State *state, Node *node) {
 	Struct_Type_Node struct_type = node->struct_type;
 
+	if (get_data(state->context, node)->type.value->tag == STRUCT_TYPE_TYPE_STUB_VALUE) {
+		Value stub = create_value(STRUCT_TYPE_STUB_VALUE);
+		stub.value->struct_type_stub.node = node;
+
+		Scope *scopes = NULL;
+		for (long int i = 0; i < arrlen(state->context->scopes); i++) {
+			arrpush(scopes, state->context->scopes[i]);
+		}
+		stub.value->struct_type_stub.scopes = scopes;
+
+		return stub;
+	}
+
 	Value_Data *struct_value_data = value_new(STRUCT_TYPE_VALUE);
 	struct_value_data->struct_type.node = node;
 	Value struct_value = create_value_data(struct_value_data, node);
@@ -598,36 +611,79 @@ static Value evaluate_call(State *state, Node *node) {
 	function_arguments = arguments;
 	function_node = function.value->function.node;
 
-	assert(function.value->tag == FUNCTION_VALUE);
+	if (function.value->tag == FUNCTION_VALUE) {
+		Function_Value function_value = function.value->function;
 
-	Function_Value function_value = function.value->function;
+		Variable_Datas saved_variables = state->variables;
+		Switch_Datas saved_switchs = state->switchs;
+		For_Datas saved_fors = state->fors;
 
-	Variable_Datas saved_variables = state->variables;
-	Switch_Datas saved_switchs = state->switchs;
-	For_Datas saved_fors = state->fors;
+		state->variables = NULL;
+		state->switchs = NULL;
+		state->fors = NULL;
 
-	state->variables = NULL;
-	state->switchs = NULL;
-	state->fors = NULL;
+		jmp_buf prev_jmp;
+		memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
+		if (!setjmp(jmp)) {
+			result = evaluate_state(state, function_value.body).value;
+		} else {
+			result = jmp_result.value;
+		}
+		memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
 
-	jmp_buf prev_jmp;
-	memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
-	if (!setjmp(jmp)) {
-		result = evaluate_state(state, function_value.body).value;
-	} else {
-		result = jmp_result.value;
+		state->variables = saved_variables;
+		state->switchs = saved_switchs;
+		state->fors = saved_fors;
+
+		function_arguments = saved_function_arguments;
+		function_node = saved_function_node;
+		state->context->static_id = saved_static_argument_id;
+
+		return clone_value(create_value_data(result, node));
+	} else if (function.value->tag == STRUCT_TYPE_STUB_VALUE) {
+		Node *struct_node = function.value->struct_type_stub.node;
+		Struct_Argument *struct_arguments = struct_node->struct_type.arguments;
+
+		// Static_Argument_Value *static_arguments = NULL;
+		// for (long int call_arg_index = 0; call_arg_index < arrlen(arguments); call_arg_index++) {
+		// 	bool compile_only_saved = state->context->compile_only;
+		// 	size_t saved_static_id = state->context->static_id;
+		// 	state->context->static_id = 0;
+		// 	reset_node(state->context, struct_arguments[call_arg_index].type);
+		// 	process_node(state->context, struct_arguments[call_arg_index].type);
+		// 	Value wanted_type = evaluate(context, struct_arguments[call_arg_index].type);
+		// 	context->static_id = saved_static_id;
+		// 	context->compile_only = compile_only_saved;
+
+		// 	Temporary_Context temporary_context = { .wanted_type = wanted_type };
+		// 	Value type = process_node_context(context, temporary_context, call_arguments[call_arg_index])->type;
+
+		// 	Static_Argument_Value static_argument = {
+		// 		.identifier = struct_arguments[call_arg_index].identifier,
+		// 		.value = { .value = evaluate(context, call_arguments[call_arg_index]), .type = type }
+		// 	};
+		// 	arrpush(static_arguments, static_argument);
+		// }
+
+		arrpush(state->context->scopes, (Scope) { .node = node });
+		for (long int i = 0; i < arrlen(arguments); i++) {
+			Scope_Identifier scope_identifier = {
+				.tag = SCOPE_STATIC_BINDING,
+				.static_binding = arguments[i]
+			};
+			hmput(arrlast(state->context->scopes).identifiers, sv_hash(struct_arguments[i].identifier), scope_identifier);
+		}
+
+		*function_type = process_struct_type(context, function_value.value->function_stub.node, true)->type;
+		function_value = evaluate(context, function_value.value->function_stub.node);
+
+		(void) arrpop(state->context->scopes);
+
+		return evaluate_state(state, function.value->struct_type_stub.node);
 	}
-	memcpy(&jmp, &prev_jmp, sizeof(jmp_buf));
 
-	state->variables = saved_variables;
-	state->switchs = saved_switchs;
-	state->fors = saved_fors;
-
-	function_arguments = saved_function_arguments;
-	function_node = saved_function_node;
-	state->context->static_id = saved_static_argument_id;
-
-	return clone_value(create_value_data(result, node));
+	assert(false);
+	return (Value) {};
 }
 
 static Value evaluate_binary_op(State *state, Node *node) {
