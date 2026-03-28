@@ -1158,7 +1158,7 @@ static Node_Data *process_block(Context *context, Node *node) {
 			} else {
 				Value type = process_node(context, statement)->type;
 				if (type.value != NULL) {
-					handle_type_error(statement, "Unused value %s", type);
+					// handle_type_error(statement, "Unused value %s", type);
 				}
 			}
 		}

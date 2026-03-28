@@ -196,11 +196,11 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 	increment_position(lexer);
 	switch (character) {
 		case ':':
-			if (lexer->source[lexer->position] == ':') {
-				result = create_token(COLON_COLON, lexer);
-				increment_position(lexer);
-				break;
-			}
+			// if (lexer->source[lexer->position] == ':') {
+			// 	result = create_token(COLON_COLON, lexer);
+			// 	increment_position(lexer);
+			// 	break;
+			// }
 			result = create_token(COLON, lexer);
 			break;
 		case ';':

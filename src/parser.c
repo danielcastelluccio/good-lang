@@ -47,7 +47,7 @@ static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
 	Token_Data token = lexer_peek(lexer);
-	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COMMA || token.kind == EQUALS || token.kind == VERTICAL_BAR || token.kind == KEYWORD_EXTERN) {
+	if (token.kind == CURLY_BRACE_CLOSED || token.kind == PARENTHESIS_CLOSED || token.kind == SEMICOLON || token.kind == COLON || token.kind == COMMA || token.kind == EQUALS || token.kind == VERTICAL_BAR || token.kind == KEYWORD_EXTERN) {
 		return NULL;
 	}
 
@@ -400,7 +400,47 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		}
 	}
 
-	return parse_actual_identifier(module, token);
+	if (lexer_peek(lexer).kind == COLON) {
+		lexer_consume(lexer);
+
+		Token_Data next = lexer_peek(lexer);
+		bool dollar = false;
+		if (next.kind == DOLLAR) {
+			lexer_consume(lexer);
+			dollar = true;
+		}
+
+		Node *type = parse_expression_or_nothing(lexer);
+
+		next = lexer_peek(lexer);
+		if (next.kind == COLON) {
+			lexer_consume(lexer);
+
+			Node *define = ast_new(DEFINE_NODE, token.location);
+			define->define.identifier = token.string;
+			define->define.public = true;
+			define->define.type = type;
+			define->define.expression = parse_expression(lexer);
+			define->define.special = define->define.expression->kind == GLOBAL_NODE || define->define.expression->kind == CONST_NODE;
+			return define;
+		}
+
+		Node *variable = ast_new(VARIABLE_NODE, token.location);
+		variable->variable.name = token.string;
+		variable->variable.static_ = dollar;
+		variable->variable.type = type;
+		if (next.kind == EQUALS) {
+			lexer_consume(lexer);
+			variable->variable.value = parse_expression(lexer);
+		} else {
+			variable->variable.value = NULL;
+		}
+
+		return variable;
+	} else {
+		Node *node = parse_actual_identifier(module, token);
+		return node;
+	}
 }
 
 static Node *parse_dereference(Lexer *lexer, Node *node) {
@@ -1179,6 +1219,11 @@ static Node *parse_switch(Lexer *lexer) {
 	return switch_;
 }
 
+static bool needs_semicolon(Node *node) {
+	Node_Kind kind = node->kind;
+	return !(kind == IF_NODE || kind == WHILE_NODE || (kind == DEFINE_NODE && (node->define.expression->kind == FUNCTION_NODE || node->define.expression->kind == STRUCT_TYPE_NODE || node->define.expression->kind == UNION_TYPE_NODE)));
+}
+
 static Node *parse_block(Lexer *lexer) {
 	Token_Data first_token = lexer_consume_check(lexer, CURLY_BRACE_OPEN);
 
@@ -1187,11 +1232,16 @@ static Node *parse_block(Lexer *lexer) {
 
 	block->block.statements = NULL;
 	while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-		arrpush(block->block.statements, parse_statement(lexer));
+		Node *statement = parse_statement(lexer);
+		arrpush(block->block.statements, statement);
 		if (lexer_peek(lexer).kind == CURLY_BRACE_CLOSED) {
 			block->block.has_result = true;
 		} else {
-			lexer_consume_check(lexer, SEMICOLON);
+			if (needs_semicolon(statement)) {
+				lexer_consume_check(lexer, SEMICOLON);
+			} else if (lexer_peek(lexer).kind == SEMICOLON) {
+				lexer_consume(lexer);
+			}
 		}
 	}
 
@@ -1290,7 +1340,7 @@ static Node *parse_not(Lexer *lexer) {
 static Node *parse_run(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *run = ast_new(RUN_NODE, first_token.location);
-	run->run.node = parse_statement(lexer);
+	run->run.node = parse_expression(lexer);
 	return run;
 }
 
@@ -1403,13 +1453,14 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		.variadic = variadic
 	};
 
+	Node *body = NULL;
 	String_View extern_ = {};
 	if (lexer_peek_check(lexer, KEYWORD_EXTERN)) {
 		lexer_consume(lexer);
 		extern_ = lexer_consume_check(lexer, STRING).string;
+	} else {
+		body = parse_separated_statement(lexer);
 	}
-
-	Node *body = parse_separated_statement_or_nothing(lexer);
 
 	if (body != NULL || extern_.ptr != NULL) {
 		Node *function = ast_new(FUNCTION_NODE, first_token.location);
@@ -1675,8 +1726,14 @@ Node *parse_source(Data *data, char *source, size_t length, char *path) {
 	block->block.has_result = false;
 	block->block.statements = NULL;
 	while (lexer_peek(&lexer).kind != END_OF_FILE) {
-		arrpush(block->block.statements, parse_expression(&lexer));
-		lexer_consume_check(&lexer, SEMICOLON);
+		Node *expression = parse_expression(&lexer);
+		arrpush(block->block.statements, expression);
+
+		if (needs_semicolon(expression)) {
+			lexer_consume_check(&lexer, SEMICOLON);
+		} else if (lexer_peek(&lexer).kind == SEMICOLON) {
+			lexer_consume(&lexer);
+		}
 	}
 	root->module.body = block;
 
