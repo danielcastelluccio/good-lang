@@ -320,10 +320,10 @@ static Value evaluate_struct_type(State *state, Node *node) {
 		arrpush(struct_value_data->struct_type.members, evaluate_state(state, struct_type.members[i].type));
 	}
 
-	if (struct_type.inherit_function) {
-		struct_value_data->struct_type.inherited_node = function_node;
-		struct_value_data->struct_type.inherited_arguments = function_arguments;
-	}
+	// if (struct_type.inherit_function) {
+	// 	struct_value_data->struct_type.inherited_node = function_node;
+	// 	struct_value_data->struct_type.inherited_arguments = function_arguments;
+	// }
 
 	Scope *scopes = NULL;
 	for (long int i = 0; i < arrlen(state->context->scopes); i++) {

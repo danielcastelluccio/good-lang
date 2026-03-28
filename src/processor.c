@@ -494,21 +494,21 @@ static bool pattern_match(Node *node, Value value, Context *context, String_View
 			}
 			break;
 		}
-		case CALL_NODE: {
-			if (value.value->tag == STRUCT_TYPE_VALUE) {
-				process_node(context, node->call.function);
-				Node *function_node = evaluate(context, node->call.function).value->function.node;
+		// case CALL_NODE: {
+		// 	if (value.value->tag == STRUCT_TYPE_VALUE) {
+		// 		process_node(context, node->call.function);
+		// 		Node *function_node = evaluate(context, node->call.function).value->function.node;
 
-				if (function_node == value.value->struct_type.inherited_node) {
-					for (long int i = 0; i < arrlen(node->call.arguments); i++) {
-						if (!pattern_match(node->call.arguments[i], value.value->struct_type.inherited_arguments[i], context, inferred_arguments, match_result)) {
-							return false;
-						}
-					}
-				}
-			}
-			break;
-		}
+		// 		if (function_node == value.value->struct_type.inherited_node) {
+		// 			for (long int i = 0; i < arrlen(node->call.arguments); i++) {
+		// 				if (!pattern_match(node->call.arguments[i], value.value->struct_type.inherited_arguments[i], context, inferred_arguments, match_result)) {
+		// 					return false;
+		// 				}
+		// 			}
+		// 		}
+		// 	}
+		// 	break;
+		// }
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
 				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
