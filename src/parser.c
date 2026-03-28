@@ -330,6 +330,11 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 					internal->internal.kind = INTERNAL_SELF;
 					internal->internal.assign_value = NULL;
 					return internal;
+				} else if (sv_eq_cstr(token.string, "sint")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_SINT;
+					internal->internal.assign_value = NULL;
+					return internal;
 				} else if (sv_eq_cstr(token.string, "size_of")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_SIZE_OF;
