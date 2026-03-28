@@ -37,6 +37,7 @@ Value *function_arguments;
 bool value_equal(Value_Data *value1, Value_Data *value2) {
 	if (value1 == NULL || value2 == NULL) return false;
 	if (value1->tag != value2->tag) return false;
+	if (value1 == value2) return true;
 
 	switch (value1->tag) {
 		case POINTER_TYPE_VALUE: {
@@ -302,8 +303,9 @@ static Value evaluate_function_type(State *state, Node *node) {
 
 static Value evaluate_struct_type(State *state, Node *node) {
 	Struct_Type_Node struct_type = node->struct_type;
+	Node_Data *struct_type_data = get_data(state->context, node);
 
-	Value_Data *struct_value_data = value_new(STRUCT_TYPE_VALUE);
+	Value_Data *struct_value_data = struct_type_data->struct_type.value.value;
 	struct_value_data->struct_type.node = node;
 	Value struct_value = create_value_data(struct_value_data, node);
 

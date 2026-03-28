@@ -261,6 +261,10 @@ typedef struct {
 	Use_Data_Internal internal;
 } Use_Data;
 
+typedef struct {
+	Value value;
+} Struct_Type_Data;
+
 struct Node_Data {
 	union {
 		Identifier_Data identifier;
@@ -296,8 +300,10 @@ struct Node_Data {
 		Internal_Data internal;
 		Operator_Data operator;
 		Use_Data use;
+		Struct_Type_Data struct_type;
 	};
 	Value type;
+	bool processed;
 };
 
 Node_Data *data_new();

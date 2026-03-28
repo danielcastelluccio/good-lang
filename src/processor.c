@@ -592,6 +592,30 @@ static Custom_Operator_Function find_custom_operator(Context *context, Value typ
 	return (Custom_Operator_Function) {};
 }
 
+Typed_Value preprocess_node(Context *context, Node *node) {
+	Node_Data **data = get_data_ref(context, node);
+	if (*data != NULL) {
+		return (Typed_Value) {};
+	}
+
+	*data = data_new();
+	(*data)->processed = false;
+
+	Typed_Value result = {};
+
+	switch (node->kind) {
+		case STRUCT_TYPE_NODE: {
+			(*data)->struct_type.value = result.value = create_value(STRUCT_TYPE_VALUE);
+			(*data)->type = result.type = create_value(TYPE_TYPE_VALUE);
+			break;
+		}
+		default:
+			break;
+	}
+
+	return result;
+}
+
 static Node_Data *process_function(Context *context, Node *node, bool given_static_arguments);
 
 static bool is_literal(Node *node) {
@@ -1371,11 +1395,14 @@ static Node_Data *process_define(Context *context, Node *node) {
 		wanted_type = evaluate(context, define.type);
 	}
 
+	Node_Data *data = context->temporary_context.data;
+
+	Typed_Value initial = preprocess_node(context, define.expression);
+	data->define.typed_value = initial;
+
 	Temporary_Context temporary_context = { .wanted_type = wanted_type };
 	Value type = process_node_context(context, temporary_context, define.expression)->type;
 	Value value = evaluate(context, define.expression);
-
-	Node_Data *data = context->temporary_context.data;
 
 	data->define.typed_value = (Typed_Value) {
 		.value = value,
@@ -3450,12 +3477,14 @@ static Node_Data *process_while(Context *context, Node *node) {
 }
 
 Node_Data *process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
+	preprocess_node(context, node);
+
 	Node_Data **data = get_data_ref(context, node);
-	if (*data != NULL) {
+	if ((*data)->processed) {
 		return *data;
 	}
 
-	*data = data_new();
+	(*data)->processed = true;
 
 	temporary_context.data = *data;
 
