@@ -1338,7 +1338,9 @@ static Node_Data *process_catch(Context *context, Node *node) {
 		};
 		hmput(arrlast(context->scopes).identifiers, sv_hash(catch.binding), scope_identifier);
 	}
-	process_node(context, catch.error);
+
+	Temporary_Context temporary_context = { .wanted_type = result_type.value->result_type.value };
+	process_node_context(context, temporary_context, catch.error);
 	(void) arrpop(context->scopes);
 
 	Node_Data *data = context->temporary_context.data;
