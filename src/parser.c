@@ -823,7 +823,7 @@ static Use_Internal parse_use_internal(Lexer *lexer) {
 	Use_Internal result;
 	Token_Data token = lexer_consume(lexer);
 	if (token.kind == IDENTIFIER) {
-		if (lexer_peek(lexer).kind == COLON_COLON) {
+		if (lexer_peek(lexer).kind == AT) {
 			result.kind = USE_INTERNAL_SINGLE;
 
 			result.single.value = token.string;
@@ -872,7 +872,7 @@ static Node *parse_use(Lexer *lexer) {
 
 	use->use.node = parse_expression_internal(lexer, true);
 
-	lexer_consume_check(lexer, COLON_COLON);
+	lexer_consume_check(lexer, AT);
 	use->use.internal = parse_use_internal(lexer);
 
 	return use;
@@ -1221,7 +1221,7 @@ static Node *parse_switch(Lexer *lexer) {
 
 static bool needs_semicolon(Node *node) {
 	Node_Kind kind = node->kind;
-	return !(kind == IF_NODE || kind == WHILE_NODE || (kind == DEFINE_NODE && (node->define.expression->kind == FUNCTION_NODE || node->define.expression->kind == STRUCT_TYPE_NODE || node->define.expression->kind == UNION_TYPE_NODE)));
+	return !(kind == IF_NODE || kind == WHILE_NODE || (kind == DEFINE_NODE && (node->define.expression->kind == FUNCTION_NODE || node->define.expression->kind == STRUCT_TYPE_NODE || node->define.expression->kind == UNION_TYPE_NODE || node->define.expression->kind == TAGGED_UNION_TYPE_NODE || node->define.expression->kind == ENUM_TYPE_NODE)));
 }
 
 static Node *parse_block(Lexer *lexer) {
@@ -1459,7 +1459,7 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		lexer_consume(lexer);
 		extern_ = lexer_consume_check(lexer, STRING).string;
 	} else {
-		body = parse_separated_statement(lexer);
+		body = parse_separated_statement_or_nothing(lexer);
 	}
 
 	if (body != NULL || extern_.ptr != NULL) {
@@ -1664,12 +1664,12 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 			case BRACE_OPEN:
 				result = parse_array_access_or_slice(lexer, result);
 				break;
-			case COLON:
+			case HASH:
 				result = parse_call_method(lexer, result);
 				break;
-			case COLON_COLON:
+			case AT:
 				if (!skip_colon_colon) {
-					lexer_consume_check(lexer, COLON_COLON);
+					lexer_consume_check(lexer, AT);
 					Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
 					result = parse_actual_identifier(result, token);
 				} else {

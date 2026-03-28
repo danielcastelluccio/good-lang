@@ -37,21 +37,21 @@ def!* c_allocator = global: C_Allocator => .{};
 def c_allocator_allocate = fn (mode: Allocate_Mode, ptr: ^, size: uint): ^!Allocate_Error {
 	switch mode {
 		case ALLOC => {
-			if c::malloc(size) |ptr| {
+			if c@malloc(size) |ptr| {
 				return ok(ptr);
 			} else {
 				return err(OUT_OF_MEMORY);
 			};
 		}
 		case REALLOC => {
-			if c::realloc(ptr, size) |ptr| {
+			if c@realloc(ptr, size) |ptr| {
 				return ok(ptr);
 			} else {
 				return err(OUT_OF_MEMORY);
 			};
 		}
 		case FREE => {
-			c::free(ptr);
+			c@free(ptr);
 			return ok(null);
 		}
 	};

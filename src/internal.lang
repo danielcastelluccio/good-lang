@@ -1,19 +1,19 @@
-def Struct_Item = struct {
+Struct_Item :: struct {
 	name: []byte,
 	type: type
-};
+}
 
-def Union_Item = struct {
+Union_Item :: struct {
 	name: []byte,
 	type: type
-};
+}
 
-def Tagged_Union_Item = struct {
+Tagged_Union_Item :: struct {
 	name: []byte,
 	type: type
-};
+}
 
-def Type_Info = tagged_union {
+Type_Info :: tagged_union {
 	Integer: struct {
 		size: uint8,
 		signed: bool
@@ -49,10 +49,10 @@ def Type_Info = tagged_union {
 	},
 	Boolean: struct {
 	}
-};
+}
 
-def Operating_System = enum {
+Operating_System :: enum {
 	LINUX,
 	MACOS,
 	WINDOWS
-};
+}

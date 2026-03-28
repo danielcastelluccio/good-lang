@@ -293,6 +293,9 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 		case '$':
 			result = create_token(DOLLAR, lexer);
 			break;
+		case '#':
+			result = create_token(HASH, lexer);
+			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
 				increment_position(lexer);
@@ -525,6 +528,8 @@ char *token_to_string(Token_Kind kind) {
 			return "@";
 		case DOLLAR:
 			return "$";
+		case HASH:
+			return "#";
 		case VERTICAL_BAR:
 			return "|";
 		case LESS:
