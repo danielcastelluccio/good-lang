@@ -819,61 +819,12 @@ static Node *parse_union_type(Lexer *lexer) {
 	return union_;
 }
 
-static Use_Internal parse_use_internal(Lexer *lexer) {
-	Use_Internal result;
-	Token_Data token = lexer_consume(lexer);
-	if (token.kind == IDENTIFIER) {
-		if (lexer_peek(lexer).kind == AT) {
-			result.kind = USE_INTERNAL_SINGLE;
-
-			result.single.value = token.string;
-
-			lexer_consume(lexer);
-
-			result.single.internal = malloc(sizeof(Use_Internal));
-			*result.single.internal = parse_use_internal(lexer);
-		} else {
-			result.kind = USE_INTERNAL_SOLO;
-
-			result.solo.value = token.string;
-
-			result.solo.binding = (String_View) {};
-			if (lexer_peek(lexer).kind == KEYWORD_AS) {
-				lexer_consume(lexer);
-				result.solo.binding = lexer_consume_check(lexer, IDENTIFIER).string;
-			}
-		}
-	} else if (token.kind == CURLY_BRACE_OPEN) {
-		result.kind = USE_INTERNAL_MULTIPLE;
-		result.multiple = NULL;
-
-		while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-			arrpush(result.multiple, parse_use_internal(lexer));
-
-			if (lexer_peek(lexer).kind == COMMA) {
-				lexer_consume(lexer);
-			}
-		}
-
-		lexer_consume(lexer);
-	} else if (token.kind == ASTERISK) {
-		result.kind = USE_INTERNAL_ALL;
-	} else {
-		assert(false);
-	}
-
-	return result;
-}
-
 static Node *parse_use(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
 	Node *use = ast_new(USE_NODE, first_token.location);
 
-	use->use.node = parse_expression_internal(lexer, true);
-
-	lexer_consume_check(lexer, AT);
-	use->use.internal = parse_use_internal(lexer);
+	use->use.node = parse_expression(lexer);
 
 	return use;
 }

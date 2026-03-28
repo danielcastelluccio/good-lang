@@ -325,31 +325,8 @@ typedef struct {
 	Structure_Member *members; // stb_ds
 } Union_Type_Node;
 
-typedef struct Use_Internal Use_Internal;
-
-struct Use_Internal {
-	union {
-		Use_Internal *multiple; // stb_ds
-		struct {
-			Use_Internal *internal;
-			String_View value;
-		} single;
-		struct {
-			String_View value;
-			String_View binding;
-		} solo;
-	};
-	enum {
-		USE_INTERNAL_MULTIPLE,
-		USE_INTERNAL_SINGLE,
-		USE_INTERNAL_SOLO,
-		USE_INTERNAL_ALL
-	} kind;
-};
-
 typedef struct {
 	Node *node;
-	Use_Internal internal;
 } Use_Node;
 
 typedef struct {
