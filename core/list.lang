@@ -3,9 +3,9 @@ def! List = fn (T: type): type {
 		items: ^[_]T,
 		length: uint,
 		capacity: uint,
-		allocator: allocate@Allocator;
+		allocator: allocate.Allocator;
 
-		op add = fn (list: ^self, element: T): !allocate@Allocate_Error {
+		op add = fn (list: ^self, element: T): !allocate.Allocate_Error {
 			if list.length == list.capacity {
 				var new_capacity = list.capacity * 2;
 				if new_capacity == 0 => new_capacity = 1;
@@ -44,7 +44,7 @@ def! List = fn (T: type): type {
 	};
 };
 
-def! new = fn ($T: type, allocator: allocate@Allocator): List(T) {
+def! new = fn ($T: type, allocator: allocate.Allocator): List(T) {
 	.{ null, 0, 0, allocator }
 };
 

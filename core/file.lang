@@ -1,8 +1,8 @@
 def File = struct {
-	file: ^c@FILE;
+	file: ^c.FILE;
 
 	op read_to_buffer = fn (file: ^self, buffer: []byte): []byte {
-		var size = c@fread(buffer.ptr, 1, buffer.len, file.file);
+		var size = c.fread(buffer.ptr, 1, buffer.len, file.file);
 		buffer.len = size;
 		return buffer;
 	};
@@ -22,7 +22,7 @@ def path_slice_to_cstring = fn (path: []byte): [PATH_MAX]byte {
 
 def open = fn (path: []byte): File {
 	var new_path = path_slice_to_cstring(path);
-	return .{ c@fopen(cast(^[_, null]byte) &new_path, "r\0") };
+	return .{ c.fopen(cast(^[_, null]byte) &new_path, "r\0") };
 };
 
 def c = import("c.lang");

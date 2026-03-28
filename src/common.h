@@ -170,6 +170,8 @@ typedef struct {
 	Value item_type;
 	bool want_pointer;
 	bool pointer_access;
+	Value value;
+	bool special;
 } Structure_Access_Data;
 
 typedef struct {

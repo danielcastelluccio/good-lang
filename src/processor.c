@@ -911,6 +911,9 @@ static bool is_trivially_evaluatable(Node *node, Node_Data *data) {
 		case IDENTIFIER_NODE: {
 			return data->identifier.kind == IDENTIFIER_VALUE;
 		}
+		case STRUCTURE_ACCESS_NODE: {
+			return data->structure_access.structure_type.value->tag == MODULE_TYPE_VALUE;
+		}
 		default:
 			return false;
 	}
@@ -3029,93 +3032,120 @@ static Node_Data *process_structure(Context *context, Node *node) {
 static Node_Data *process_structure_access(Context *context, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 
-	Value raw_structure_type = process_node(context, structure_access.parent)->type;
-	if (context->temporary_context.want_pointer || structure_access.assign_value != NULL) {
-		raw_structure_type = process_enforce_pointer(context, structure_access.parent, raw_structure_type);
-	}
-
-	Value structure_type = raw_structure_type;
-	if (structure_type.value->tag == POINTER_TYPE_VALUE) {
-		structure_type = structure_type.value->pointer_type.inner;
-	}
-
-	if (structure_type.value->tag != STRUCT_TYPE_VALUE
-			&& structure_type.value->tag != TUPLE_TYPE_VALUE
-			&& structure_type.value->tag != UNION_TYPE_VALUE
-			&& structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
-		handle_type_error(node, "Cannot perform structure access operation on %s", structure_type);
-	}
-
-	Value item_type = {};
-	switch (structure_type.value->tag) {
-		case STRUCT_TYPE_VALUE: {
-			for (long int i = 0; i < arrlen(structure_type.value->struct_type.members); i++) {
-				if (sv_eq(structure_type.value->struct_type.node->struct_type.members[i].name, structure_access.name)) {
-					item_type = structure_type.value->struct_type.members[i];
-					break;
-				}
-			}
-			break;
-		}
-		case TUPLE_TYPE_VALUE: {
-			for (long int i = 0; i < arrlen(structure_type.value->tuple_type.members); i++) {
-				char name[21] = {};
-				sprintf(name, "_%li", i);
-				if (sv_eq_cstr(structure_access.name, name)) {
-					item_type = structure_type.value->tuple_type.members[i];
-					break;
-				}
-			}
-			break;
-		}
-		case UNION_TYPE_VALUE: {
-			for (long int i = 0; i < arrlen(structure_type.value->union_type.items); i++) {
-				if (sv_eq(structure_type.value->union_type.items[i].identifier, structure_access.name)) {
-					item_type = structure_type.value->union_type.items[i].type;
-					break;
-				}
-			}
-			break;
-		}
-		case ARRAY_VIEW_TYPE_VALUE: {
-			if (sv_eq_cstr(structure_access.name, "len")) {
-				item_type = create_integer_type(false, context->codegen.default_integer_size);
-			} else if (sv_eq_cstr(structure_access.name, "ptr")) {
-				item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
-			}
-			break;
-		}
-		default:
-			assert(false);
-	}
-
-	if (item_type.value == NULL) {
-		handle_semantic_error(context, node->location, "Item '%.*s' not found", (int) structure_access.name.len, structure_access.name.ptr);
-	}
-
 	Node_Data *data = context->temporary_context.data;
-	data->structure_access.structure_type = structure_type;
 	data->structure_access.want_pointer = context->temporary_context.want_pointer;
-	data->structure_access.item_type = item_type;
-	data->structure_access.pointer_access = raw_structure_type.value->tag == POINTER_TYPE_VALUE;
 
-	if (structure_access.assign_value != NULL) {
-		Temporary_Context temporary_context = { .wanted_type = item_type };
-		Value value_type = process_node_context(context, temporary_context, structure_access.assign_value)->type;
-		if (!type_assignable(item_type.value, value_type.value)) {
-			handle_expected_type_error(context, node, item_type, value_type);
+	Value raw_structure_type = process_node(context, structure_access.parent)->type;
+	if (raw_structure_type.value->tag == MODULE_TYPE_VALUE) {
+		Value module_value = evaluate(context, structure_access.parent);
+
+		Node *define_node = NULL;
+		Scope *define_scopes = NULL;
+		Typed_Value typed_value = lookup_resolve_define(context, module_value, node, (Lookup_Result) { .tag = LOOKUP_RESULT_FAIL }, structure_access.name, &define_scopes, data->structure_access.want_pointer, structure_access.assign_value, &define_node);
+
+		if (typed_value.value.value != NULL) {
+			typed_value.value.node = node;
+
+			data->structure_access.special = define_node != NULL && define_node->define.special;
+
+			data->structure_access.value = typed_value.value;
 		}
+
+		data->structure_access.item_type = typed_value.type;
+
+		if (structure_access.assign_value == NULL) {
+			data->type = typed_value.type;
+		}
+
+		data->structure_access.structure_type = raw_structure_type;
+
+		return data;
 	} else {
-		if (data->structure_access.want_pointer) {
-			Value_Data *pointer_item_type = value_new(POINTER_TYPE_VALUE);
-			pointer_item_type->pointer_type.inner = item_type;
-			item_type = (Value) { .value = pointer_item_type };
+		if (context->temporary_context.want_pointer || structure_access.assign_value != NULL) {
+			raw_structure_type = process_enforce_pointer(context, structure_access.parent, raw_structure_type);
 		}
 
-		data->type = item_type;
-	}
+		Value structure_type = raw_structure_type;
+		if (structure_type.value->tag == POINTER_TYPE_VALUE) {
+			structure_type = structure_type.value->pointer_type.inner;
+		}
 
-	return data;
+		if (structure_type.value->tag != STRUCT_TYPE_VALUE
+				&& structure_type.value->tag != TUPLE_TYPE_VALUE
+				&& structure_type.value->tag != UNION_TYPE_VALUE
+				&& structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+			handle_type_error(node, "Cannot perform structure access operation on %s", structure_type);
+		}
+
+		Value item_type = {};
+		switch (structure_type.value->tag) {
+			case STRUCT_TYPE_VALUE: {
+				for (long int i = 0; i < arrlen(structure_type.value->struct_type.members); i++) {
+					if (sv_eq(structure_type.value->struct_type.node->struct_type.members[i].name, structure_access.name)) {
+						item_type = structure_type.value->struct_type.members[i];
+						break;
+					}
+				}
+				break;
+			}
+			case TUPLE_TYPE_VALUE: {
+				for (long int i = 0; i < arrlen(structure_type.value->tuple_type.members); i++) {
+					char name[21] = {};
+					sprintf(name, "_%li", i);
+					if (sv_eq_cstr(structure_access.name, name)) {
+						item_type = structure_type.value->tuple_type.members[i];
+						break;
+					}
+				}
+				break;
+			}
+			case UNION_TYPE_VALUE: {
+				for (long int i = 0; i < arrlen(structure_type.value->union_type.items); i++) {
+					if (sv_eq(structure_type.value->union_type.items[i].identifier, structure_access.name)) {
+						item_type = structure_type.value->union_type.items[i].type;
+						break;
+					}
+				}
+				break;
+			}
+			case ARRAY_VIEW_TYPE_VALUE: {
+				if (sv_eq_cstr(structure_access.name, "len")) {
+					item_type = create_integer_type(false, context->codegen.default_integer_size);
+				} else if (sv_eq_cstr(structure_access.name, "ptr")) {
+					item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
+				}
+				break;
+			}
+			default:
+				assert(false);
+		}
+
+		if (item_type.value == NULL) {
+			handle_semantic_error(context, node->location, "Item '%.*s' not found", (int) structure_access.name.len, structure_access.name.ptr);
+		}
+
+		data->structure_access.structure_type = structure_type;
+		data->structure_access.item_type = item_type;
+		data->structure_access.pointer_access = raw_structure_type.value->tag == POINTER_TYPE_VALUE;
+
+		if (structure_access.assign_value != NULL) {
+			Temporary_Context temporary_context = { .wanted_type = item_type };
+			Value value_type = process_node_context(context, temporary_context, structure_access.assign_value)->type;
+			if (!type_assignable(item_type.value, value_type.value)) {
+				handle_expected_type_error(context, node, item_type, value_type);
+			}
+		} else {
+			if (data->structure_access.want_pointer) {
+				Value_Data *pointer_item_type = value_new(POINTER_TYPE_VALUE);
+				pointer_item_type->pointer_type.inner = item_type;
+				item_type = (Value) { .value = pointer_item_type };
+			}
+
+			data->type = item_type;
+		}
+
+		return data;
+	}
 }
 
 static Node_Data *process_switch(Context *context, Node *node) {

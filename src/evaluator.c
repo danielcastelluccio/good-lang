@@ -817,6 +817,10 @@ static Value evaluate_structure_access(State *state, Node *node) {
 	Structure_Access_Node structure_access = node->structure_access;
 	Structure_Access_Data structure_access_data = get_data(state->context, node)->structure_access;
 
+	if (structure_access_data.structure_type.value->tag == MODULE_TYPE_VALUE) {
+		return structure_access_data.value;
+	}
+
 	switch (structure_access_data.structure_type.value->tag) {
 		case STRUCT_TYPE_VALUE: {
 			Struct_Type_Value structure_type = structure_access_data.structure_type.value->struct_type;
