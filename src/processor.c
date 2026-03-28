@@ -2260,11 +2260,11 @@ static Node_Data *process_internal(Context *context, Node *node) {
 				source[i] = string.value->array_view.values[i]->byte.value;
 			}
 
-			if (strcmp(source, "core") == 0) {
+			if (strlen(source) <= 5 || strcmp(source + strlen(source) - 5, ".lang") != 0) {
 				char *cwd = getcwd(NULL, PATH_MAX);
-				source = malloc(strlen(cwd) + 16);
-				strcpy(source, cwd);
-				strcat(source, "/core/core.lang");
+				char *new_source = malloc(strlen(cwd) + 32);
+				sprintf(new_source, "%s/modules/%s.lang", cwd, source);
+				source = new_source;
 			} else {
 				size_t slash_index = 0;
 				char *node_path = context->data->source_files[node->location.path_ref];
