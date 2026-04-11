@@ -174,6 +174,7 @@ typedef struct {
 	String_View value;
 	Node *assign_value;
 	bool assign_static;
+	bool polymorphic;
 } Identifier_Node;
 
 typedef struct {
@@ -334,6 +335,7 @@ typedef struct {
 	Node *type;
 	Node *value;
 	bool static_;
+	bool polymorphic;
 } Variable_Node;
 
 typedef struct {

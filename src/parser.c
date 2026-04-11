@@ -142,16 +142,17 @@ static Node *parse_structure(Lexer *lexer) {
 	return structure;
 }
 
-static Node *parse_actual_identifier(Node *module, Token_Data token) {
+static Node *parse_actual_identifier(Node *module, Token_Data token, bool polymorphic) {
 	Node *identifier = ast_new(IDENTIFIER_NODE, token.location);
 	identifier->identifier.module = module;
 	identifier->identifier.value = token.string;
 	identifier->identifier.assign_value = NULL;
+	identifier->identifier.polymorphic = polymorphic;
 
 	return identifier;
 }
 
-static Node *parse_identifier(Lexer *lexer, Node *module) {
+static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 	Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
 
 	if (module == NULL) {
@@ -404,11 +405,11 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 		lexer_consume(lexer);
 
 		Token_Data next = lexer_peek(lexer);
-		bool dollar = false;
-		if (next.kind == DOLLAR) {
-			lexer_consume(lexer);
-			dollar = true;
-		}
+		// bool dollar = false;
+		// if (next.kind == DOLLAR) {
+		// 	lexer_consume(lexer);
+		// 	dollar = true;
+		// }
 
 		Node *type = parse_expression_or_nothing(lexer);
 
@@ -427,7 +428,8 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 		Node *variable = ast_new(VARIABLE_NODE, token.location);
 		variable->variable.name = token.string;
-		variable->variable.static_ = dollar;
+		variable->variable.polymorphic = polymorphic;
+		variable->variable.static_ = false;
 		variable->variable.type = type;
 		if (next.kind == EQUALS) {
 			lexer_consume(lexer);
@@ -438,7 +440,7 @@ static Node *parse_identifier(Lexer *lexer, Node *module) {
 
 		return variable;
 	} else {
-		Node *node = parse_actual_identifier(module, token);
+		Node *node = parse_actual_identifier(module, token, polymorphic);
 		return node;
 	}
 }
@@ -534,6 +536,124 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
 	return call;
+}
+
+static void add_inferred_arguments(Function_Argument **arguments, Node *argument) {
+	switch (argument->kind) {
+		case IDENTIFIER_NODE: {
+			Identifier_Node *identifier = &argument->identifier;
+			if (identifier->polymorphic) {
+				Function_Argument argument = {
+					.identifier = identifier->value,
+					.static_ = true,
+					.inferred = true
+				};
+				arrpush(*arguments, argument);
+			}
+			break;
+		}
+		case INTERNAL_NODE:
+			break;
+		default:
+			assert(false);
+	}
+}
+
+static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data first_token, Node *first_argument) {
+	Function_Argument *arguments = NULL;
+	
+	if (first_argument != NULL) {
+		Function_Argument argument = {
+			.identifier = first_argument->variable.name,
+			.type = first_argument->variable.type,
+			.static_ = false
+		};
+		add_inferred_arguments(&arguments, first_argument->variable.type);
+		arrpush(arguments, argument);
+	}
+
+	bool variadic = false;
+	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
+		lexer_consume_check(lexer, COMMA);
+
+		while (true) {
+			if (lexer_peek(lexer).kind == PERIOD_PERIOD) {
+				lexer_consume(lexer);
+				variadic = true;
+			} else {
+				Node *argument_node = parse_expression(lexer);
+
+				Function_Argument argument = {
+					.identifier = argument_node->variable.name,
+					.type = argument_node->variable.type,
+					.static_ = false
+				};
+				add_inferred_arguments(&arguments, argument_node->variable.type);
+				arrpush(arguments, argument);
+			}
+
+			Token_Data token = lexer_peek(lexer);
+			if (token.kind == COMMA) {
+				lexer_consume(lexer);
+			} else if (token.kind == PARENTHESIS_CLOSED) {
+				break;
+			} else {
+				handle_token_error_no_expected(lexer, token);
+			}
+		}
+	}
+
+	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+	Node *return_ = NULL;
+	if (lexer_peek(lexer).kind == COLON) {
+		lexer_consume_check(lexer, COLON);
+		return_ = parse_expression(lexer);
+	}
+
+	Node *function_type = ast_new(FUNCTION_TYPE_NODE, first_token.location);
+	function_type->function_type = (Function_Type_Node) {
+		.arguments = arguments,
+		.return_ = return_,
+		.variadic = variadic
+	};
+
+	Node *body = NULL;
+	String_View extern_ = {};
+	if (lexer_peek_check(lexer, KEYWORD_EXTERN)) {
+		lexer_consume(lexer);
+		extern_ = lexer_consume_check(lexer, STRING).string;
+	} else {
+		body = parse_separated_statement_or_nothing(lexer);
+	}
+
+	if (body != NULL || extern_.ptr != NULL) {
+		Node *function = ast_new(FUNCTION_NODE, first_token.location);
+		function->function.function_type = function_type;
+		function->function.body = body;
+		function->function.extern_ = extern_;
+		function->function.static_id_counter = 0;
+		return function;
+	} else {
+		return function_type;
+	}
+}
+
+static Node *parse_parenthesis(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	if (lexer_peek(lexer).kind == PARENTHESIS_CLOSED) {
+		return parse_function_or_function_type_partial(lexer, first_token, NULL);
+	} else {
+		Node *result = parse_expression(lexer);
+
+		if (result->kind == VARIABLE_NODE) {
+			return parse_function_or_function_type_partial(lexer, first_token, result);
+		} else {
+			lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+			return result;
+		}
+	}
 }
 
 static size_t get_precedence(Binary_Op_Node_Kind kind) {
@@ -1464,12 +1584,17 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 			result = parse_number(lexer);
 			break;
 		}
+		case DOLLAR: {
+			lexer_consume(lexer);
+			result = parse_identifier(lexer, NULL, true);
+			break;
+		}
 		case PERIOD_CURLY_BRACE_OPEN: {
 			result = parse_structure(lexer);
 			break;
 		}
 		case IDENTIFIER: {
-			result = parse_identifier(lexer, NULL);
+			result = parse_identifier(lexer, NULL, false);
 			break;
 		}
 		case KEYWORD_BREAK: {
@@ -1581,9 +1706,7 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 			break;
 		}
 		case PARENTHESIS_OPEN: {
-			lexer_consume(lexer);
-			result = parse_expression(lexer);
-			lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+			result = parse_parenthesis(lexer);
 			break;
 		}
 		default:
@@ -1625,7 +1748,7 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 				if (!skip_colon_colon) {
 					lexer_consume_check(lexer, AT);
 					Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
-					result = parse_actual_identifier(result, token);
+					result = parse_actual_identifier(result, token, false);
 				} else {
 					operating = false;
 				}
