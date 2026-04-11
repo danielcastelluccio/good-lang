@@ -559,9 +559,14 @@ static void add_inferred_arguments(Function_Argument **arguments, Node *argument
 	}
 }
 
-static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data first_token, Node *first_argument) {
+typedef struct {
+	Function_Argument *arguments;
+	bool variadic;
+} Parse_Arguments_Result;
+
+static Parse_Arguments_Result parse_arguments_partial(Lexer *lexer, Node *first_argument) {
 	Function_Argument *arguments = NULL;
-	
+
 	if (first_argument != NULL) {
 		Function_Argument argument = {
 			.identifier = first_argument->variable.name,
@@ -574,7 +579,9 @@ static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data fi
 
 	bool variadic = false;
 	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
-		lexer_consume_check(lexer, COMMA);
+		if (first_argument) {
+			lexer_consume_check(lexer, COMMA);
+		}
 
 		while (true) {
 			if (lexer_peek(lexer).kind == PERIOD_PERIOD) {
@@ -604,6 +611,17 @@ static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data fi
 	}
 
 	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+	return (Parse_Arguments_Result) {
+		.arguments = arguments,
+		.variadic = variadic
+	};
+}
+
+static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data first_token, Node *first_argument) {
+	Parse_Arguments_Result result = parse_arguments_partial(lexer, first_argument);
+	Function_Argument *arguments = result.arguments;
+	bool variadic = result.variadic;
 
 	Node *return_ = NULL;
 	if (lexer_peek(lexer).kind == COLON) {
@@ -864,6 +882,13 @@ static Node *parse_struct_type(Lexer *lexer) {
 	// } else {
 	// 	struct_->struct_type.inherit_function = false;
 	// }
+	
+	Function_Argument *arguments = NULL;
+	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
+		lexer_consume(lexer);
+		arguments = parse_arguments_partial(lexer, NULL).arguments;
+		(void) arguments;
+	}
 
 	struct_->struct_type.members = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
@@ -905,6 +930,20 @@ static Node *parse_struct_type(Lexer *lexer) {
 	}
 
 	lexer_consume_check(lexer, CURLY_BRACE_CLOSED);
+
+	if (arguments) {
+		Node *function_type = ast_new(FUNCTION_TYPE_NODE, first_token.location);
+		function_type->function_type.arguments = arguments;
+		function_type->function_type.variadic = false;
+		function_type->function_type.return_ = NULL;
+
+		Node *function = ast_new(FUNCTION_NODE, first_token.location);
+		function->function.function_type = function_type;
+		function->function.body = struct_;
+		function->function.static_id_counter = 0;
+
+		return function;
+	}
 
 	return struct_;
 }
