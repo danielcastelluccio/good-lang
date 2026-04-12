@@ -410,6 +410,11 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 						};
 					}
 				} else {
+					if (lexer->source[lexer->position] == '>') {
+						increment_position(lexer);
+						result = create_token(MINUS_ARROW, lexer);
+						break;
+					}
 					result = create_token(MINUS, lexer);
 				}
 				break;
@@ -520,6 +525,8 @@ char *token_to_string(Token_Kind kind) {
 			return "+";
 		case MINUS:
 			return "-";
+		case MINUS_ARROW:
+			return "->";
 		case SLASH:
 			return "/";
 		case AMPERSAND:

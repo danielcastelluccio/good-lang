@@ -698,8 +698,8 @@ static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data fi
 	bool variadic = result.variadic;
 
 	Node *return_ = NULL;
-	if (lexer_peek(lexer).kind == COLON) {
-		lexer_consume_check(lexer, COLON);
+	if (lexer_peek(lexer).kind == MINUS_ARROW) {
+		lexer_consume(lexer);
 		return_ = parse_expression(lexer);
 	}
 
