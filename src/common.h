@@ -32,8 +32,8 @@ typedef struct {
 		SCOPE_BINDING,
 		SCOPE_STATIC_BINDING,
 		SCOPE_STATIC_VARIABLE,
-		SCOPE_DEFINE,
-		SCOPE_USE
+		SCOPE_USE,
+		SCOPE_IMPORT
 	} tag;
 	union {
 		Variable_Definition variable;
@@ -42,6 +42,7 @@ typedef struct {
 		Variable_Definition static_variable;
 		Node *define;
 		Node *use;
+		Node *import;
 	};
 } Scope_Identifier;
 
@@ -53,6 +54,7 @@ typedef struct {
 typedef struct {
 	// struct { size_t key; Scope_Identifier value; } *identifiers; // stb_ds
 	Scope_Key_Identifier *identifiers;
+	Value *imports;
 	Node *node;
 	Value node_type;
 	Value current_type;

@@ -6,7 +6,7 @@ def print_stdout_fn = fn (_: ^, char: byte) {
 };
 
 def! print = fn [T]($fmt: string, args: T) {
-	stdout_printer#print(fmt, args);
+	stdout_printer$$print(fmt, args);
 };
 
 def c = import("c.lang");

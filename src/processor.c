@@ -47,6 +47,10 @@ static Node *find_define(Block_Node block, String_View identifier) {
 
 typedef struct {
 	Node *node;
+	enum {
+		DEFINE_LOCAL,
+		DEFINE_NONLOCAL
+	} kind;
 	Scope *scope;
 } Define_Scope;
 
@@ -57,6 +61,10 @@ typedef struct {
 			Node *node;
 			Scope *scope;
 		} use;
+		struct {
+			Node *node;
+			Scope *scope;
+		} import;
 		Node *variable;
 		Variable_Definition static_variable;
 		struct {
@@ -72,6 +80,7 @@ typedef struct {
 		LOOKUP_RESULT_FAIL,
 		LOOKUP_RESULT_DEFINE,
 		LOOKUP_RESULT_USE,
+		LOOKUP_RESULT_IMPORT,
 		LOOKUP_RESULT_DEFINE_INTERNAL,
 		LOOKUP_RESULT_VARIABLE,
 		LOOKUP_RESULT_BINDING,
@@ -83,24 +92,19 @@ typedef struct {
 
 static Lookup_Result lookup(Context *context, String_View identifier) {
 	if (context->internal_root != NULL) {
-		Scope_Identifier scope_identifier = {};
-		for (long int i = 0; i < arrlen(context->internal_scope.identifiers); i++) {
-			if (sv_eq(context->internal_scope.identifiers[i].key, identifier)) {
-				scope_identifier = context->internal_scope.identifiers[i].value;
-				break;
+		for (long int i = 0; i < arrlen(context->internal_scope.node->block.statements); i++) {
+			Node *statement = context->internal_scope.node->block.statements[i];
+			if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+				Define_Scope *defines = NULL;
+				Define_Scope define = {
+					.node = statement,
+					.kind = DEFINE_LOCAL,
+					.scope = &context->internal_scope
+				};
+				arrpush(defines, define);
+				return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = defines };
 			}
 		}
-
-		if (scope_identifier.tag == SCOPE_DEFINE) {
-			Define_Scope *defines = NULL;
-			Define_Scope define = {
-				.node = scope_identifier.define,
-				.scope = &context->internal_scope
-			};
-			arrpush(defines, define);
-			return (Lookup_Result) { .tag = LOOKUP_RESULT_DEFINE_INTERNAL, .define = defines };
-		}
-		assert(scope_identifier.tag == SCOPE_INVALID);
 	}
 
 	Define_Scope *defines = NULL;
@@ -108,6 +112,35 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 	bool found_function = false;
 	for (long int i = 0; i < arrlen(context->scopes); i++) {
 		Scope *scope = &context->scopes[arrlen(context->scopes) - i - 1];
+
+		if (scope->node->kind == BLOCK_NODE) {
+			for (long int i = 0; i < arrlen(scope->node->block.statements); i++) {
+				Node *statement = scope->node->block.statements[i];
+				if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+					Define_Scope define = {
+						.node = statement,
+						.kind = DEFINE_LOCAL,
+						.scope = scope
+					};
+					arrpush(defines, define);
+				}
+			}
+
+			for (long int i = 0; i < arrlen(scope->imports); i++) {
+				Node *block = scope->imports[i].value->module.body;
+				for (long int j = 0; j < arrlen(block->block.statements); j++) {
+					Node *statement = block->block.statements[j];
+					if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+						Define_Scope define = {
+							.node = statement,
+							.kind = DEFINE_NONLOCAL,
+							.scope = scope->imports[i].value->module.scopes
+						};
+						arrpush(defines, define);
+					}
+				}
+			}
+		}
 
 		for (long int i = 0; i < arrlen(scope->identifiers); i++) {
 			if (sv_eq(scope->identifiers[i].key, identifier)) {
@@ -122,16 +155,10 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_BINDING, .static_binding = scope_identifier.static_binding.value, .type = scope_identifier.static_binding.type };
 					case SCOPE_STATIC_VARIABLE:
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = { .node = scope_identifier.static_variable.node, .node_data = scope_identifier.static_variable.node_data }, .type = scope_identifier.static_variable.node_data->variable.type };
-					case SCOPE_DEFINE: {
-						Define_Scope define = {
-							.node = scope_identifier.define,
-							.scope = scope
-						};
-						arrpush(defines, define);
-						break;
-					}
 					case SCOPE_USE:
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_USE, .use = { .node = scope_identifier.use, .scope = scope } };
+					case SCOPE_IMPORT:
+						return (Lookup_Result) { .tag = LOOKUP_RESULT_IMPORT, .import = { .node = scope_identifier.import, .scope = scope } };
 					case SCOPE_INVALID:
 						break;
 				}
@@ -1324,19 +1351,12 @@ static Node_Data *process_block(Context *context, Node *node) {
 
 	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(block.statements); i++) {
-		if (block.statements[i]->kind == DEFINE_NODE) {
-			Scope_Key_Identifier scope_identifier = {
-				.key = block.statements[i]->define.identifier,
-				.value = {
-					.tag = SCOPE_DEFINE,
-					.define = block.statements[i]
-				}
-			};
-
-			arrpush(arrlast(context->scopes).identifiers, scope_identifier);
-		} else if (block.statements[i]->kind == USE_NODE) {
+		if (block.statements[i]->kind == USE_NODE) {
 			Node_Data *data = process_node(context, block.statements[i]);
 			add_uses(context, block.statements[i], data->use.identifiers);
+		} else if (block.statements[i]->kind == INTERNAL_NODE && block.statements[i]->internal.kind == INTERNAL_IMPORT) {
+			Node_Data *data = process_node(context, block.statements[i]);
+			arrpush(arrlast(context->scopes).imports, data->internal.value);
 		}
 	}
 
@@ -2016,10 +2036,16 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 			for (long int i = 0; i < arrlen(lookup_result.define); i++) {
 				Scope *define_scopes_temp = NULL;
 
-				for (long i = 0; i < arrlen(context->scopes); i++) {
-					arrpush(define_scopes_temp, context->scopes[i]);
+				if (lookup_result.define[i].kind == DEFINE_LOCAL) {
+					for (long i = 0; i < arrlen(context->scopes); i++) {
+						arrpush(define_scopes_temp, context->scopes[i]);
 
-					if (lookup_result.define[i].scope == &context->scopes[i]) break;
+						if (lookup_result.define[i].scope == &context->scopes[i]) break;
+					}
+				} else {
+					for (long i = 0; i < arrlen(lookup_result.define[i].scope); i++) {
+						arrpush(define_scopes_temp, lookup_result.define[i].scope[i]);
+					}
 				}
 
 				Define_Scope define = lookup_result.define[i];
@@ -2027,7 +2053,7 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 				Node *function_type_node = function_node->function.function_type;
 				assert(function_node->kind == FUNCTION_NODE);
 
-				arrpush(define_scopes_temp, (Scope) { .node = function_node});
+				arrpush(define_scopes_temp, (Scope) { .node = function_node });
 
 				Call_Argument *call_arguments = context->temporary_context.call_arguments;
 
@@ -2368,6 +2394,30 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 					typed_value = identifiers[i].typed_value;
 					break;
 				}
+			}
+			type = typed_value.type;
+			value = typed_value.value;
+			break;
+		}
+		case LOOKUP_RESULT_IMPORT: {
+			Scope *import_scopes = NULL;
+			for (long i = 0; i < arrlen(context->scopes); i++) {
+				arrpush(import_scopes, context->scopes[i]);
+
+				if (lookup_result.import.scope == &context->scopes[i]) break;
+			}
+			Node_Data *data = process_node(context, lookup_result.use.node);
+
+			Value module = data->internal.value;
+			Typed_Value typed_value = {};
+			for (long int i = 0; i < arrlen(module.value->module.body->block.statements); i++) {
+				Node *statement = module.value->module.body->block.statements[i];
+
+				if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier.value)) {
+					typed_value = process_node_with_scopes(context, node, import_scopes)->define.typed_value;
+					break;
+				}
+
 			}
 			type = typed_value.type;
 			value = typed_value.value;

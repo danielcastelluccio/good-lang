@@ -42,7 +42,6 @@ static Token_Data lexer_consume_check(Lexer *lexer, Token_Kind kind) {
 }
 
 static Node *parse_expression(Lexer *lexer);
-static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon);
 static Node *parse_statement(Lexer *lexer);
 
 static Node *parse_expression_or_nothing(Lexer *lexer) {
@@ -1283,6 +1282,19 @@ static Node *parse_while(Lexer *lexer) {
 	return while_;
 }
 
+static Node *parse_import(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
+	internal->internal.kind = INTERNAL_IMPORT;
+	internal->internal.inputs = NULL;
+	internal->internal.assign_value = NULL;
+
+	arrpush(internal->internal.inputs, parse_expression(lexer));
+
+	return internal;
+}
+
 static Node *parse_for(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
@@ -1680,7 +1692,7 @@ static Node *parse_statement(Lexer *lexer) {
 	return result;
 }
 
-static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
+static Node *parse_expression(Lexer *lexer) {
 	Token_Data token = lexer_peek(lexer);
 	Node *result = NULL;
 	switch (token.kind) {
@@ -1794,6 +1806,10 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 			result = parse_while(lexer);
 			break;
 		}
+		case DIRECTIVE_IMPORT: {
+			result = parse_import(lexer);
+			break;
+		}
 		case CURLY_BRACE_OPEN: {
 			result = parse_block(lexer);
 			break;
@@ -1854,17 +1870,13 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 			case BRACE_OPEN:
 				result = parse_array_access_or_slice(lexer, result);
 				break;
-			case HASH:
+			case DOLLAR_DOLLAR:
 				result = parse_call_method(lexer, result);
 				break;
 			case AT:
-				if (!skip_colon_colon) {
-					lexer_consume_check(lexer, AT);
-					Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
-					result = parse_actual_identifier(result, token, false);
-				} else {
-					operating = false;
-				}
+				lexer_consume_check(lexer, AT);
+				Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
+				result = parse_actual_identifier(result, token, false);
 				break;
 			case CARET:
 				result = parse_dereference(lexer, result);
@@ -1891,10 +1903,6 @@ static Node *parse_expression_internal(Lexer *lexer, bool skip_colon_colon) {
 	}
 
 	return result;
-}
-
-static Node *parse_expression(Lexer *lexer) {
-	return parse_expression_internal(lexer, false);
 }
 
 Node *parse_source_statement(Data *data, char *source, size_t length, size_t path_ref, size_t row, size_t column) {

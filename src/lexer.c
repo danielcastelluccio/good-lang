@@ -17,20 +17,16 @@ Lexer lexer_create(char *source, size_t source_length, uint32_t path_ref) {
 	};
 }
 
-static bool is_alphabetical_underscore(char character) {
-	return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_';
+static bool is_alphabetical_plus(char character) {
+	return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_' || character == '#';
 }
 
 static bool is_numeric(char character) {
 	return (character >= '0' && character <= '9');
 }
 
-static bool is_alphanumeric_underscore(char character) {
-	return is_alphabetical_underscore(character) || is_numeric(character);
-}
-
-static bool is_alphanumericplus(char character) {
-	return is_alphanumeric_underscore(character) || character == '_';
+static bool is_alphanumeric_plus(char character) {
+	return is_alphabetical_plus(character) || is_numeric(character);
 }
 
 static bool is_whitespace(char character) {
@@ -151,6 +147,9 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case 'w':
 			if (streq_len(identifier, len, "while", 5)) result = KEYWORD_WHILE;
+			break;
+		case '#':
+			if (streq_len(identifier, len, "#import", 7)) result = DIRECTIVE_IMPORT;
 			break;
 	}
 	return result;
@@ -291,10 +290,12 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(PERCENT, lexer);
 			break;
 		case '$':
+			if (lexer->source[lexer->position] == '$') {
+				increment_position(lexer);
+				result = create_token(DOLLAR_DOLLAR, lexer);
+				break;
+			}
 			result = create_token(DOLLAR, lexer);
-			break;
-		case '#':
-			result = create_token(HASH, lexer);
 			break;
 		case '.': {
 			if (lexer->source[lexer->position] == '.') {
@@ -348,12 +349,12 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			break;
 		}
 		default: {
-			if (is_alphabetical_underscore(character)) {
+			if (is_alphabetical_plus(character)) {
 				size_t string_start = lexer->position - 1;
 				size_t string_start_row = lexer->row;
 				size_t string_start_column = lexer->column - 1;
 
-				while (is_alphanumericplus(lexer->source[lexer->position]) && lexer->position < lexer->source_length) {
+				while (is_alphanumeric_plus(lexer->source[lexer->position]) && lexer->position < lexer->source_length) {
 					increment_position(lexer);
 				}
 
@@ -505,6 +506,8 @@ char *token_to_string(Token_Kind kind) {
 			return "var";
 		case KEYWORD_WHILE:
 			return "while";
+		case DIRECTIVE_IMPORT:
+			return "#import";
 		case COLON:
 			return ":";
 		case SEMICOLON:
@@ -535,6 +538,8 @@ char *token_to_string(Token_Kind kind) {
 			return "@";
 		case DOLLAR:
 			return "$";
+		case DOLLAR_DOLLAR:
+			return "$$";
 		case HASH:
 			return "#";
 		case VERTICAL_BAR:

@@ -31,18 +31,6 @@ int main(int argc, char **argv) {
 		.node = internal_root,
 		.identifiers = NULL
 	};
-	for (int i = 0; i < arrlen(internal_root->block.statements); i++) {
-		if (internal_root->block.statements[i]->kind == DEFINE_NODE) {
-			Scope_Key_Identifier scope_identifier = {
-				.key = internal_root->block.statements[i]->define.identifier,
-				.value = {
-					.tag = SCOPE_DEFINE,
-					.define = internal_root->block.statements[i]
-				}
-			};
-			arrpush(internal_scope.identifiers, scope_identifier);
-		}
-	}
 	context.internal_root = internal_root;
 	context.internal_scope = internal_scope;
 

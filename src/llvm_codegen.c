@@ -1560,6 +1560,9 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 
 			return LLVMBuildLoad2(state->llvm_builder, result_type, result_value, "");
 		}
+		case INTERNAL_IMPORT: {
+			return NULL;
+		}
 		default:
 			assert(false);
 	}
