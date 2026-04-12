@@ -152,7 +152,8 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		case BYTE_TYPE_VALUE:
 		case BOOLEAN_TYPE_VALUE:
 		case TYPE_TYPE_VALUE:
-		case MODULE_TYPE_VALUE: {
+		case MODULE_TYPE_VALUE:
+		case STRING_TYPE_VALUE: {
 			return true;
 		}
 		case INTEGER_VALUE: {
@@ -163,6 +164,9 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		}
 		case BYTE_VALUE: {
 			return value1->byte.value == value2->byte.value;
+		}
+		case STRING_VALUE: {
+			return value_equal(value1->string.length, value2->string.length) && strncmp(value1->string.value, value2->string.value, value1->string.length->integer.value) == 0;
 		}
 		default:
 			assert(false);
@@ -513,14 +517,12 @@ static Value evaluate_string(State *state, Node *node) {
 	String_View string_value = string_data.value;
 	size_t string_length = string_value.len;
 
-	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
-		Value_Data *string = value_new(ARRAY_VIEW_VALUE);
-		string->array_view.length = create_integer(string_length).value;
-		string->array_view.values = NULL;
+	if (string_data.type.value->tag == STRING_TYPE_VALUE) {
+		Value_Data *string = value_new(STRING_VALUE);
+		string->string.length = create_integer(string_length).value;
+		string->string.value = NULL;
 		for (size_t i = 0; i < string_length; i++) {
-			Value_Data *byte_value = value_new(BYTE_VALUE);
-			byte_value->byte.value = string_value.ptr[i];
-			arrpush(string->array_view.values, byte_value);
+			arrpush(string->string.value, string_value.ptr[i]);
 		}
 
 		return create_value_data(string, node);
@@ -560,9 +562,7 @@ static Value evaluate_number(State *state, Node *node) {
 static Value evaluate_character(State *state, Node *node) {
 	(void) state;
 	Character_Node character = node->character;
-	Value_Data *value = value_new(BYTE_VALUE);
-	value->byte.value = character.value.ptr[0];
-	return create_value_data(value, node);
+	return create_integer(character.value.ptr[0]);
 }
 
 static Value evaluate_boolean(State *state, Node *node) {
@@ -850,6 +850,18 @@ static Value evaluate_structure_access(State *state, Node *node) {
 			}
 			break;
 		}
+		case STRING_TYPE_VALUE: {
+			String_Value string_value = evaluate_state(state, structure_access.parent).value->string;
+
+			if (sv_eq_cstr(structure_access.name, "data")) {
+				assert(false);
+			} else if (sv_eq_cstr(structure_access.name, "count")) {
+				return (Value) { .value = string_value.length };
+			} else {
+				assert(false);
+			}
+			break;
+		}
 		default:
 			assert(false);
 	}
@@ -885,6 +897,18 @@ static Value evaluate_array_access(State *state, Node *node) {
 			}
 			break;
 		}
+		case STRING_TYPE_VALUE: {
+			String_Value string_value = evaluate_state(state, array_access.parent).value->string;
+
+			long index = evaluate_state(state, array_access.index).value->integer.value;
+			if (array_access.assign_value != NULL) {
+				assert(false);
+				return (Value) {};
+			} else {
+				return create_integer(string_value.value[index]);
+			}
+			break;
+		}
 		default:
 			assert(false);
 	}
@@ -908,6 +932,21 @@ static Value evaluate_slice(State *state, Node *node) {
 			Value result = create_value(ARRAY_VIEW_VALUE);
 			result.value->array_view.values = values;
 			result.value->array_view.length = create_integer(end - start).value;
+
+			return result;
+		}
+		case STRING_TYPE_VALUE: {
+			String_Value string_value = evaluate_state(state, slice.parent).value->string;
+
+			long start = evaluate_state(state, slice.start).value->integer.value;
+			long end = evaluate_state(state, slice.end).value->integer.value;
+
+			char *value = malloc(sizeof(char) * (end - start));
+			memcpy(value, &string_value.value[start], sizeof(char) * (end - start));
+
+			Value result = create_value(STRING_VALUE);
+			result.value->string.value = value;
+			result.value->string.length = create_integer(end - start).value;
 
 			return result;
 		}

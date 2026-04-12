@@ -220,6 +220,12 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 			items[1] = inner_type;
 			return LLVMStructTypeInContext(state->llvm_context, items, 2, false);
 		}
+		case STRING_TYPE_VALUE: {
+			LLVMTypeRef *items = malloc(sizeof(LLVMTypeRef) * 2);
+			items[0] = LLVMInt64TypeInContext(state->llvm_context);
+			items[1] = LLVMPointerType(LLVMArrayType2(LLVMInt8TypeInContext(state->llvm_context), 0), 0);
+			return LLVMStructTypeInContext(state->llvm_context, items, 2, false);
+		}
 		default:
 			assert(false);
 	}
@@ -451,7 +457,7 @@ static LLVMValueRef generate_string(Node *node, State *state) {
 
 	LLVMValueRef pointer_llvm_value = LLVMBuildPointerCast(state->llvm_builder, global, LLVMPointerType(LLVMInt8TypeInContext(state->llvm_context), 0), "");
 
-	if (string_data.type.value->tag == ARRAY_VIEW_TYPE_VALUE && string_data.type.value->array_view_type.inner.value->tag == BYTE_TYPE_VALUE) {
+	if (string_data.type.value->tag == STRING_TYPE_VALUE) {
 		LLVMValueRef string_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(string_data.type.value, state), "");
 
 		LLVMValueRef length_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(string_data.type.value, state), string_value, 0, "");
@@ -953,6 +959,12 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 					element_pointer = LLVMBuildGEP2(state->llvm_builder, actual_array_llvm_type, elements_pointer, indices, 2, "");
 					return LLVMBuildLoad2(state->llvm_builder, inner_type, element_pointer, "");
 				}
+				case STRING_TYPE_VALUE: {
+					LLVMTypeRef actual_array_llvm_type = LLVMArrayType2(LLVMInt8TypeInContext(state->llvm_context), 0);
+					LLVMValueRef elements_pointer = LLVMBuildExtractValue(state->llvm_builder, array_llvm_value, 1, "");
+					element_pointer = LLVMBuildGEP2(state->llvm_builder, actual_array_llvm_type, elements_pointer, indices, 2, "");
+					return LLVMBuildLoad2(state->llvm_builder, LLVMInt8TypeInContext(state->llvm_context), element_pointer, "");
+				}
 				default:
 					assert(false);
 					return NULL;
@@ -1413,6 +1425,10 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 				len = LLVMBuildExtractValue(state->llvm_builder, items[i], 1, "");
 				break;
 			}
+			case STRING_TYPE_VALUE: {
+				len = LLVMBuildExtractValue(state->llvm_builder, items[i], 0, "");
+				break;
+			}
 			default:
 				assert(false);
 		}
@@ -1448,6 +1464,17 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 			case RANGE_TYPE_VALUE: {
 				LLVMValueRef start = LLVMBuildExtractValue(state->llvm_builder, items[i], 0, "");
 				LLVMValueRef element = LLVMBuildAdd(state->llvm_builder, start, i_value, "");
+
+				arrpush(bindings, element);
+				break;
+			}
+			case STRING_TYPE_VALUE: {
+				LLVMValueRef indices[2] = {
+					LLVMConstInt(LLVMInt64TypeInContext(state->llvm_context), 0, false),
+					i_value
+				};
+				LLVMValueRef item_ptr = LLVMBuildExtractValue(state->llvm_builder, items[i], 1, "");
+				LLVMValueRef element = LLVMBuildGEP2(state->llvm_builder, LLVMArrayType2(LLVMInt8TypeInContext(state->llvm_context), 0), item_ptr, indices, 2, "");
 
 				arrpush(bindings, element);
 				break;
@@ -1735,12 +1762,11 @@ static void generate_module(Value_Data *value, State *state) {
 	generate_node(module.body, state);
 }
 
-static LLVMValueRef generate_integer(Value_Data *value, State *state) {
-	(void) state;
+static LLVMValueRef generate_integer(Value_Data *value, Value_Data *type, State *state) {
 	assert(value->tag == INTEGER_VALUE);
 	Integer_Value integer = value->integer;
 
-	return LLVMConstInt(LLVMInt64TypeInContext(state->llvm_context), integer.value, false);
+	return LLVMConstInt(create_llvm_type(type, state), integer.value, false);
 }
 
 static LLVMValueRef generate_byte(Value_Data *value, State *state) {
@@ -1792,6 +1818,28 @@ static LLVMValueRef generate_array_view(Value_Data *value, Value_Data *type, Sta
 	return struct_value;
 }
 
+static LLVMValueRef generate_string_value(Value_Data *value, Value_Data *type, State *state) {
+	String_Value string = value->string;
+
+	LLVMTypeRef inner_llvm_type = LLVMInt8TypeInContext(state->llvm_context);
+
+	LLVMValueRef array_value = LLVMGetUndef(LLVMArrayType(inner_llvm_type, string.length->integer.value));
+	for (long int i = 0; i < string.length->integer.value; i++) {
+		array_value = LLVMBuildInsertValue(state->llvm_builder, array_value, LLVMConstInt(inner_llvm_type, string.value[i], false), i, "");
+	}
+	LLVMValueRef global_array = LLVMAddGlobal(state->llvm_module, LLVMArrayType(inner_llvm_type, string.length->integer.value), "");
+	LLVMSetLinkage(global_array, LLVMPrivateLinkage);
+	LLVMSetGlobalConstant(global_array, true);
+	LLVMSetUnnamedAddr(global_array, true);
+	LLVMSetInitializer(global_array, array_value);
+
+	LLVMValueRef struct_value = LLVMGetUndef(create_llvm_type(type, state));
+	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMConstInt(LLVMInt64TypeInContext(state->llvm_context), string.length->integer.value, false), 0, "");
+	struct_value = LLVMBuildInsertValue(state->llvm_builder, struct_value, LLVMBuildPointerCast(state->llvm_builder, global_array, LLVMPointerType(inner_llvm_type, 0), ""), 1, "");
+
+	return struct_value;
+}
+
 static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -1807,7 +1855,7 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 			generate_module(value, state);
 			break;
 		case INTEGER_VALUE:
-			result = generate_integer(value, state);
+			result = generate_integer(value, type, state);
 			break;
 		case BYTE_VALUE:
 			result = generate_byte(value, state);
@@ -1820,6 +1868,9 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 			break;
 		case STRUCT_VALUE:
 			result = generate_struct(value, type, state);
+			break;
+		case STRING_VALUE:
+			result = generate_string_value(value, type, state);
 			break;
 		case NONE_VALUE:
 			result = NULL;

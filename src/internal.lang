@@ -1,15 +1,15 @@
 Struct_Item :: struct {
-	name: []byte,
+	name: []u8,
 	type: type
 }
 
 Union_Item :: struct {
-	name: []byte,
+	name: []u8,
 	type: type
 }
 
 Tagged_Union_Item :: struct {
-	name: []byte,
+	name: []u8,
 	type: type
 }
 
@@ -28,7 +28,7 @@ Type_Info :: tagged_union {
 		members: []Tagged_Union_Item
 	},
 	Enum: struct {
-		values: [][]byte
+		values: [][]u8
 	},
 	Optional: struct {
 		type: type
@@ -48,6 +48,8 @@ Type_Info :: tagged_union {
 	Pointer: struct {
 	},
 	Boolean: struct {
+	},
+	String: struct {
 	}
 }
 

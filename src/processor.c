@@ -189,6 +189,46 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 					buffer += sprintf(buffer, "byte");
 					break;
 				}
+				case INTERNAL_STRING: {
+					buffer += sprintf(buffer, "string");
+					break;
+				}
+				case INTERNAL_U8: {
+					buffer += sprintf(buffer, "u8");
+					break;
+				}
+				case INTERNAL_U16: {
+					buffer += sprintf(buffer, "u16");
+					break;
+				}
+				case INTERNAL_U32: {
+					buffer += sprintf(buffer, "u32");
+					break;
+				}
+				case INTERNAL_U64: {
+					buffer += sprintf(buffer, "u64");
+					break;
+				}
+				case INTERNAL_S8: {
+					buffer += sprintf(buffer, "s8");
+					break;
+				}
+				case INTERNAL_S16: {
+					buffer += sprintf(buffer, "s16");
+					break;
+				}
+				case INTERNAL_S32: {
+					buffer += sprintf(buffer, "s32");
+					break;
+				}
+				case INTERNAL_S64: {
+					buffer += sprintf(buffer, "s64");
+					break;
+				}
+				case INTERNAL_INT: {
+					buffer += sprintf(buffer, "int");
+					break;
+				}
 				default:
 					assert(false);
 			}
@@ -362,6 +402,10 @@ static int print_type(Value type, char *buffer) {
 		}
 		case BYTE_TYPE_VALUE: {
 			buffer += sprintf(buffer, "byte");
+			break;
+		}
+		case STRING_TYPE_VALUE: {
+			buffer += sprintf(buffer, "string");
 			break;
 		}
 		case BOOLEAN_TYPE_VALUE: {
@@ -1091,11 +1135,12 @@ static Node_Data *process_array_access(Context *context, Node *node) {
 		array_type = array_type.value->pointer_type.inner;
 	}
 
-	Custom_Operator_Function custom_operator_function = find_custom_operator(context, array_type.value->pointer_type.inner, cstr_to_sv("[]"));
+	Custom_Operator_Function custom_operator_function = find_custom_operator(context, array_type, cstr_to_sv("[]"));
 
 	if (custom_operator_function.function == NULL
 			&& array_type.value->tag != ARRAY_TYPE_VALUE
-			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE
+			&& array_type.value->tag != STRING_TYPE_VALUE) {
 		handle_type_error(node, "Cannot perform array access operation on %s", array_type);
 	}
 
@@ -1108,6 +1153,10 @@ static Node_Data *process_array_access(Context *context, Node *node) {
 			}
 			case ARRAY_VIEW_TYPE_VALUE: {
 				item_type = array_type.value->array_view_type.inner;
+				break;
+			}
+			case STRING_TYPE_VALUE: {
+				item_type = create_integer_type(false, 8);
 				break;
 			}
 			default:
@@ -1394,6 +1443,7 @@ static Node_Data *process_cast(Context *context, Node *node) {
 	bool cast_ok = false;
 	if (is_simple_cast(from_type, to_type)) cast_ok = true;
 	else if (from_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->tag == BYTE_TYPE_VALUE) cast_ok = true;
+	else if (from_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->integer_type.size == 8 && !to_type.value->integer_type.signed_) cast_ok = true;
 	else if (from_type.value->tag == BYTE_TYPE_VALUE && to_type.value->tag == INTEGER_TYPE_VALUE) cast_ok = true;
 	else if (from_type.value->tag == POINTER_TYPE_VALUE && to_type.value->tag == INTEGER_TYPE_VALUE && to_type.value->integer_type.signed_ == false && to_type.value->integer_type.size == context->codegen.default_integer_size) cast_ok = true;
 
@@ -1482,7 +1532,7 @@ static Node_Data *process_character(Context *context, Node *node) {
 
 	Node_Data *data = context->temporary_context.data;
 	data->character.value = new_string.ptr[0];
-	data->type = create_value(BYTE_TYPE_VALUE);
+	data->type = create_integer_type(false, 8);
 	return data;
 }
 
@@ -1639,6 +1689,10 @@ static Node_Data *process_for(Context *context, Node *node) {
 			}
 			case RANGE_TYPE_VALUE: {
 				arrpush(element_types, item_types[i].value->range_type.type);
+				break;
+			}
+			case STRING_TYPE_VALUE: {
+				arrpush(element_types, create_integer_type(false, 8));
 				break;
 			}
 			default:
@@ -2405,6 +2459,12 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 			return data;
 		}
+		case INTERNAL_STRING: {
+			value->value = value_new(STRING_TYPE_VALUE);
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
 		case INTERNAL_C_CHAR_SIZE: {
 			*value = create_integer(context->codegen.c_size_fn(C_CHAR_SIZE));
 			data->type = (Value) { .value = create_integer_type(false, 8).value };
@@ -2441,6 +2501,9 @@ static Node_Data *process_internal(Context *context, Node *node) {
 					case BYTE_VALUE:
 						total_length += 1;
 						break;
+					case STRING_VALUE:
+						total_length += values[i].value->string.length->integer.value;
+						break;
 					default:
 						assert(false);
 				}
@@ -2459,6 +2522,11 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						break;
 					case BYTE_VALUE:
 						source_string[index++] = values[i].value->byte.value;
+						break;
+					case STRING_VALUE:
+						for (long int j = 0; j < values[i].value->string.length->integer.value; j++) {
+							source_string[index++] = values[i].value->string.value[j];
+						}
 						break;
 					default:
 						assert(false);
@@ -2509,10 +2577,10 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 			Value string = evaluate(context, internal.inputs[0]);
 
-			char *source = malloc(string.value->array_view.length->integer.value + 1);
-			source[string.value->array_view.length->integer.value] = '\0';
-			for (long int i = 0; i < string.value->array_view.length->integer.value; i++) {
-				source[i] = string.value->array_view.values[i]->byte.value;
+			char *source = malloc(string.value->string.length->integer.value + 1);
+			source[string.value->string.length->integer.value] = '\0';
+			for (long int i = 0; i < string.value->string.length->integer.value; i++) {
+				source[i] = string.value->string.value[i];
 			}
 
 			if (strlen(source) <= 5 || strcmp(source + strlen(source) - 5, ".lang") != 0) {
@@ -2605,9 +2673,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						name_value->array_view.values = NULL;
 						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string.ptr[i];
-							arrpush(name_value->array_view.values, byte_value);
+							arrpush(name_value->array_view.values, create_integer(name_string.ptr[i]).value);
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
 
@@ -2636,9 +2702,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string.ptr[i];
-							arrpush(name_value->array_view.values, byte_value);
+							arrpush(name_value->array_view.values, create_integer(name_string.ptr[i]).value);
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
 
@@ -2667,9 +2731,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string.ptr[i];
-							arrpush(name_value->array_view.values, byte_value);
+							arrpush(name_value->array_view.values, create_integer(name_string.ptr[i]).value);
 						}
 						arrpush(struct_item_value->struct_.values, name_value);
 
@@ -2696,9 +2758,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 						Value_Data *name_value = value_new(ARRAY_VIEW_VALUE);
 						name_value->array_view.length = create_integer(name_string_length).value;
 						for (size_t i = 0; i < name_string_length; i++) {
-							Value_Data *byte_value = value_new(BYTE_VALUE);
-							byte_value->byte.value = name_string.ptr[i];
-							arrpush(name_value->array_view.values, byte_value);
+							arrpush(name_value->array_view.values, create_integer(name_string.ptr[i]).value);
 						}
 						arrpush(items_value->array_view.values, name_value);
 					}
@@ -2767,6 +2827,12 @@ static Node_Data *process_internal(Context *context, Node *node) {
 				}
 				case BOOLEAN_TYPE_VALUE: {
 					enum_value->enum_.value = 11;
+
+					value_data = value_new(STRUCT_VALUE);
+					break;
+				}
+				case STRING_TYPE_VALUE: {
+					enum_value->enum_.value = 12;
 
 					value_data = value_new(STRUCT_VALUE);
 					break;
@@ -3100,7 +3166,8 @@ static Node_Data *process_slice(Context *context, Node *node) {
 	}
 
 	if (array_type.value->tag != ARRAY_TYPE_VALUE
-			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE
+			&& array_type.value->tag != STRING_TYPE_VALUE) {
 		handle_type_error(node, "Cannot perform array access operation on %s", array_type);
 	}
 
@@ -3112,6 +3179,10 @@ static Node_Data *process_slice(Context *context, Node *node) {
 		}
 		case ARRAY_VIEW_TYPE_VALUE: {
 			item_type = array_type.value->array_view_type.inner;
+			break;
+		}
+		case STRING_TYPE_VALUE: {
+			item_type = create_integer_type(false, 8);
 			break;
 		}
 		default:
@@ -3141,7 +3212,7 @@ static Node_Data *process_string(Context *context, Node *node) {
 	else invalid_type = true;
 
 	if (invalid_type) {
-		type = create_array_view_type(create_value(BYTE_TYPE_VALUE));
+		type = create_value(STRING_TYPE_VALUE);
 	}
 
 	String_View new_string = expand_escapes(string.value, type);
@@ -3270,7 +3341,8 @@ static Node_Data *process_structure_access(Context *context, Node *node) {
 		if (structure_type.value->tag != STRUCT_TYPE_VALUE
 				&& structure_type.value->tag != TUPLE_TYPE_VALUE
 				&& structure_type.value->tag != UNION_TYPE_VALUE
-				&& structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE) {
+				&& structure_type.value->tag != ARRAY_VIEW_TYPE_VALUE
+				&& structure_type.value->tag != STRING_TYPE_VALUE) {
 			handle_type_error(node, "Cannot perform structure access operation on %s", structure_type);
 		}
 
@@ -3310,6 +3382,14 @@ static Node_Data *process_structure_access(Context *context, Node *node) {
 					item_type = create_integer_type(false, context->codegen.default_integer_size);
 				} else if (sv_eq_cstr(structure_access.name, "ptr")) {
 					item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
+				}
+				break;
+			}
+			case STRING_TYPE_VALUE: {
+				if (sv_eq_cstr(structure_access.name, "count")) {
+					item_type = create_integer_type(false, context->codegen.default_integer_size);
+				} else if (sv_eq_cstr(structure_access.name, "data")) {
+					item_type = create_pointer_type(create_array_type(create_integer_type(false, 8)));
 				}
 				break;
 			}

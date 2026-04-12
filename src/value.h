@@ -33,6 +33,8 @@ typedef enum {
 	RANGE_VALUE,
 	RANGE_TYPE_VALUE,
 	RESULT_TYPE_VALUE,
+	STRING_VALUE,
+	STRING_TYPE_VALUE,
 	STRUCT_VALUE,
 	STRUCT_TYPE_VALUE,
 	TAGGED_UNION_VALUE,
@@ -118,6 +120,11 @@ typedef struct {
 typedef struct {
 	long value;
 } Integer_Value;
+
+typedef struct {
+	Value_Data *length;
+	char *value;
+} String_Value;
 
 typedef struct {
 	Value *members; // stb_ds
@@ -248,6 +255,7 @@ struct Value_Data {
 		Range_Value range;
 		Range_Type_Value range_type;
 		Result_Type_Value result_type;
+		String_Value string;
 		Struct_Value struct_;
 		Struct_Type_Value struct_type;
 		Tagged_Union_Value tagged_union;

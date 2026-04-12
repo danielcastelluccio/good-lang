@@ -1,14 +1,14 @@
-def Output_Fn = fn (data: ^, char: byte);
+def Output_Fn = fn (data: ^, char: u8);
 
 def! Printer = struct {
 	output_fn: Output_Fn;
 
-	op print = fn [T](printer: ^Printer, $fmt: []byte, args: T) {
+	op print = fn [T](printer: ^Printer, $fmt: string, args: T) {
 		var$ type_info = type_info_of(T);
 		if$ type_info is Tuple |tuple| {
 			var$ argument_index: uint = 0;
 			var$ i: uint = 0;
-			while$ i < fmt.len {
+			while$ i < fmt.count {
 				if$ fmt[i] == '{' {
 					var$ start = i + 1;
 					while$ fmt[i] != '}' {
@@ -33,11 +33,11 @@ def! Printer = struct {
 		};
 	};
 
-	op print_value = fn [T](printer: ^Printer, t: T, $fmt: []byte) {
+	op print_value = fn [T](printer: ^Printer, t: T, $fmt: string) {
 		var$ type_info = type_info_of(T);
 		switch$ type_info {
 			case Integer {
-				var buffer: [24]byte;
+				var buffer: [24]u8;
 				var index: uint = 24;
 
 				var negative = t < 0;
@@ -57,7 +57,7 @@ def! Printer = struct {
 
 					var ch = i % 10 + 48;
 
-					buffer[index] = cast(byte) ch;
+					buffer[index] = cast(u8) ch;
 					i = i / 10;
 				};
 
@@ -66,7 +66,7 @@ def! Printer = struct {
 					buffer[index] = '-';
 				};
 
-				printer#print_chars(buffer[index, 24]);
+				printer#print_chars2(buffer[index, 24]);
 			}
 			case Byte {
 				var buffer: [24]byte;
@@ -114,7 +114,7 @@ def! Printer = struct {
 				printer#print_chars(".{");
 				for$ struct_.members |member, i| {
 					printer#print_chars(" .");
-					printer#print_chars(run member.name);
+					printer#print_chars2(run member.name);
 					printer#print_chars(" = ");
 
 					printer#print_value(embed("t.", member.name), "");
@@ -174,7 +174,7 @@ def! Printer = struct {
 			}
 			case Array_View |array_view| {
 				if$ fmt == "s" and array_view.type == byte {
-					printer#print_chars(t);
+					printer#print_chars2(t);
 				} else {
 					printer#print_chars(".{");
 
@@ -193,6 +193,9 @@ def! Printer = struct {
 					printer#print_chars("}");
 				};
 			}
+			case String |string| {
+				printer#print_chars(t);
+			}
 			case Boolean {
 				if t {
 					printer#print_chars("true");
@@ -203,11 +206,17 @@ def! Printer = struct {
 		};
 	};
 
-	op print_char = fn (printer: ^Printer, char: byte) {
+	op print_char = fn (printer: ^Printer, char: u8) {
 		printer.output_fn(null, char);
 	};
 
-	op print_chars = fn (printer: ^Printer, chars: []byte) {
+	op print_chars = fn (printer: ^Printer, chars: string) {
+		for chars |c| {
+			printer.output_fn(null, c);
+		};
+	};
+
+	op print_chars2 = fn (printer: ^Printer, chars: []u8) {
 		for chars |c| {
 			printer.output_fn(null, c);
 		};

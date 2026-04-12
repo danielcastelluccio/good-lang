@@ -372,6 +372,11 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 					internal->internal.kind = INTERNAL_S64;
 					internal->internal.assign_value = NULL;
 					return internal;
+				} else if (sv_eq_cstr(token.string, "string")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_STRING;
+					internal->internal.assign_value = NULL;
+					return internal;
 				}
 				break;
 			case 't':
