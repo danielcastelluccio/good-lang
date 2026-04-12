@@ -46,7 +46,13 @@ typedef struct {
 } Scope_Identifier;
 
 typedef struct {
-	struct { size_t key; Scope_Identifier value; } *identifiers;
+	String_View key;
+	Scope_Identifier value;
+} Scope_Key_Identifier;
+
+typedef struct {
+	// struct { size_t key; Scope_Identifier value; } *identifiers; // stb_ds
+	Scope_Key_Identifier *identifiers;
 	Node *node;
 	Value node_type;
 	Value current_type;
@@ -348,8 +354,7 @@ typedef struct {
 	Node *assign_node;
 	Value wanted_type;
 	bool want_pointer;
-	Value *call_argument_types;
-	Value call_wanted_type;
+	Call_Argument *call_arguments;
 	Node_Data *data;
 } Temporary_Context;
 

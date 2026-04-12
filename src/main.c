@@ -33,11 +33,14 @@ int main(int argc, char **argv) {
 	};
 	for (int i = 0; i < arrlen(internal_root->block.statements); i++) {
 		if (internal_root->block.statements[i]->kind == DEFINE_NODE) {
-			Scope_Identifier scope_identifier = {
-				.tag = SCOPE_DEFINE,
-				.define = internal_root->block.statements[i]
+			Scope_Key_Identifier scope_identifier = {
+				.key = internal_root->block.statements[i]->define.identifier,
+				.value = {
+					.tag = SCOPE_DEFINE,
+					.define = internal_root->block.statements[i]
+				}
 			};
-			hmput(internal_scope.identifiers, sv_hash(internal_root->block.statements[i]->define.identifier), scope_identifier);
+			arrpush(internal_scope.identifiers, scope_identifier);
 		}
 	}
 	context.internal_root = internal_root;
