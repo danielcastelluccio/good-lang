@@ -2325,12 +2325,82 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			return data;
 		}
 		case INTERNAL_INT: {
-			process_node(context, internal.inputs[0]);
-			process_node(context, internal.inputs[1]);
+			// process_node(context, internal.inputs[0]);
+			// process_node(context, internal.inputs[1]);
 
+			// value->value = value_new(INTEGER_TYPE_VALUE);
+			// value->value->integer_type.signed_ = evaluate(context, internal.inputs[0]).value->boolean.value;
+			// value->value->integer_type.size = evaluate(context, internal.inputs[1]).value->integer.value;
+
+			// data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			// return data;
 			value->value = value_new(INTEGER_TYPE_VALUE);
-			value->value->integer_type.signed_ = evaluate(context, internal.inputs[0]).value->boolean.value;
-			value->value->integer_type.size = evaluate(context, internal.inputs[1]).value->integer.value;
+			value->value->integer_type.size = context->codegen.default_integer_size;
+			value->value->integer_type.signed_ = true;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_U8: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 8;
+			value->value->integer_type.signed_ = false;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_U16: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 16;
+			value->value->integer_type.signed_ = false;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_U32: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 32;
+			value->value->integer_type.signed_ = false;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_U64: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 64;
+			value->value->integer_type.signed_ = false;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_S8: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 8;
+			value->value->integer_type.signed_ = true;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_S16: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 16;
+			value->value->integer_type.signed_ = true;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_S32: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 32;
+			value->value->integer_type.signed_ = true;
+
+			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
+			return data;
+		}
+		case INTERNAL_S64: {
+			value->value = value_new(INTEGER_TYPE_VALUE);
+			value->value->integer_type.size = 64;
+			value->value->integer_type.signed_ = true;
 
 			data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
 			return data;

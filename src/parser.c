@@ -252,21 +252,26 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 				}
 				break;
 			case 'i':
+				// if (sv_eq_cstr(token.string, "int")) {
+				// 	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
+				// 		Node *internal = ast_new(INTERNAL_NODE, token.location);
+				// 		internal->internal.kind = INTERNAL_INT;
+				// 		internal->internal.inputs = NULL;
+				// 		internal->internal.assign_value = NULL;
+
+				// 		lexer_consume_check(lexer, PARENTHESIS_OPEN);
+				// 		arrpush(internal->internal.inputs, parse_expression(lexer));
+				// 		lexer_consume_check(lexer, COMMA);
+				// 		arrpush(internal->internal.inputs, parse_expression(lexer));
+				// 		lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+
+				// 		return internal;
+				// 	}
 				if (sv_eq_cstr(token.string, "int")) {
-					if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
-						Node *internal = ast_new(INTERNAL_NODE, token.location);
-						internal->internal.kind = INTERNAL_INT;
-						internal->internal.inputs = NULL;
-						internal->internal.assign_value = NULL;
-
-						lexer_consume_check(lexer, PARENTHESIS_OPEN);
-						arrpush(internal->internal.inputs, parse_expression(lexer));
-						lexer_consume_check(lexer, COMMA);
-						arrpush(internal->internal.inputs, parse_expression(lexer));
-						lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-
-						return internal;
-					}
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_INT;
+					internal->internal.assign_value = NULL;
+					return internal;
 				} else if (sv_eq_cstr(token.string, "import")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_IMPORT;
@@ -347,6 +352,26 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
 					return internal;
+				} else if (sv_eq_cstr(token.string, "s8")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_S8;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "s16")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_S16;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "s32")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_S32;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "s64")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_S64;
+					internal->internal.assign_value = NULL;
+					return internal;
 				}
 				break;
 			case 't':
@@ -400,6 +425,26 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 				} else if (sv_eq_cstr(token.string, "uint8")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_UINT8;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "u8")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_U8;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "u16")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_U8;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "u32")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_U32;
+					internal->internal.assign_value = NULL;
+					return internal;
+				} else if (sv_eq_cstr(token.string, "u64")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_U64;
 					internal->internal.assign_value = NULL;
 					return internal;
 				}

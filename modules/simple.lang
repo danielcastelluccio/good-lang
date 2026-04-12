@@ -2,7 +2,7 @@
 def* stdout_printer = global: print_.Printer => .{ print_stdout_fn };
 
 def print_stdout_fn = fn (_: ^, char: byte) {
-	_ = c.putchar(cast(c.int) char);
+	_ = c.putchar(cast(int) char);
 };
 
 def! print = fn [T]($fmt: []byte, args: T) {
