@@ -587,7 +587,7 @@ static Value evaluate_call(State *state, Node *node) {
 
 	Value *arguments = NULL;
 	for (long int i = 0; i < arrlen(call.arguments); i++) {
-		arrpush(arguments, clone_value(evaluate_state(state, call.arguments[i])));
+		arrpush(arguments, clone_value(evaluate_state(state, call.arguments[i].node)));
 	}
 
 	Value_Data *result = NULL;

@@ -84,8 +84,13 @@ typedef struct {
 } Cast_Node;
 
 typedef struct {
+	String_View identifier;
+	Node *node;
+} Call_Argument;
+
+typedef struct {
 	Node *function;
-	Node **arguments; // stb_ds
+	Call_Argument *arguments; // stb_ds
 } Call_Node;
 
 typedef struct {

@@ -96,6 +96,7 @@ typedef struct {
 	Value type;
 	bool static_;
 	bool inferred;
+	Value default_value;
 } Function_Argument_Value;
 
 typedef struct {

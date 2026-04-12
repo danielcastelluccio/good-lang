@@ -111,9 +111,25 @@ typedef struct {
 } Null_Data;
 
 typedef struct {
+	enum {
+		CALL_ARGUMENT_NONE,
+		CALL_ARGUMENT_NODE,
+		CALL_ARGUMENT_VALUE
+	} kind;
+	union {
+		Node *node;
+		struct {
+			Value value;
+			Value type;
+		} value;
+	};
+} Call_Argument_Value;
+
+typedef struct {
 	Value function_type;
 	Value function_value;
 	Value struct_type;
+	Call_Argument_Value *arguments;
 } Call_Data;
 
 typedef struct {
@@ -122,7 +138,7 @@ typedef struct {
 } Custom_Operator_Function;
 
 typedef struct {
-	Node **arguments;
+	Call_Argument *arguments;
 	Custom_Operator_Function custom_operator_function;
 } Call_Method_Data;
 

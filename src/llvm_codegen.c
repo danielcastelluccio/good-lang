@@ -286,6 +286,60 @@ static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Valu
 	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
 }
 
+static LLVMValueRef generate_call_generic_old(LLVMValueRef function_llvm_value, Value_Data *function_type, Call_Argument *arguments, State *state) {
+	assert(function_llvm_value != NULL);
+
+	LLVMValueRef *llvm_arguments = NULL;
+	long int j = 0;
+	for (long int i = 0; i < arrlen(arguments); i++) {
+		while (function_type->function_type.arguments[j].inferred) j++;
+		if (j >= arrlen(function_type->function_type.arguments) || !function_type->function_type.arguments[j].static_) {
+			arrpush(llvm_arguments, generate_node(arguments[i].node, state));
+		}
+		j++;
+	}
+
+	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
+}
+
+static Function_Argument_Value get_noninferred_argument(Function_Argument_Value *arguments, long int index) {
+	long int j = 0;
+	for (long int i = 0; i < arrlen(arguments); i++) {
+		if (arguments[i].inferred) continue;
+
+		if (j == index) {
+			return arguments[i];
+		}
+
+		j++;
+	}
+
+	assert(false);
+}
+
+static LLVMValueRef generate_call_generic2(LLVMValueRef function_llvm_value, Value_Data *function_type, Call_Argument_Value *arguments, State *state) {
+	assert(function_llvm_value != NULL);
+
+	LLVMValueRef *llvm_arguments = NULL;
+	for (long int i = 0; i < arrlen(arguments); i++) {
+		if (get_noninferred_argument(function_type->function_type.arguments, i).static_) continue;
+		switch (arguments[i].kind) {
+			case CALL_ARGUMENT_NODE: {
+				arrpush(llvm_arguments, generate_node(arguments[i].node, state));
+				break;
+			}
+			case CALL_ARGUMENT_VALUE: {
+				arrpush(llvm_arguments, generate_value(arguments[i].value.value.value, arguments[i].value.type.value, state));
+				break;
+			}
+			default:
+				assert(false);
+		}
+	}
+
+	return LLVMBuildCall2(state->llvm_builder, create_llvm_function_literal_type(function_type, state), function_llvm_value, llvm_arguments, arrlen(llvm_arguments), "");
+}
+
 static LLVMValueRef generate_call(Node *node, State *state) {
 	assert(node->kind == CALL_NODE);
 	Call_Node call = node->call;
@@ -294,9 +348,9 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	Value function_type = call_data.function_type;
 
 	if (call_data.function_value.value != NULL) {
-		return generate_call_generic(generate_value(call_data.function_value.value, call_data.function_type.value, state), function_type.value, call.arguments, state);
+		return generate_call_generic2(generate_value(call_data.function_value.value, call_data.function_type.value, state), function_type.value, call_data.arguments, state);
 	} else {
-		return generate_call_generic(generate_node(call.function, state), function_type.value, call.arguments, state);
+		return generate_call_generic2(generate_node(call.function, state), function_type.value, call_data.arguments, state);
 	}
 }
 
@@ -305,7 +359,7 @@ static LLVMValueRef generate_call_method(Node *node, State *state) {
 	Call_Method_Data call_method_data = get_data(&state->context, node)->call_method;
 
 	Custom_Operator_Function operator = call_method_data.custom_operator_function;
-	return generate_call_generic(generate_value(operator.function, operator.function_type.value, state), call_method_data.custom_operator_function.function_type.value, call_method_data.arguments, state);
+	return generate_call_generic_old(generate_value(operator.function, operator.function_type.value, state), call_method_data.custom_operator_function.function_type.value, call_method_data.arguments, state);
 }
 
 static LLVMValueRef generate_identifier(Node *node, State *state) {

@@ -383,6 +383,14 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 					return internal;
 				}
 				break;
+			case 'T':
+				if (sv_eq_cstr(token.string, "Type")) {
+					Node *internal = ast_new(INTERNAL_NODE, token.location);
+					internal->internal.kind = INTERNAL_TYPE;
+					internal->internal.assign_value = NULL;
+					return internal;
+				}
+				break;
 			case 'u':
 				if (sv_eq_cstr(token.string, "uint")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
@@ -520,7 +528,20 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 
 	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
 		while (true) {
-			arrpush(call->call.arguments, parse_expression(lexer));
+			String_View identifier = {};
+			Node *argument = parse_expression(lexer);
+
+			if (lexer_peek(lexer).kind == EQUALS) {
+				identifier = argument->identifier.value;
+				lexer_consume(lexer);
+				argument = parse_expression(lexer);
+			}
+
+			Call_Argument call_argument = {
+				.identifier = identifier,
+				.node = argument
+			};
+			arrpush(call->call.arguments, call_argument);
 
 			Token_Data token = lexer_peek(lexer);
 			if (token.kind == COMMA) {
@@ -539,6 +560,8 @@ static Node *parse_call(Lexer *lexer, Node *function) {
 }
 
 static void add_inferred_arguments(Function_Argument **arguments, Node *argument) {
+	if (argument == NULL) return;
+
 	switch (argument->kind) {
 		case IDENTIFIER_NODE: {
 			Identifier_Node *identifier = &argument->identifier;
@@ -571,7 +594,7 @@ static Parse_Arguments_Result parse_arguments_partial(Lexer *lexer, Node *first_
 		Function_Argument argument = {
 			.identifier = first_argument->variable.name,
 			.type = first_argument->variable.type,
-			.static_ = false
+			.static_ = first_argument->variable.polymorphic
 		};
 		add_inferred_arguments(&arguments, first_argument->variable.type);
 		arrpush(arguments, argument);
@@ -593,7 +616,8 @@ static Parse_Arguments_Result parse_arguments_partial(Lexer *lexer, Node *first_
 				Function_Argument argument = {
 					.identifier = argument_node->variable.name,
 					.type = argument_node->variable.type,
-					.static_ = false
+					.default_value = argument_node->variable.value,
+					.static_ = argument_node->variable.polymorphic
 				};
 				add_inferred_arguments(&arguments, argument_node->variable.type);
 				arrpush(arguments, argument);
