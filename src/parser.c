@@ -586,6 +586,13 @@ static void add_inferred_arguments(Function_Argument **arguments, Node *argument
 	if (argument == NULL) return;
 
 	switch (argument->kind) {
+		case ARRAY_TYPE_NODE:
+			add_inferred_arguments(arguments, argument->array_type.size);
+			add_inferred_arguments(arguments, argument->array_type.inner);
+			break;
+		case ARRAY_VIEW_TYPE_NODE:
+			add_inferred_arguments(arguments, argument->array_view_type.inner);
+			break;
 		case IDENTIFIER_NODE: {
 			Identifier_Node *identifier = &argument->identifier;
 			if (identifier->polymorphic) {
@@ -598,6 +605,9 @@ static void add_inferred_arguments(Function_Argument **arguments, Node *argument
 			}
 			break;
 		}
+		case POINTER_NODE:
+			add_inferred_arguments(arguments, argument->pointer_type.inner);
+			break;
 		case INTERNAL_NODE:
 			break;
 		default:
@@ -610,25 +620,13 @@ typedef struct {
 	bool variadic;
 } Parse_Arguments_Result;
 
-static Parse_Arguments_Result parse_arguments_partial(Lexer *lexer, Node *first_argument) {
+static Parse_Arguments_Result parse_arguments(Lexer *lexer) {
 	Function_Argument *arguments = NULL;
 
-	if (first_argument != NULL) {
-		Function_Argument argument = {
-			.identifier = first_argument->variable.name,
-			.type = first_argument->variable.type,
-			.static_ = first_argument->variable.polymorphic
-		};
-		add_inferred_arguments(&arguments, first_argument->variable.type);
-		arrpush(arguments, argument);
-	}
+	lexer_consume_check(lexer, PARENTHESIS_OPEN);
 
 	bool variadic = false;
 	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
-		if (first_argument) {
-			lexer_consume_check(lexer, COMMA);
-		}
-
 		while (true) {
 			if (lexer_peek(lexer).kind == PERIOD_PERIOD) {
 				lexer_consume(lexer);
@@ -665,60 +663,13 @@ static Parse_Arguments_Result parse_arguments_partial(Lexer *lexer, Node *first_
 	};
 }
 
-static Node *parse_function_or_function_type_partial(Lexer *lexer, Token_Data first_token, Node *first_argument) {
-	Parse_Arguments_Result result = parse_arguments_partial(lexer, first_argument);
-	Function_Argument *arguments = result.arguments;
-	bool variadic = result.variadic;
-
-	Node *return_ = NULL;
-	if (lexer_peek(lexer).kind == MINUS_ARROW) {
-		lexer_consume(lexer);
-		return_ = parse_expression(lexer);
-	}
-
-	Node *function_type = ast_new(FUNCTION_TYPE_NODE, first_token.location);
-	function_type->function_type = (Function_Type_Node) {
-		.arguments = arguments,
-		.return_ = return_,
-		.variadic = variadic
-	};
-
-	Node *body = NULL;
-	String_View extern_ = {};
-	if (lexer_peek_check(lexer, KEYWORD_EXTERN)) {
-		lexer_consume(lexer);
-		extern_ = lexer_consume_check(lexer, STRING).string;
-	} else {
-		body = parse_separated_statement_or_nothing(lexer);
-	}
-
-	if (body != NULL || extern_.ptr != NULL) {
-		Node *function = ast_new(FUNCTION_NODE, first_token.location);
-		function->function.function_type = function_type;
-		function->function.body = body;
-		function->function.extern_ = extern_;
-		function->function.static_id_counter = 0;
-		return function;
-	} else {
-		return function_type;
-	}
-}
-
 static Node *parse_parenthesis(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
+	lexer_consume(lexer);
 
-	if (lexer_peek(lexer).kind == PARENTHESIS_CLOSED) {
-		return parse_function_or_function_type_partial(lexer, first_token, NULL);
-	} else {
-		Node *result = parse_expression(lexer);
+	Node *result = parse_expression(lexer);
 
-		if (result->kind == VARIABLE_NODE) {
-			return parse_function_or_function_type_partial(lexer, first_token, result);
-		} else {
-			lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-			return result;
-		}
-	}
+	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+	return result;
 }
 
 static size_t get_precedence(Binary_Op_Node_Kind kind) {
@@ -932,8 +883,7 @@ static Node *parse_struct_type(Lexer *lexer) {
 	
 	Function_Argument *arguments = NULL;
 	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
-		lexer_consume(lexer);
-		arguments = parse_arguments_partial(lexer, NULL).arguments;
+		arguments = parse_arguments(lexer).arguments;
 		(void) arguments;
 	}
 
@@ -1531,85 +1481,13 @@ static Node *parse_defer(Lexer *lexer) {
 static Node *parse_function_or_function_type(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	
-	Function_Argument *arguments = NULL;
-
-	if (lexer_peek(lexer).kind == BRACE_OPEN) {
-		lexer_consume(lexer);
-
-		if (lexer_peek(lexer).kind != BRACE_CLOSED) {
-			while (true) {
-				Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-
-				Function_Argument argument = {
-					.identifier = identifier.string,
-					.static_ = true,
-					.inferred = true
-				};
-
-				if (lexer_peek(lexer).kind == EQUALS) {
-					lexer_consume(lexer);
-					argument.default_value = parse_expression(lexer);
-				}
-
-				arrpush(arguments, argument);
-
-				Token_Data token = lexer_peek(lexer);
-				if (token.kind == COMMA) {
-					lexer_consume(lexer);
-				} else if (token.kind == BRACE_CLOSED) {
-					break;
-				} else {
-					handle_token_error_no_expected(lexer, token);
-				}
-			}
-		}
-
-		lexer_consume(lexer);
-	}
-
-	lexer_consume_check(lexer, PARENTHESIS_OPEN);
-
-	bool variadic = false;
-	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
-		while (true) {
-			if (lexer_peek(lexer).kind == PERIOD_PERIOD) {
-				lexer_consume(lexer);
-				variadic = true;
-			} else {
-				bool static_ = false;
-				if (lexer_peek_check(lexer, DOLLAR)) {
-					lexer_consume(lexer);
-					static_ = true;
-				}
-
-				Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-				lexer_consume_check(lexer, COLON);
-				Node *type = parse_expression(lexer);
-
-				Function_Argument argument = {
-					.identifier = identifier.string,
-					.type = type,
-					.static_ = static_
-				};
-				arrpush(arguments, argument);
-			}
-
-			Token_Data token = lexer_peek(lexer);
-			if (token.kind == COMMA) {
-				lexer_consume(lexer);
-			} else if (token.kind == PARENTHESIS_CLOSED) {
-				break;
-			} else {
-				handle_token_error_no_expected(lexer, token);
-			}
-		}
-	}
-
-	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+	Parse_Arguments_Result result = parse_arguments(lexer);
+	Function_Argument *arguments = result.arguments;
+	bool variadic = result.variadic;
 
 	Node *return_ = NULL;
-	if (lexer_peek(lexer).kind == COLON) {
-		lexer_consume_check(lexer, COLON);
+	if (lexer_peek(lexer).kind == MINUS_ARROW) {
+		lexer_consume(lexer);
 		return_ = parse_expression(lexer);
 	}
 

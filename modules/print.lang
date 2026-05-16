@@ -3,7 +3,7 @@ def Output_Fn = fn (data: ^, char: u8);
 def! Printer = struct {
 	output_fn: Output_Fn;
 
-	op print = fn [T](printer: ^Printer, $fmt: string, args: T) {
+	op print = fn (printer: ^Printer, $fmt: string, args: $T) {
 		var$ type_info = type_info_of(T);
 		if$ type_info is Tuple |tuple| {
 			var$ argument_index: uint = 0;
@@ -33,7 +33,7 @@ def! Printer = struct {
 		};
 	};
 
-	op print_value = fn [T](printer: ^Printer, t: T, $fmt: string) {
+	op print_value = fn (printer: ^Printer, t: $T, $fmt: string) {
 		var$ type_info = type_info_of(T);
 		switch$ type_info {
 			case Integer {

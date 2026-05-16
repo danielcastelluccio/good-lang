@@ -916,30 +916,42 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 		}
 
 		String_View *used_inferred_arguments = NULL;
+		long int function_argument_index = 0;
 		for (long int i = 0; i < arrlen(call_argument_values); i++) {
 			if (call_argument_values[i].kind != CALL_ARGUMENT_NODE) continue;
+
+			while (function_arguments[function_argument_index].inferred) {
+				function_argument_index++;
+			}
 
 			Node *node = call_argument_values[i].node;
 			Value type = get_type(context, node);
 			if (type.value == NULL) {
-				long int function_argument_index = i + arrlen(inferred_arguments);
 				if (function_argument_index < arrlen(function_arguments) && !is_literal(node) && uses_inferred_arguments(function_arguments[function_argument_index].type, inferred_arguments, &used_inferred_arguments)) {
 					process_node(context, node);
 				}
 			}
+
+			function_argument_index++;
 		}
 
+		function_argument_index = 0;
 		for (long int i = 0; i < arrlen(call_argument_values); i++) {
 			if (call_argument_values[i].kind != CALL_ARGUMENT_NODE) continue;
+
+			while (function_arguments[function_argument_index].inferred) {
+				function_argument_index++;
+			}
 
 			Node *node = call_argument_values[i].node;
 			Value type = get_type(context, node);
 			if (type.value == NULL) {
-				long int function_argument_index = i + arrlen(inferred_arguments);
 				if (function_argument_index < arrlen(function_arguments) && is_literal(node) && uses_inferred_arguments(function_arguments[function_argument_index].type, inferred_arguments, NULL) && !uses_inferred_arguments(function_arguments[function_argument_index].type, used_inferred_arguments, NULL)) {
 					process_node(context, node);
 				}
 			}
+
+			function_argument_index++;
 		}
 
 		assert(arrlen(call_argument_values) + arrlen(inferred_arguments) == arrlen(function_arguments));
@@ -1010,7 +1022,7 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 		}
 
 		for (long int k = 0; k < arrlen(function_arguments); k++) {
-			if (!function_arguments[k].inferred) break;
+			if (!function_arguments[k].inferred) continue;
 
 			Typed_Value typed_value = hmget(result, sv_hash(function_arguments[k].identifier));
 			if (typed_value.value.value == NULL && function_arguments[k].default_value != NULL) {

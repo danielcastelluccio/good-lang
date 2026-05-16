@@ -5,7 +5,7 @@ def print_stdout_fn = fn (_: ^, char: byte) {
 	_ = c.putchar(cast(int) char);
 };
 
-def! print = fn [T]($fmt: string, args: T) {
+def! print = fn ($fmt: string, args: $T) {
 	stdout_printer$$print(fmt, args);
 };
 
