@@ -239,6 +239,10 @@ typedef struct {
 } Is_Node;
 
 typedef struct {
+	Node *path;
+} Load_Node;
+
+typedef struct {
 	Node *body;
 } Module_Node;
 
@@ -287,6 +291,10 @@ typedef struct {
 typedef struct {
 	Node *value;
 } Return_Node;
+
+typedef struct {
+	Node **statements; // stb_ds
+} Root_Node;
 
 typedef struct {
 	Node *node;
@@ -387,6 +395,7 @@ typedef enum {
 	IMPORT_NODE,
 	INTERNAL_NODE,
 	IS_NODE,
+	LOAD_NODE,
 	MODULE_NODE,
 	MODULE_TYPE_NODE,
 	NOT_NODE,
@@ -399,6 +408,7 @@ typedef enum {
 	REFERENCE_NODE,
 	RESULT_NODE,
 	RETURN_NODE,
+	ROOT_NODE,
 	RUN_NODE,
 	SLICE_NODE,
 	STRING_NODE,
@@ -444,6 +454,7 @@ struct Node {
 		Import_Node import;
 		Internal_Node internal;
 		Is_Node is;
+		Load_Node load;
 		Module_Node module;
 		Not_Node not;
 		Number_Node number;
@@ -454,6 +465,7 @@ struct Node {
 		Reference_Node reference;
 		Result_Type_Node result_type;
 		Return_Node return_;
+		Root_Node root;
 		Run_Node run;
 		Slice_Node slice;
 		String_Node string;

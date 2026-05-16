@@ -118,9 +118,9 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			else if (streq_len(identifier, len, "is", 2)) result = KEYWORD_IS;
 			else if (streq_len(identifier, len, "import", 6)) result = KEYWORD_IMPORT;
 			break;
-		// case 'l':
-		// 	if (streq_len(identifier, len, "load", 4)) result = KEYWORD_LOAD;
-		// 	break;
+		case 'l':
+			if (streq_len(identifier, len, "load", 4)) result = KEYWORD_LOAD;
+			break;
 		case 'm':
 			if (streq_len(identifier, len, "mod", 3)) result = KEYWORD_MOD;
 			break;
@@ -482,8 +482,8 @@ char *token_to_string(Token_Kind kind) {
 			return "import";
 		case KEYWORD_IS:
 			return "is";
-		// case KEYWORD_LOAD:
-		// 	return "load";
+		case KEYWORD_LOAD:
+			return "load";
 		case KEYWORD_MOD:
 			return "mod";
 		case KEYWORD_NOT:

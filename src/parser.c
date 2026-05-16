@@ -251,21 +251,6 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 				}
 				break;
 			case 'i':
-				// if (sv_eq_cstr(token.string, "int")) {
-				// 	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
-				// 		Node *internal = ast_new(INTERNAL_NODE, token.location);
-				// 		internal->internal.kind = INTERNAL_INT;
-				// 		internal->internal.inputs = NULL;
-				// 		internal->internal.assign_value = NULL;
-
-				// 		lexer_consume_check(lexer, PARENTHESIS_OPEN);
-				// 		arrpush(internal->internal.inputs, parse_expression(lexer));
-				// 		lexer_consume_check(lexer, COMMA);
-				// 		arrpush(internal->internal.inputs, parse_expression(lexer));
-				// 		lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-
-				// 		return internal;
-				// 	}
 				if (sv_eq_cstr(token.string, "int")) {
 					Node *internal = ast_new(INTERNAL_NODE, token.location);
 					internal->internal.kind = INTERNAL_INT;
@@ -1270,18 +1255,13 @@ static Node *parse_import(Lexer *lexer) {
 	return import;
 }
 
-// static Node *parse_load(Lexer *lexer) {
-// 	Token_Data first_token = lexer_consume(lexer);
-// 
-// 	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
-// 	internal->internal.kind = INTERNAL_IMPORT;
-// 	internal->internal.inputs = NULL;
-// 	internal->internal.assign_value = NULL;
-// 
-// 	arrpush(internal->internal.inputs, parse_expression(lexer));
-// 
-// 	return internal;
-// }
+static Node *parse_load(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *load = ast_new(LOAD_NODE, first_token.location);
+	load->load.path = parse_expression(lexer);
+	return load;
+}
 
 static Node *parse_for(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
@@ -1754,10 +1734,10 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_import(lexer);
 			break;
 		}
-		// case KEYWORD_LOAD: {
-		// 	result = parse_load(lexer);
-		// 	break;
-		// }
+		case KEYWORD_LOAD: {
+			result = parse_load(lexer);
+			break;
+		}
 		case KEYWORD_MOD: {
 			result = parse_module_or_module_type(lexer);
 			break;
@@ -1907,13 +1887,11 @@ Node *parse_source(Data *data, char *source, size_t length, char *path) {
 	arrpush(data->source_files, path);
 	lexer.path = path;
 
-	Node *root = ast_new(MODULE_NODE, (Source_Location) {});
-	Node *block = ast_new(BLOCK_NODE, (Source_Location) {});
-	block->block.has_result = false;
-	block->block.statements = NULL;
+	Node *root = ast_new(ROOT_NODE, (Source_Location) {});
+	root->root.statements = NULL;
 	while (lexer_peek(&lexer).kind != END_OF_FILE) {
 		Node *expression = parse_expression(&lexer);
-		arrpush(block->block.statements, expression);
+		arrpush(root->root.statements, expression);
 
 		if (needs_semicolon(expression)) {
 			lexer_consume_check(&lexer, SEMICOLON);
@@ -1921,7 +1899,6 @@ Node *parse_source(Data *data, char *source, size_t length, char *path) {
 			lexer_consume(&lexer);
 		}
 	}
-	root->module.body = block;
 
 	return root;
 }

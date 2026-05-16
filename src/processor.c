@@ -34,9 +34,9 @@ static Node_Data *process_node_with_scopes(Context *context, Node *node, Scope *
 	return data;
 }
 
-static Node *find_define(Block_Node block, String_View identifier) {
-	for (long int i = 0; i < arrlen(block.statements); i++) {
-		Node *statement = block.statements[i];
+static Node *find_define(Node *root, String_View identifier) {
+	for (long int i = 0; i < arrlen(root->root.statements); i++) {
+		Node *statement = root->root.statements[i];
 		if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
 			return statement;
 		}
@@ -127,16 +127,71 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 			}
 
 			for (long int i = 0; i < arrlen(scope->imports); i++) {
-				Node *block = scope->imports[i].value->module.body;
-				for (long int j = 0; j < arrlen(block->block.statements); j++) {
-					Node *statement = block->block.statements[j];
+				Node **roots = scope->imports[i].value->module.bodies;
+				for (long int k = 0; k < arrlen(roots); k++) {
+					Node *root = roots[k];
+					for (long int j = 0; j < arrlen(root->root.statements); j++) {
+						Node *statement = root->root.statements[j];
+						if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+							Define_Scope define = {
+								.node = statement,
+								.kind = DEFINE_NONLOCAL,
+								.scope = scope->imports[i].value->module.scopes
+							};
+							arrpush(defines, define);
+						}
+					}
+				}
+			}
+		}
+
+		if (scope->node->kind == ROOT_NODE) {
+			size_t saved_static_id = context->static_id;
+			context->static_id = 0;
+			Value_Data *module = get_data(context, scope->node)->root.module;
+			context->static_id = saved_static_id;
+			if (module != NULL) {
+				for (long int i = 0; i < arrlen(module->module.bodies); i++) {
+					for (long int j = 0; j < arrlen(module->module.bodies[i]->root.statements); j++) {
+						Node *statement = module->module.bodies[i]->root.statements[j];
+						if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+							Define_Scope define = {
+								.node = statement,
+								.kind = DEFINE_LOCAL,
+								.scope = scope
+							};
+							arrpush(defines, define);
+						}
+					}
+				}
+			} else {
+				for (long int i = 0; i < arrlen(scope->node->root.statements); i++) {
+					Node *statement = scope->node->root.statements[i];
 					if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
 						Define_Scope define = {
 							.node = statement,
-							.kind = DEFINE_NONLOCAL,
-							.scope = scope->imports[i].value->module.scopes
+							.kind = DEFINE_LOCAL,
+							.scope = scope
 						};
 						arrpush(defines, define);
+					}
+				}
+			}
+
+			for (long int i = 0; i < arrlen(scope->imports); i++) {
+				Node **roots = scope->imports[i].value->module.bodies;
+				for (long int k = 0; k < arrlen(roots); k++) {
+					Node *root = roots[k];
+					for (long int j = 0; j < arrlen(root->root.statements); j++) {
+						Node *statement = root->root.statements[j];
+						if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
+							Define_Scope define = {
+								.node = statement,
+								.kind = DEFINE_NONLOCAL,
+								.scope = scope->imports[i].value->module.scopes
+							};
+							arrpush(defines, define);
+						}
 					}
 				}
 			}
@@ -717,6 +772,34 @@ Typed_Value preprocess_node(Context *context, Node *node) {
 	return result;
 }
 
+Value process_module_root(Context *context, Node *root) {
+	Value_Data *result = value_new(MODULE_VALUE);
+	result->module.bodies = NULL;
+	arrpush(result->module.bodies, root);
+	for (long int i = 0; i < arrlen(root->root.statements); i++) {
+		Node *statement = root->root.statements[i];
+
+		if (statement->kind == LOAD_NODE) {
+			Node *file = process_node(context, statement)->load.file;
+			arrpush(result->module.bodies, file);
+		}
+	}
+
+	for (long int i = 0; i < arrlen(result->module.bodies); i++) {
+		Node_Data **data = get_data_ref(context, result->module.bodies[i]);
+		*data = data_new();
+		(*data)->root.module = result;
+	}
+
+	for (long int i = 0; i < arrlen(result->module.bodies); i++) {
+		process_node(context, result->module.bodies[i]);
+	}
+
+	return (Value) {
+		.value = result
+	};
+}
+
 static Node_Data *process_function(Context *context, Node *node, bool given_static_arguments);
 
 static bool is_literal(Node *node) {
@@ -1113,7 +1196,7 @@ static Value process_enforce_pointer(Context *context, Node *node, Value structu
 	return structure_type;
 }
 
-Value get_cached_file(Context *context, char *path) {
+Value get_module(Context *context, char *path) {
 	for (long int i = 0; i < arrlen(context->cached_files); i++) {
 		if (strcmp(context->cached_files[i].path, path) == 0) {
 			return context->cached_files[i].value;
@@ -1123,7 +1206,7 @@ Value get_cached_file(Context *context, char *path) {
 	return (Value) {};
 }
 
-void add_cached_file(Context *context, char *path, Value value) {
+void add_module(Context *context, char *path, Value value) {
 	Cached_File file = {
 		.path = path,
 		.value = value
@@ -1990,15 +2073,18 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 	*define_node = NULL;
 	*define_scopes = NULL;
 	if (module_value.value != NULL) {
-		for (long int i = 0; i < arrlen(module_value.value->module.body->block.statements); i++) {
-			Node *statement = module_value.value->module.body->block.statements[i];
-			if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
-				*define_node = statement;
+		for (long int j = 0; j < arrlen(module_value.value->module.bodies); j++) {
+			Node *root = module_value.value->module.bodies[j];
+			for (long int i = 0; i < arrlen(root->root.statements); i++) {
+				Node *statement = root->root.statements[i];
+				if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
+					*define_node = statement;
 
-				for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
-					arrpush(*define_scopes, module_value.value->module.scopes[i]);
+					for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
+						arrpush(*define_scopes, module_value.value->module.scopes[i]);
+					}
+					break;
 				}
-				break;
 			}
 		}
 	}
@@ -2392,14 +2478,17 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 
 			Value module = data->internal.value;
 			Typed_Value typed_value = {};
-			for (long int i = 0; i < arrlen(module.value->module.body->block.statements); i++) {
-				Node *statement = module.value->module.body->block.statements[i];
+			for (long int j = 0; j < arrlen(module.value->module.bodies); j++) {
+				Node *root = module.value->module.bodies[j];
+				for (long int i = 0; i < arrlen(root->root.statements); i++) {
+					Node *statement = root->root.statements[i];
 
-				if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier.value)) {
-					typed_value = process_node_with_scopes(context, node, import_scopes)->define.typed_value;
-					break;
+					if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier.value)) {
+						typed_value = process_node_with_scopes(context, node, import_scopes)->define.typed_value;
+						break;
+					}
+
 				}
-
 			}
 			type = typed_value.type;
 			value = typed_value.value;
@@ -2572,38 +2661,23 @@ static Node_Data *process_import(Context *context, Node *node) {
 		source[i] = string.value->string.value[i];
 	}
 
-	if (strlen(source) <= 5 || strcmp(source + strlen(source) - 5, ".lang") != 0) {
+	Value value = get_module(context, source);
+
+	if (value.value == NULL) {
 		char *cwd = getcwd(NULL, PATH_MAX);
 		char *new_source = malloc(strlen(cwd) + 32);
 		sprintf(new_source, "%s/modules/%s.lang", cwd, source);
-		source = new_source;
-	} else {
-		size_t slash_index = 0;
-		char *node_path = context->data->source_files[node->location.path_ref];
-		for (size_t i = 0; i < strlen(node_path); i++) {
-			if (node_path[i] == '/') {
-				slash_index = i;
-			}
-		}
 
-		char *old_source = source;
-		source = malloc(slash_index + strlen(source) + 2);
-		strncpy(source, node_path, slash_index + 1);
-		source[slash_index + 1] = '\0';
-		strcat(source, old_source);
-	}
-
-	Value value = get_cached_file(context, source);
-	if (value.value == NULL) {
-		Node *file_node = parse_file(context->data, source);
+		Node *file_node = parse_file(context->data, new_source);
 
 		Scope *saved_scopes = context->scopes;
 		context->scopes = NULL;
-		process_node(context, file_node);
-		value = evaluate(context, file_node);
+		value = process_module_root(context, file_node);
+		// process_node(context, file_node);
+		// value = evaluate(context, file_node);
 		context->scopes = saved_scopes;
 
-		add_cached_file(context, source, value);
+		add_module(context, source, value);
 	}
 
 	data->type = create_value(MODULE_TYPE_VALUE);
@@ -3090,13 +3164,13 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 			size_t saved_static_id = context->static_id;
 			context->static_id = 0;
-			Value type_info_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Type_Info")))->define.typed_value.value;
+			Value type_info_type = get_data(context, find_define(context->internal_root, cstr_to_sv("Type_Info")))->define.typed_value.value;
 			context->static_id = saved_static_id;
 			data->type = type_info_type;
 			return data;
 		}
 		case INTERNAL_OS: {
-			Value operating_system_type = get_data(context, find_define(context->internal_root->module.body->block, cstr_to_sv("Operating_System")))->define.typed_value.value;
+			Value operating_system_type = get_data(context, find_define(context->internal_root, cstr_to_sv("Operating_System")))->define.typed_value.value;
 
 			#if defined(__linux__)
 				size_t os_value = 0;
@@ -3173,6 +3247,40 @@ static Node_Data *process_is(Context *context, Node *node) {
 	data->is.type = create_optional_type(tagged_type);
 
 	data->type = create_optional_type(tagged_type);
+	return data;
+}
+
+static Node_Data *process_load(Context *context, Node *node) {
+	Load_Node load = node->load;
+
+	process_node(context, load.path);
+
+	Value string = evaluate(context, load.path);
+
+	char *source = malloc(string.value->string.length->integer.value + 1);
+	source[string.value->string.length->integer.value] = '\0';
+	for (long int i = 0; i < string.value->string.length->integer.value; i++) {
+		source[i] = string.value->string.value[i];
+	}
+
+	size_t slash_index = 0;
+	char *node_path = context->data->source_files[node->location.path_ref];
+	for (size_t i = 0; i < strlen(node_path); i++) {
+		if (node_path[i] == '/') {
+			slash_index = i;
+		}
+	}
+
+	char *old_source = source;
+	source = malloc(slash_index + strlen(source) + 2);
+	strncpy(source, node_path, slash_index + 1);
+	source[slash_index + 1] = '\0';
+	strcat(source, old_source);
+
+	Node *file_node = parse_file(context->data, source);
+
+	Node_Data *data = context->temporary_context.data;
+	data->load.file = file_node;
 	return data;
 }
 
@@ -3376,6 +3484,26 @@ static Node_Data *process_return(Context *context, Node *node) {
 
 	data->return_.type = return_type;
 	return data;
+}
+
+static Node_Data *process_root(Context *context, Node *node) {
+	Root_Node root = node->root;
+
+	arrpush(context->scopes, (Scope) { .node = node });
+	for (long int i = 0; i < arrlen(root.statements); i++) {
+		if (root.statements[i]->kind == IMPORT_NODE) {
+			Node_Data *data = process_node(context, root.statements[i]);
+			arrpush(arrlast(context->scopes).imports, data->import.value);
+		}
+	}
+
+	for (long int i = 0; i < arrlen(root.statements); i++) {
+		Node *statement = root.statements[i];
+		process_node(context, statement);
+	}
+	(void) arrpop(context->scopes);
+
+	return context->temporary_context.data;
 }
 
 static Node_Data *process_run(Context *context, Node *node) {
@@ -4070,6 +4198,9 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 		case IS_NODE:
 			value = process_is(context, node);
 			break;
+		case LOAD_NODE:
+			value = process_load(context, node);
+			break;
 		case MODULE_NODE:
 			value = process_module(context, node);
 			break;
@@ -4105,6 +4236,9 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			break;
 		case RETURN_NODE:
 			value = process_return(context, node);
+			break;
+		case ROOT_NODE:
+			value = process_root(context, node);
 			break;
 		case RUN_NODE:
 			value = process_run(context, node);

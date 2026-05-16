@@ -158,7 +158,7 @@ typedef struct {
 } Tuple_Type_Value;
 
 typedef struct {
-	Node *body;
+	Node **bodies;
 	Scope *scopes;
 } Module_Value;
 

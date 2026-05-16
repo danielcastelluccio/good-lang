@@ -9,5 +9,5 @@ def! print = fn [T]($fmt: string, args: T) {
 	stdout_printer$$print(fmt, args);
 };
 
-def c = import("c.lang");
-def print_ = import("print.lang");
+def c = import("c");
+def print_ = import("print");

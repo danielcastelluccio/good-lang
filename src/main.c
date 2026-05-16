@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
 	context.internal_root = internal_root;
 	context.internal_scope = internal_scope;
 
-	process_node(&context, root);
+	process_module_root(&context, root);
 
 	codegen.build_fn(context, root, codegen.data);
 

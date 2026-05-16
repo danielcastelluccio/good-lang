@@ -284,6 +284,14 @@ typedef struct {
 	Value value;
 } Import_Data;
 
+typedef struct {
+	Node *file;
+} Load_Data;
+
+typedef struct {
+	Value_Data *module;
+} Root_Data;
+
 struct Node_Data {
 	union {
 		Identifier_Data identifier;
@@ -321,6 +329,8 @@ struct Node_Data {
 		Use_Data use;
 		Struct_Type_Data struct_type;
 		Import_Data import;
+		Load_Data load;
+		Root_Data root;
 	};
 	Value type;
 	bool processed;

@@ -1620,6 +1620,20 @@ static LLVMValueRef generate_not(Node *node, State *state) {
 	return LLVMBuildNot(state->llvm_builder, generate_node(not.node, state), "");
 }
 
+static LLVMValueRef generate_root(Node *node, State *state) {
+	assert(node->kind == ROOT_NODE);
+	Root_Node root = node->root;
+
+	for (long int i = 0; i < arrlen(root.statements); i++) {
+		// if (root.statements[i]->kind == DEFINE_NODE) {
+		// 	printf("statement %.*s\n", root.statements[i]->define.identifier.len, root.statements[i]->define.identifier.ptr);
+		// }
+		generate_node(root.statements[i], state);
+	}
+
+	return NULL;
+}
+
 static LLVMValueRef generate_node(Node *node, State *state) {
 	switch (node->kind) {
 		case DEFINE_NODE:
@@ -1687,6 +1701,10 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_slice(node, state);
 		case NOT_NODE:
 			return generate_not(node, state);
+		case ROOT_NODE:
+			return generate_root(node, state);
+		case LOAD_NODE:
+			return NULL;
 		case IMPORT_NODE:
 			return NULL;
 		default:
@@ -1761,7 +1779,9 @@ static void generate_module(Value_Data *value, State *state) {
 	assert(value->tag == MODULE_VALUE);
 	Module_Value module = value->module;
 
-	generate_node(module.body, state);
+	for (long int i = 0; i < arrlen(module.bodies); i++) {
+		generate_node(module.bodies[i], state);
+	}
 }
 
 static LLVMValueRef generate_integer(Value_Data *value, Value_Data *type, State *state) {
@@ -2057,7 +2077,7 @@ size_t alignment_llvm(Value_Data *value, void *data) {
 }
 
 void build_llvm(Context context, Node *root, void *data) {
-	assert(root->kind == MODULE_NODE);
+	assert(root->kind == ROOT_NODE);
 
 	LLVMModuleRef llvm_module = ((LLVM_Data *) data)->module;
     LLVMTargetMachineRef llvm_target_machine = ((LLVM_Data *) data)->target_machine;
@@ -2073,7 +2093,7 @@ void build_llvm(Context context, Node *root, void *data) {
 		.generated_cache = NULL
 	};
 
-	generate_node(root->module.body, &state);
+	generate_node(root, &state);
 	generate_main(&state);
 
 	LLVMPrintModuleToFile(llvm_module, "output.ll", NULL);

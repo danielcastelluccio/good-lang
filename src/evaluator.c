@@ -401,7 +401,8 @@ static Value evaluate_module(State *state, Node *node) {
 
 	arrpush(scopes, (Scope) { .node = module.body });
 
-	module_value->module.body = module.body;
+	module_value->module.bodies = NULL;
+	arrpush(module_value->module.bodies, module.body);
 	module_value->module.scopes = scopes;
 
 	return create_value_data(module_value, node);
