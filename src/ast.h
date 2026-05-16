@@ -341,10 +341,6 @@ typedef struct {
 } Union_Type_Node;
 
 typedef struct {
-	Node *node;
-} Use_Node;
-
-typedef struct {
 	String_View name;
 	Node *type;
 	Node *value;
@@ -408,7 +404,6 @@ typedef enum {
 	SWITCH_NODE,
 	TAGGED_UNION_TYPE_NODE,
 	UNION_TYPE_NODE,
-	USE_NODE,
 	VARIABLE_NODE,
 	WHILE_NODE
 } Node_Kind;
@@ -463,7 +458,6 @@ struct Node {
 		Switch_Node switch_;
 		Tagged_Union_Type_Node tagged_union_type;
 		Union_Type_Node union_type;
-		Use_Node use;
 		Variable_Node variable;
 		While_Node while_;
 	};

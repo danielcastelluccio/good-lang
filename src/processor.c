@@ -1328,21 +1328,6 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 	return data;
 }
 
-static void add_uses(Context *context, Node *use_node, Use_Data_Identifier *identifiers) {
-	Scope_Identifier scope_identifier = {
-		.tag = SCOPE_USE,
-		.use = use_node
-	};
-
-	for (long int i = 0; i < arrlen(identifiers); i++) {
-		Scope_Key_Identifier scope_key_identifier = {
-			.key = identifiers[i].identifier,
-			.value = scope_identifier
-		};
-		arrpush(arrlast(context->scopes).identifiers, scope_key_identifier);
-	}
-}
-
 static Node_Data *process_block(Context *context, Node *node) {
 	Block_Node block = node->block;
 
@@ -1351,10 +1336,7 @@ static Node_Data *process_block(Context *context, Node *node) {
 
 	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(block.statements); i++) {
-		if (block.statements[i]->kind == USE_NODE) {
-			Node_Data *data = process_node(context, block.statements[i]);
-			add_uses(context, block.statements[i], data->use.identifiers);
-		} else if (block.statements[i]->kind == INTERNAL_NODE && block.statements[i]->internal.kind == INTERNAL_IMPORT) {
+		if (block.statements[i]->kind == INTERNAL_NODE && block.statements[i]->internal.kind == INTERNAL_IMPORT) {
 			Node_Data *data = process_node(context, block.statements[i]);
 			arrpush(arrlast(context->scopes).imports, data->internal.value);
 		}
@@ -3868,34 +3850,6 @@ static Node_Data *process_union_type(Context *context, Node *node) {
 	return data;
 }
 
-static Node_Data *process_use(Context *context, Node *node) {
-	Use_Node use = node->use;
-	process_node(context, use.node);
-
-	Node_Data *data = context->temporary_context.data;
-	Value module = evaluate(context, use.node);
-
-	data->use.identifiers = NULL;
-	for (long int i = 0; i < arrlen(module.value->module.body->block.statements); i++) {
-		Node *statement = module.value->module.body->block.statements[i];
-
-		if (statement->kind == DEFINE_NODE && statement->define.public) {
-			Scope *scopes = NULL;
-			for (long i = 0; i < arrlen(module.value->module.scopes); i++) {
-				arrpush(scopes, module.value->module.scopes[i]);
-			}
-
-			Use_Data_Identifier identifier_data = {
-				.identifier = statement->define.identifier,
-				.typed_value = process_node_with_scopes(context, statement, scopes)->define.typed_value
-			};
-
-			arrpush(data->use.identifiers, identifier_data);
-		}
-	}
-	return data;
-}
-
 static Node_Data *process_variable(Context *context, Node *node) {
 	Variable_Node variable = node->variable;
 
@@ -4169,9 +4123,6 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			break;
 		case UNION_TYPE_NODE:
 			value = process_union_type(context, node);
-			break;
-		case USE_NODE:
-			value = process_use(context, node);
 			break;
 		case VARIABLE_NODE:
 			value = process_variable(context, node);

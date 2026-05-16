@@ -1054,16 +1054,6 @@ static Node *parse_union_type(Lexer *lexer) {
 	return union_;
 }
 
-static Node *parse_use(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *use = ast_new(USE_NODE, first_token.location);
-
-	use->use.node = parse_expression(lexer);
-
-	return use;
-}
-
 static Node *parse_tagged_union_type(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
@@ -1295,18 +1285,18 @@ static Node *parse_import(Lexer *lexer) {
 	return internal;
 }
 
-static Node *parse_load(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
-	internal->internal.kind = INTERNAL_IMPORT;
-	internal->internal.inputs = NULL;
-	internal->internal.assign_value = NULL;
-
-	arrpush(internal->internal.inputs, parse_expression(lexer));
-
-	return internal;
-}
+// static Node *parse_load(Lexer *lexer) {
+// 	Token_Data first_token = lexer_consume(lexer);
+// 
+// 	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
+// 	internal->internal.kind = INTERNAL_IMPORT;
+// 	internal->internal.inputs = NULL;
+// 	internal->internal.assign_value = NULL;
+// 
+// 	arrpush(internal->internal.inputs, parse_expression(lexer));
+// 
+// 	return internal;
+// }
 
 static Node *parse_for(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
@@ -1779,10 +1769,10 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_import(lexer);
 			break;
 		}
-		case KEYWORD_LOAD: {
-			result = parse_load(lexer);
-			break;
-		}
+		// case KEYWORD_LOAD: {
+		// 	result = parse_load(lexer);
+		// 	break;
+		// }
 		case KEYWORD_MOD: {
 			result = parse_module_or_module_type(lexer);
 			break;
@@ -1813,10 +1803,6 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_UNION: {
 			result = parse_union_type(lexer);
-			break;
-		}
-		case KEYWORD_USE: {
-			result = parse_use(lexer);
 			break;
 		}
 		case KEYWORD_VAR: {
