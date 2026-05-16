@@ -280,6 +280,10 @@ typedef struct {
 	Value value;
 } Struct_Type_Data;
 
+typedef struct {
+	Value value;
+} Import_Data;
+
 struct Node_Data {
 	union {
 		Identifier_Data identifier;
@@ -316,6 +320,7 @@ struct Node_Data {
 		Operator_Data operator;
 		Use_Data use;
 		Struct_Type_Data struct_type;
+		Import_Data import;
 	};
 	Value type;
 	bool processed;

@@ -1336,9 +1336,9 @@ static Node_Data *process_block(Context *context, Node *node) {
 
 	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(block.statements); i++) {
-		if (block.statements[i]->kind == INTERNAL_NODE && block.statements[i]->internal.kind == INTERNAL_IMPORT) {
+		if (block.statements[i]->kind == IMPORT_NODE) {
 			Node_Data *data = process_node(context, block.statements[i]);
-			arrpush(arrlast(context->scopes).imports, data->internal.value);
+			arrpush(arrlast(context->scopes).imports, data->import.value);
 		}
 	}
 
@@ -2557,6 +2557,60 @@ static Node_Data *process_if(Context *context, Node *node) {
 	return data;
 }
 
+static Node_Data *process_import(Context *context, Node *node) {
+	Import_Node import = node->import;
+
+	Node_Data *data = context->temporary_context.data;
+
+	process_node(context, import.module);
+
+	Value string = evaluate(context, import.module);
+
+	char *source = malloc(string.value->string.length->integer.value + 1);
+	source[string.value->string.length->integer.value] = '\0';
+	for (long int i = 0; i < string.value->string.length->integer.value; i++) {
+		source[i] = string.value->string.value[i];
+	}
+
+	if (strlen(source) <= 5 || strcmp(source + strlen(source) - 5, ".lang") != 0) {
+		char *cwd = getcwd(NULL, PATH_MAX);
+		char *new_source = malloc(strlen(cwd) + 32);
+		sprintf(new_source, "%s/modules/%s.lang", cwd, source);
+		source = new_source;
+	} else {
+		size_t slash_index = 0;
+		char *node_path = context->data->source_files[node->location.path_ref];
+		for (size_t i = 0; i < strlen(node_path); i++) {
+			if (node_path[i] == '/') {
+				slash_index = i;
+			}
+		}
+
+		char *old_source = source;
+		source = malloc(slash_index + strlen(source) + 2);
+		strncpy(source, node_path, slash_index + 1);
+		source[slash_index + 1] = '\0';
+		strcat(source, old_source);
+	}
+
+	Value value = get_cached_file(context, source);
+	if (value.value == NULL) {
+		Node *file_node = parse_file(context->data, source);
+
+		Scope *saved_scopes = context->scopes;
+		context->scopes = NULL;
+		process_node(context, file_node);
+		value = evaluate(context, file_node);
+		context->scopes = saved_scopes;
+
+		add_cached_file(context, source, value);
+	}
+
+	data->type = create_value(MODULE_TYPE_VALUE);
+	data->import.value = value;
+	return data;
+}
+
 static Node_Data *process_internal(Context *context, Node *node) {
 	Internal_Node internal = node->internal;
 
@@ -2808,54 +2862,6 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->integer.value = context->codegen.size_fn(type.value, context->codegen.data);
 
 			data->type = create_integer_type(false, context->codegen.default_integer_size);
-			return data;
-		}
-		case INTERNAL_IMPORT: {
-			process_node(context, internal.inputs[0]);
-
-			Value string = evaluate(context, internal.inputs[0]);
-
-			char *source = malloc(string.value->string.length->integer.value + 1);
-			source[string.value->string.length->integer.value] = '\0';
-			for (long int i = 0; i < string.value->string.length->integer.value; i++) {
-				source[i] = string.value->string.value[i];
-			}
-
-			if (strlen(source) <= 5 || strcmp(source + strlen(source) - 5, ".lang") != 0) {
-				char *cwd = getcwd(NULL, PATH_MAX);
-				char *new_source = malloc(strlen(cwd) + 32);
-				sprintf(new_source, "%s/modules/%s.lang", cwd, source);
-				source = new_source;
-			} else {
-				size_t slash_index = 0;
-				char *node_path = context->data->source_files[node->location.path_ref];
-				for (size_t i = 0; i < strlen(node_path); i++) {
-					if (node_path[i] == '/') {
-						slash_index = i;
-					}
-				}
-
-				char *old_source = source;
-				source = malloc(slash_index + strlen(source) + 2);
-				strncpy(source, node_path, slash_index + 1);
-				source[slash_index + 1] = '\0';
-				strcat(source, old_source);
-			}
-
-			*value = get_cached_file(context, source);
-			if (value->value == NULL) {
-				Node *file_node = parse_file(context->data, source);
-
-				Scope *saved_scopes = context->scopes;
-				context->scopes = NULL;
-				process_node(context, file_node);
-				*value = evaluate(context, file_node);
-				context->scopes = saved_scopes;
-
-				add_cached_file(context, source, *value);
-			}
-
-			data->type = create_value(MODULE_TYPE_VALUE);
 			return data;
 		}
 		case INTERNAL_TYPE_INFO_OF: {
@@ -4054,6 +4060,9 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			break;
 		case IF_NODE:
 			value = process_if(context, node);
+			break;
+		case IMPORT_NODE:
+			value = process_import(context, node);
 			break;
 		case INTERNAL_NODE:
 			value = process_internal(context, node);

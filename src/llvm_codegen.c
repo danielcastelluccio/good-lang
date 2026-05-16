@@ -1562,9 +1562,6 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 
 			return LLVMBuildLoad2(state->llvm_builder, result_type, result_value, "");
 		}
-		case INTERNAL_IMPORT: {
-			return NULL;
-		}
 		default:
 			assert(false);
 	}
@@ -1690,6 +1687,8 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return generate_slice(node, state);
 		case NOT_NODE:
 			return generate_not(node, state);
+		case IMPORT_NODE:
+			return NULL;
 		default:
 			assert(false);
 	}

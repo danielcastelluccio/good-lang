@@ -191,6 +191,10 @@ typedef struct {
 } If_Node;
 
 typedef struct {
+	Node *module;
+} Import_Node;
+
+typedef struct {
 	enum {
 		INTERNAL_UINT,
 		INTERNAL_UINT8,
@@ -218,7 +222,6 @@ typedef struct {
 		INTERNAL_EMBED,
 		INTERNAL_SELF,
 		INTERNAL_SIZE_OF,
-		INTERNAL_IMPORT,
 		INTERNAL_TYPE_INFO_OF,
 		INTERNAL_OS,
 		INTERNAL_OK,
@@ -381,6 +384,7 @@ typedef enum {
 	GLOBAL_NODE,
 	IDENTIFIER_NODE,
 	IF_NODE,
+	IMPORT_NODE,
 	INTERNAL_NODE,
 	IS_NODE,
 	MODULE_NODE,
@@ -437,6 +441,7 @@ struct Node {
 		Global_Node global;
 		Identifier_Node identifier;
 		If_Node if_;
+		Import_Node import;
 		Internal_Node internal;
 		Is_Node is;
 		Module_Node module;

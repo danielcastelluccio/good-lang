@@ -271,17 +271,6 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 					internal->internal.kind = INTERNAL_INT;
 					internal->internal.assign_value = NULL;
 					return internal;
-				} else if (sv_eq_cstr(token.string, "import")) {
-					Node *internal = ast_new(INTERNAL_NODE, token.location);
-					internal->internal.kind = INTERNAL_IMPORT;
-					internal->internal.inputs = NULL;
-					internal->internal.assign_value = NULL;
-
-					lexer_consume_check(lexer, PARENTHESIS_OPEN);
-					arrpush(internal->internal.inputs, parse_expression(lexer));
-					lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-
-					return internal;
 				}
 				break;
 			case 'n':
@@ -1275,14 +1264,10 @@ static Node *parse_while(Lexer *lexer) {
 static Node *parse_import(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
-	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
-	internal->internal.kind = INTERNAL_IMPORT;
-	internal->internal.inputs = NULL;
-	internal->internal.assign_value = NULL;
+	Node *import = ast_new(IMPORT_NODE, first_token.location);
+	import->import.module = parse_expression(lexer);
 
-	arrpush(internal->internal.inputs, parse_expression(lexer));
-
-	return internal;
+	return import;
 }
 
 // static Node *parse_load(Lexer *lexer) {

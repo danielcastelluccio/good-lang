@@ -1110,6 +1110,11 @@ static Value evaluate_run(State *state, Node *node) {
 	return run_data.value;
 }
 
+static Value evaluate_import(State *state, Node *node) {
+	Import_Data import_data = get_data(state->context, node)->import;
+	return import_data.value;
+}
+
 static Value evaluate_state(State *state, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE:          return evaluate_function(state, node);
@@ -1150,6 +1155,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case CONST_NODE:             return evaluate_const(state, node);
 		case NULL_NODE:              return evaluate_null(state, node);
 		case RUN_NODE:               return evaluate_run(state, node);
+		case IMPORT_NODE:            return evaluate_import(state, node);
 		case DEFINE_NODE:            return (Value) {};
 		default:                     assert(false);
 	}
