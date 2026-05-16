@@ -116,6 +116,10 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 		case 'i':
 			if (streq_len(identifier, len, "if", 2)) result = KEYWORD_IF;
 			else if (streq_len(identifier, len, "is", 2)) result = KEYWORD_IS;
+			else if (streq_len(identifier, len, "import", 6)) result = KEYWORD_IMPORT;
+			break;
+		case 'l':
+			if (streq_len(identifier, len, "load", 4)) result = KEYWORD_LOAD;
 			break;
 		case 'm':
 			if (streq_len(identifier, len, "mod", 3)) result = KEYWORD_MOD;
@@ -147,10 +151,6 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case 'w':
 			if (streq_len(identifier, len, "while", 5)) result = KEYWORD_WHILE;
-			break;
-		case '#':
-			if (streq_len(identifier, len, "#import", 7)) result = DIRECTIVE_IMPORT;
-			else if (streq_len(identifier, len, "#load", 5)) result = DIRECTIVE_LOAD;
 			break;
 	}
 	return result;
@@ -479,8 +479,12 @@ char *token_to_string(Token_Kind kind) {
 			return "global";
 		case KEYWORD_IF:
 			return "if";
+		case KEYWORD_IMPORT:
+			return "import";
 		case KEYWORD_IS:
 			return "is";
+		case KEYWORD_LOAD:
+			return "load";
 		case KEYWORD_MOD:
 			return "mod";
 		case KEYWORD_NOT:
@@ -507,10 +511,6 @@ char *token_to_string(Token_Kind kind) {
 			return "var";
 		case KEYWORD_WHILE:
 			return "while";
-		case DIRECTIVE_IMPORT:
-			return "#import";
-		case DIRECTIVE_LOAD:
-			return "#load";
 		case COLON:
 			return ":";
 		case SEMICOLON:

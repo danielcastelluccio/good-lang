@@ -1775,6 +1775,14 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_if(lexer);
 			break;
 		}
+		case KEYWORD_IMPORT: {
+			result = parse_import(lexer);
+			break;
+		}
+		case KEYWORD_LOAD: {
+			result = parse_load(lexer);
+			break;
+		}
 		case KEYWORD_MOD: {
 			result = parse_module_or_module_type(lexer);
 			break;
@@ -1817,14 +1825,6 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_WHILE: {
 			result = parse_while(lexer);
-			break;
-		}
-		case DIRECTIVE_IMPORT: {
-			result = parse_import(lexer);
-			break;
-		}
-		case DIRECTIVE_LOAD: {
-			result = parse_load(lexer);
 			break;
 		}
 		case CURLY_BRACE_OPEN: {
