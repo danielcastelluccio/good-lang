@@ -150,6 +150,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case '#':
 			if (streq_len(identifier, len, "#import", 7)) result = DIRECTIVE_IMPORT;
+			else if (streq_len(identifier, len, "#load", 5)) result = DIRECTIVE_LOAD;
 			break;
 	}
 	return result;
@@ -508,6 +509,8 @@ char *token_to_string(Token_Kind kind) {
 			return "while";
 		case DIRECTIVE_IMPORT:
 			return "#import";
+		case DIRECTIVE_LOAD:
+			return "#load";
 		case COLON:
 			return ":";
 		case SEMICOLON:

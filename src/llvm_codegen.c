@@ -623,6 +623,8 @@ static LLVMValueRef generate_cast(Node *node, State *state) {
 
 	if (cast_data.from_type.value->tag == INTEGER_TYPE_VALUE && cast_data.to_type.value->tag == BYTE_TYPE_VALUE) {
 		return LLVMBuildTrunc(state->llvm_builder, llvm_value, create_llvm_type(cast_data.to_type.value, state), "");
+	} else if (cast_data.from_type.value->tag == INTEGER_TYPE_VALUE && cast_data.to_type.value->tag == INTEGER_TYPE_VALUE && cast_data.to_type.value->integer_type.size == 8 && cast_data.to_type.value->integer_type.signed_ == false) {
+		return LLVMBuildTrunc(state->llvm_builder, llvm_value, create_llvm_type(cast_data.to_type.value, state), "");
 	} else if (cast_data.from_type.value->tag == BYTE_TYPE_VALUE && cast_data.to_type.value->tag == INTEGER_TYPE_VALUE) {
 		return LLVMBuildZExt(state->llvm_builder, llvm_value, create_llvm_type(cast_data.to_type.value, state), "");
 	}

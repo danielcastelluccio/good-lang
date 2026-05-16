@@ -3152,10 +3152,10 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 			Value string = evaluate(context, internal.inputs[0]);
 
-			char *message = malloc(string.value->array_view.length->integer.value + 1);
-			message[string.value->array_view.length->integer.value] = '\0';
+			char *message = malloc(string.value->string.length->integer.value + 1);
+			message[string.value->string.length->integer.value] = '\0';
 			for (long int i = 0; i < string.value->array_view.length->integer.value; i++) {
-				message[i] = string.value->array_view.values[i]->byte.value;
+				message[i] = string.value->string.value[i];
 			}
 
 			handle_semantic_error(context, node->location, "%.*s", (int) string.value->array_view.length->integer.value, message);

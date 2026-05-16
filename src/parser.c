@@ -1295,6 +1295,19 @@ static Node *parse_import(Lexer *lexer) {
 	return internal;
 }
 
+static Node *parse_load(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	Node *internal = ast_new(INTERNAL_NODE, first_token.location);
+	internal->internal.kind = INTERNAL_IMPORT;
+	internal->internal.inputs = NULL;
+	internal->internal.assign_value = NULL;
+
+	arrpush(internal->internal.inputs, parse_expression(lexer));
+
+	return internal;
+}
+
 static Node *parse_for(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
@@ -1808,6 +1821,10 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case DIRECTIVE_IMPORT: {
 			result = parse_import(lexer);
+			break;
+		}
+		case DIRECTIVE_LOAD: {
+			result = parse_load(lexer);
 			break;
 		}
 		case CURLY_BRACE_OPEN: {
