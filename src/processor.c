@@ -818,7 +818,7 @@ typedef struct {
 	Call_Argument_Value *arguments;
 } Process_Call_Generic_Result;
 
-Call_Argument_Value *compute_call_argument_values(Node *function_type_node, Call_Argument *call_arguments) {
+Call_Argument_Value *compute_call_argument_values(Context *context, Node *node, Node *function_type_node, Call_Argument *call_arguments) {
 	Call_Argument_Value *call_argument_values = NULL;
 	arrsetlen(call_argument_values, arrlen(function_type_node->function_type.arguments));
 
@@ -846,6 +846,10 @@ Call_Argument_Value *compute_call_argument_values(Node *function_type_node, Call
 					break;
 				}
 			}
+		}
+
+		if (index >= arrlen(call_argument_values)) {
+			handle_semantic_error(context, node->location, "Too many arguments");
 		}
 
 		call_argument_values[index] = (Call_Argument_Value) {
@@ -1144,7 +1148,7 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 		function_type_node = function_type->value->function_type.node;
 	}
 
-	Call_Argument_Value *call_argument_values = compute_call_argument_values(function_type_node, call_arguments);
+	Call_Argument_Value *call_argument_values = compute_call_argument_values(context, node, function_type_node, call_arguments);
 	long int noninferred_count = arrlen(call_argument_values);
 
 	for (long int i = 0; i < noninferred_count; i++) {
@@ -3632,9 +3636,13 @@ static Node_Data *process_structure(Context *context, Node *node) {
 	Value wanted_type = context->temporary_context.wanted_type;
 
 	Value result_type = wanted_type;
-	if (wanted_type.value == NULL) {
+	if (result_type.value == NULL) {
 		result_type = create_value(TUPLE_TYPE_VALUE);
 		result_type.value->tuple_type.members = NULL;
+	}
+
+	if (result_type.value->tag == STRUCT_TYPE_VALUE && arrlen(structure.values) != arrlen(result_type.value->struct_type.members)) {
+		handle_semantic_error(context, node->location, "Incorrect member count in struct literal");
 	}
 
 	for (long int i = 0; i < arrlen(structure.values); i++) {

@@ -1,0 +1,3 @@
+new :: fn ($T: Type, allocator: Allocator) -> ^T!Allocate_Error {
+	cast(^T!Allocate_Error) allocator.allocate_fn(ALLOC, null, size_of(T))
+}

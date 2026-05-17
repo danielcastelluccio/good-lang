@@ -2,7 +2,7 @@ xxd -i src/internal.lang > src/internal_source.h
 
 FLAGS="-lLLVM -o lang -Wall -Wextra -Werror -fshort-enums"
 if [[ "$1" == "release" ]]; then
-	FLAGS+=" -DNDEBUG -O3 -flto -fprofile-use -fprofile-correction"
+	FLAGS+=" -DNDEBUG -O3 -flto"
 else
 	FLAGS+=" -g"
 fi

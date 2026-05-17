@@ -9,19 +9,12 @@ def! Printer = struct {
 			var$ argument_index: uint = 0;
 			var$ i: uint = 0;
 			while$ i < fmt.count {
-				if$ fmt[i] == '{' {
-					var$ start = i + 1;
-					while$ fmt[i] != '}' {
-						i =$ i + 1;
-					};
-
-					var$ end = i;
-
+				if$ fmt[i] == '%' {
 					if$ argument_index >= tuple.members.len {
 						compile_error("Not enough arguments");
 					};
 
-					printer$$print_value(embed("args._", cast(byte) argument_index + 48), fmt[start, end]);
+					printer$$print_value(embed("args._", cast(byte) argument_index + 48));
 					argument_index =$ argument_index + 1;
 				} else {
 					printer$$print_char(fmt[i]);
@@ -33,7 +26,7 @@ def! Printer = struct {
 		};
 	};
 
-	op print_value = fn (printer: ^Printer, t: $T, $fmt: string) {
+	op print_value = fn (printer: ^Printer, t: $T) {
 		var$ type_info = type_info_of(T);
 		switch$ type_info {
 			case Integer {
@@ -87,13 +80,13 @@ def! Printer = struct {
 					i = i / 10;
 				};
 
-				printer$$print_chars(buffer[index, 24]);
+				printer$$print_chars2(buffer[index, 24]);
 			}
 			case Pointer {
 				if t == null {
 					printer$$print_chars("null");
 				} else {
-					var buffer: [24]byte;
+					var buffer: [24]u8;
 					var index: uint = 24;
 					var i: uint = cast(uint) t;
 					while i > 0 {
@@ -102,12 +95,12 @@ def! Printer = struct {
 						var ch = i % 16;
 						if ch > 9 => ch = ch + 87 else ch = ch + 48;
 
-						buffer[index] = cast(byte) ch;
+						buffer[index] = cast(u8) ch;
 						i = i / 16;
 					};
 
 					printer$$print_chars("0x");
-					printer$$print_chars(buffer[index, 24]);
+					printer$$print_chars2(buffer[index, 24]);
 				};
 			}
 			case Struct |struct_| {
@@ -117,7 +110,7 @@ def! Printer = struct {
 					printer$$print_chars2(run member.name);
 					printer$$print_chars(" = ");
 
-					printer$$print_value(embed("t.", member.name), "");
+					printer$$print_value(embed("t.", member.name));
 
 					if$ i < struct_.members.len - 1 {
 						printer$$print_chars(",");
@@ -134,7 +127,7 @@ def! Printer = struct {
 					if t is embed(member.name) |value| {
 						printer$$print_chars(run member.name);
 
-						printer$$print_value(value, "");
+						printer$$print_value(value);
 						printer$$print_chars(" ");
 					};
 				};
@@ -150,7 +143,7 @@ def! Printer = struct {
 			}
 			case Optional {
 				if t |value| {
-					printer$$print_value(value, "");
+					printer$$print_value(value);
 				} else {
 					printer$$print_chars("null");
 				};
@@ -161,7 +154,7 @@ def! Printer = struct {
 				for$ 0..run array.size |i| {
 					printer$$print_chars(" ");
 
-					printer$$print_value(t[i], "");
+					printer$$print_value(t[i]);
 
 					if i < run array.size - 1 {
 						printer$$print_chars(",");
@@ -173,25 +166,21 @@ def! Printer = struct {
 				printer$$print_chars("}");
 			}
 			case Array_View |array_view| {
-				if$ fmt == "s" and array_view.type == byte {
-					printer$$print_chars2(t);
-				} else {
-					printer$$print_chars(".{");
+				printer$$print_chars(".{");
 
-					for 0..t.len |i| {
+				for 0..t.len |i| {
+					printer$$print_chars(" ");
+
+					printer$$print_value(t[i]);
+
+					if i < t.len - 1 {
+						printer$$print_chars(",");
+					} else {
 						printer$$print_chars(" ");
-
-						printer$$print_value(t[i], "");
-
-						if i < t.len - 1 {
-							printer$$print_chars(",");
-						} else {
-							printer$$print_chars(" ");
-						};
 					};
-
-					printer$$print_chars("}");
 				};
+
+				printer$$print_chars("}");
 			}
 			case String |string| {
 				printer$$print_chars(t);
