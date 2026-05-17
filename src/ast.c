@@ -8,8 +8,8 @@ Node *nodes = NULL;
 size_t node_index = 0;
 
 Node *ast_new(Node_Kind kind, Source_Location location) {
-	if (nodes == NULL || node_index == 65536) {
-		nodes = malloc(sizeof(Node) * 65536);
+	if (nodes == NULL || node_index == 1 << 20) {
+		nodes = malloc(sizeof(Node) * 1 << 20);
 		node_index = 0;
 	}
 

@@ -693,6 +693,7 @@ static size_t get_precedence(Binary_Op_Node_Kind kind) {
 			return 0;
 		default:
 			assert(false);
+			return 0;
 	}
 }
 

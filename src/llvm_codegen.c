@@ -228,6 +228,7 @@ static LLVMTypeRef create_llvm_type(Value_Data *value, State *state) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -321,6 +322,7 @@ static Function_Argument_Value get_noninferred_argument(Function_Argument_Value 
 	}
 
 	assert(false);
+	return (Function_Argument_Value) {};
 }
 
 static LLVMValueRef generate_call_generic2(LLVMValueRef function_llvm_value, Value_Data *function_type, Call_Argument_Value *arguments, State *state) {
@@ -441,6 +443,7 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -511,6 +514,7 @@ static LLVMValueRef generate_null(Node *node, State *state) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -600,6 +604,7 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -884,6 +889,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 			return LLVMBuildLoad2(state->llvm_builder, item_type_llvm, LLVMBuildBitCast(state->llvm_builder, temp, LLVMPointerType(item_type_llvm, 0), ""), "");
 		} else {
 			assert(false);
+			return NULL;
 		}
 	}
 }
@@ -984,6 +990,7 @@ static bool is_type_signed(Value_Data *type) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -1056,6 +1063,7 @@ static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValu
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -1140,6 +1148,7 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 			return LLVMBuildOr(state->llvm_builder, left_value, right_value, "");
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -1433,6 +1442,7 @@ static LLVMValueRef generate_for(Node *node, State *state) {
 			}
 			default:
 				assert(false);
+				len = 0;
 		}
 
 		LLVMValueRef condition = LLVMBuildICmp(state->llvm_builder, LLVMIntULT, len, min_len, "");
@@ -1564,6 +1574,7 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -1609,6 +1620,7 @@ static LLVMValueRef generate_slice(Node *node, State *state) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -1709,6 +1721,7 @@ static LLVMValueRef generate_node(Node *node, State *state) {
 			return NULL;
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -1942,12 +1955,14 @@ static LLVMValueRef generate_special_value(Value_Data *value, Value_Data *type, 
 				}
 				default:
 					assert(false);
+					return NULL;
 			}
 
 			break;
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 

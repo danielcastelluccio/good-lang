@@ -170,6 +170,7 @@ bool value_equal(Value_Data *value1, Value_Data *value2) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
@@ -511,6 +512,7 @@ static Value evaluate_identifier(State *state, Node *node) {
 	}
 
 	assert(false);
+	return (Value) {};
 }
 
 static Value evaluate_string(State *state, Node *node) {
@@ -529,20 +531,7 @@ static Value evaluate_string(State *state, Node *node) {
 		return create_value_data(string, node);
 	} else {
 		assert(false);
-		// Value_Data **values = malloc(sizeof(Value_Data *) * string_length);
-		// for (size_t i = 0; i < string_length; i++) {
-		// 	Value_Data *byte = value_new(BYTE_VALUE);
-		// 	byte->byte.value = string_value[i];
-		// 	values[i] = byte;
-		// }
-
-		// Value_Data *pointer = value_new(POINTER_VALUE);
-		// Value_Data *array = value_new(ARRAY_VALUE);
-		// array->array.length = string_length;
-		// array->array.values = values;
-		// pointer->pointer.value = array;
-
-		// return create_value_data(pointer, node);
+		return (Value) {};
 	}
 }
 
@@ -557,6 +546,7 @@ static Value evaluate_number(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
 }
 
@@ -699,6 +689,7 @@ static Value evaluate_binary_op(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
 }
 
@@ -752,6 +743,7 @@ static Value evaluate_structure(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
 }
 
@@ -865,8 +857,11 @@ static Value evaluate_structure_access(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
+
 	assert(false);
+	return (Value) {};
 }
 
 static Value evaluate_array_access(State *state, Node *node) {
@@ -912,8 +907,11 @@ static Value evaluate_array_access(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
+
 	assert(false);
+	return (Value) {};
 }
 
 static Value evaluate_slice(State *state, Node *node) {
@@ -953,8 +951,11 @@ static Value evaluate_slice(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
+
 	assert(false);
+	return (Value) {};
 }
 
 static Value evaluate_switch(State *state, Node *node) {
@@ -1030,8 +1031,7 @@ static Value evaluate_is(State *state, Node *node) {
 	Is_Node is = node->is;
 
 	Value value = evaluate_state(state, is.node);
-	Value type = get_data(state->context, is.node)->type;
-	assert(type.value->tag == TAGGED_UNION_TYPE_VALUE);
+	assert(get_data(state->context, is.node)->type.value->tag == TAGGED_UNION_TYPE_VALUE);
 
 	Value check = evaluate_state(state, is.check);
 
@@ -1056,6 +1056,7 @@ static Value evaluate_cast(State *state, Node *node) {
 		return create_byte(value.value->integer.value);
 	} else {
 		assert(false);
+		return (Value) {};
 	}
 }
 
@@ -1103,6 +1104,7 @@ static Value evaluate_null(State *state, Node *node) {
 		}
 		default:
 			assert(false);
+			return (Value) {};
 	}
 }
 
@@ -1158,7 +1160,7 @@ static Value evaluate_state(State *state, Node *node) {
 		case RUN_NODE:               return evaluate_run(state, node);
 		case IMPORT_NODE:            return evaluate_import(state, node);
 		case DEFINE_NODE:            return (Value) {};
-		default:                     assert(false);
+		default:                     assert(false); return (Value) {};
 	}
 }
 

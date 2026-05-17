@@ -1540,6 +1540,7 @@ static bool is_simple_cast(Value from_type, Value to_type) {
 			return false;
 		default:
 			assert(false);
+			return false;
 	}
 }
 
@@ -1835,6 +1836,7 @@ static Node_Data *process_for(Context *context, Node *node) {
 			}
 			default:
 				assert(false);
+				length = 0;
 		}
 
 		size_t saved_static_id = context->static_id;
@@ -3241,6 +3243,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 		}
 		default:
 			assert(false);
+			return NULL;
 	}
 }
 
