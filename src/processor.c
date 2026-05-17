@@ -2076,10 +2076,7 @@ static Node_Data *process_global(Context *context, Node *node) {
 static bool references_identifier(Node *node, String_View identifier) {
 	switch (node->kind) {
 		case IDENTIFIER_NODE:
-			if (node->identifier.module == NULL) {
-				return sv_eq(node->identifier.value, identifier);
-			}
-			break;
+			return sv_eq(node->identifier.value, identifier);
 		case INTERNAL_NODE:
 			break;
 		default:
@@ -2350,46 +2347,33 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 
 	Value value = {};
 	Value type = {};
-	if (identifier.module == NULL) {
-		Value wanted_type = context->temporary_context.wanted_type;
-		if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
-			for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
-				if (sv_eq(identifier.value, wanted_type.value->enum_type.items[i])) {
-					value.value = value_new(ENUM_VALUE);
-					value.value->enum_.value = i;
-					type = context->temporary_context.wanted_type;
-				}
-			}
-		}
-
-		if (type.value == NULL) {
-			if (sv_eq_cstr(identifier.value, "_")) {
-				data->identifier.kind = IDENTIFIER_UNDERSCORE;
-				type = create_value(NONE_VALUE);
-
-				if (identifier.assign_value != NULL) {
-					process_node(context, identifier.assign_value);
-				}
-			} else {
-				lookup_result = lookup(context, identifier.value);
+	Value wanted_type = context->temporary_context.wanted_type;
+	if (wanted_type.value != NULL && wanted_type.value->tag == ENUM_TYPE_VALUE) {
+		for (long int i = 0; i < arrlen(wanted_type.value->enum_type.items); i++) {
+			if (sv_eq(identifier.value, wanted_type.value->enum_type.items[i])) {
+				value.value = value_new(ENUM_VALUE);
+				value.value->enum_.value = i;
+				type = context->temporary_context.wanted_type;
 			}
 		}
 	}
 
-	Value module_value = {};
+	if (type.value == NULL) {
+		if (sv_eq_cstr(identifier.value, "_")) {
+			data->identifier.kind = IDENTIFIER_UNDERSCORE;
+			type = create_value(NONE_VALUE);
 
-	if (identifier.module != NULL) {
-		Value module_type = process_node(context, identifier.module)->type;
-		if (module_type.value->tag != MODULE_TYPE_VALUE) {
-			handle_type_error(node, "Expected module, but got %s", module_type);
+			if (identifier.assign_value != NULL) {
+				process_node(context, identifier.assign_value);
+			}
+		} else {
+			lookup_result = lookup(context, identifier.value);
 		}
-
-		module_value = evaluate(context, identifier.module);
 	}
 
 	Node *define_node = NULL;
 	Scope *define_scopes = NULL;
-	Typed_Value typed_value = lookup_resolve_define(context, module_value, node, lookup_result, identifier.value, &define_scopes, data->identifier.want_pointer, identifier.assign_value, &define_node);
+	Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, identifier.value, &define_scopes, data->identifier.want_pointer, identifier.assign_value, &define_node);
 	if (typed_value.type.value != NULL) {
 		type = typed_value.type;
 		value = typed_value.value;

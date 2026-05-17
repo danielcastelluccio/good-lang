@@ -175,7 +175,6 @@ typedef struct {
 } Global_Node;
 
 typedef struct {
-	Node *module;
 	String_View value;
 	Node *assign_value;
 	bool assign_static;

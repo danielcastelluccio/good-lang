@@ -5,26 +5,26 @@ def! Printer = struct {
 
 	op print = fn (printer: *Printer, $fmt: string, args: $T) {
 		var$ type_info = type_info_of(T);
-		if$ type_info is Tuple |tuple| {
+		$if type_info is Tuple |tuple| {
 			var$ argument_index: uint = 0;
 			var$ i: uint = 0;
-			while$ i < fmt.count {
-				if$ fmt[i] == '%' {
-					if$ argument_index >= tuple.members.len {
+			$while i < fmt.count {
+				$if fmt[i] == '%' {
+					$if argument_index >= tuple.members.len {
 						compile_error("Not enough arguments");
-					};
+					}
 
 					printer$$print_value(embed("args._", cast(byte) argument_index + 48));
-					argument_index =$ argument_index + 1;
+					argument_index $= argument_index + 1;
 				} else {
 					printer$$print_char(fmt[i]);
-				};
-				i =$ i + 1;
-			};
+				}
+				i $= i + 1;
+			}
 		} else {
 			compile_error("Need tuple as argument");
-		};
-	};
+		}
+	}
 
 	op print_value = fn (printer: *Printer, t: $T) {
 		var$ type_info = type_info_of(T);
@@ -38,12 +38,12 @@ def! Printer = struct {
 				var i = t;
 				if negative {
 					i = 0 - i;
-				};
+				}
 
 				if i == 0 {
 					index = index - 1;
 					buffer[index] = '0';
-				};
+				}
 
 				while i > 0 {
 					index = index - 1;
@@ -52,12 +52,12 @@ def! Printer = struct {
 
 					buffer[index] = cast(u8) ch;
 					i = i / 10;
-				};
+				}
 
 				if negative {
 					index = index - 1;
 					buffer[index] = '-';
-				};
+				}
 
 				printer$$print_chars2(buffer[index, 24]);
 			}
@@ -69,7 +69,7 @@ def! Printer = struct {
 				if i == 0 {
 					index = index - 1;
 					buffer[index] = '0';
-				};
+				}
 
 				while i > 0 {
 					index = index - 1;
@@ -78,7 +78,7 @@ def! Printer = struct {
 
 					buffer[index] = cast(byte) ch;
 					i = i / 10;
-				};
+				}
 
 				printer$$print_chars2(buffer[index, 24]);
 			}
@@ -97,61 +97,61 @@ def! Printer = struct {
 
 						buffer[index] = cast(u8) ch;
 						i = i / 16;
-					};
+					}
 
 					printer$$print_chars("0x");
 					printer$$print_chars2(buffer[index, 24]);
-				};
+				}
 			}
 			case Struct |struct_| {
 				printer$$print_chars(".{");
-				for$ struct_.members |member, i| {
+				$for struct_.members |member, i| {
 					printer$$print_chars(" .");
 					printer$$print_chars2(run member.name);
 					printer$$print_chars(" = ");
 
 					printer$$print_value(embed("t.", member.name));
 
-					if$ i < struct_.members.len - 1 {
+					$if i < struct_.members.len - 1 {
 						printer$$print_chars(",");
 					} else {
 						printer$$print_chars(" ");
-					};
-				};
+					}
+				}
 				printer$$print_chars("}");
 			}
 			case Tagged_Union |tagged_union_| {
 				printer$$print_chars(".{");
 
-				for$ tagged_union_.members |member| {
+				$for tagged_union_.members |member| {
 					if t is embed(member.name) |value| {
 						printer$$print_chars(run member.name);
 
 						printer$$print_value(value);
 						printer$$print_chars(" ");
-					};
-				};
+					}
+				}
 
 				printer$$print_chars("}");
 			}
 			case Enum |enum_| {
-				for$ enum_.values |value| {
+				$for enum_.values |value| {
 					if t == embed(value) {
 						printer$$print_chars(value);
-					};
-				};
+					}
+				}
 			}
 			case Optional {
 				if t |value| {
 					printer$$print_value(value);
 				} else {
 					printer$$print_chars("null");
-				};
+				}
 			}
 			case Array |array| {
 				printer$$print_chars(".{");
 
-				for$ 0..run array.size |i| {
+				$for 0..run array.size |i| {
 					printer$$print_chars(" ");
 
 					printer$$print_value(t[i]);
@@ -160,8 +160,8 @@ def! Printer = struct {
 						printer$$print_chars(",");
 					} else {
 						printer$$print_chars(" ");
-					};
-				};
+					}
+				}
 
 				printer$$print_chars("}");
 			}
@@ -177,8 +177,8 @@ def! Printer = struct {
 						printer$$print_chars(",");
 					} else {
 						printer$$print_chars(" ");
-					};
-				};
+					}
+				}
 
 				printer$$print_chars("}");
 			}
@@ -190,24 +190,24 @@ def! Printer = struct {
 					printer$$print_chars("true");
 				} else {
 					printer$$print_chars("false");
-				};
+				}
 			}
-		};
-	};
+		}
+	}
 
 	op print_char = fn (printer: *Printer, char: u8) {
 		printer.output_fn(null, char);
-	};
+	}
 
 	op print_chars = fn (printer: *Printer, chars: string) {
 		for chars |c| {
 			printer.output_fn(null, c);
-		};
-	};
+		}
+	}
 
 	op print_chars2 = fn (printer: *Printer, chars: []u8) {
 		for chars |c| {
 			printer.output_fn(null, c);
-		};
-	};
-};
+		}
+	}
+}
