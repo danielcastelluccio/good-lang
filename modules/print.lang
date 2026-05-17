@@ -1,9 +1,9 @@
-def Output_Fn = fn (data: ^, char: u8);
+def Output_Fn = fn (data: *, char: u8);
 
 def! Printer = struct {
 	output_fn: Output_Fn;
 
-	op print = fn (printer: ^Printer, $fmt: string, args: $T) {
+	op print = fn (printer: *Printer, $fmt: string, args: $T) {
 		var$ type_info = type_info_of(T);
 		if$ type_info is Tuple |tuple| {
 			var$ argument_index: uint = 0;
@@ -26,7 +26,7 @@ def! Printer = struct {
 		};
 	};
 
-	op print_value = fn (printer: ^Printer, t: $T) {
+	op print_value = fn (printer: *Printer, t: $T) {
 		var$ type_info = type_info_of(T);
 		switch$ type_info {
 			case Integer {
@@ -195,17 +195,17 @@ def! Printer = struct {
 		};
 	};
 
-	op print_char = fn (printer: ^Printer, char: u8) {
+	op print_char = fn (printer: *Printer, char: u8) {
 		printer.output_fn(null, char);
 	};
 
-	op print_chars = fn (printer: ^Printer, chars: string) {
+	op print_chars = fn (printer: *Printer, chars: string) {
 		for chars |c| {
 			printer.output_fn(null, c);
 		};
 	};
 
-	op print_chars2 = fn (printer: ^Printer, chars: []u8) {
+	op print_chars2 = fn (printer: *Printer, chars: []u8) {
 		for chars |c| {
 			printer.output_fn(null, c);
 		};

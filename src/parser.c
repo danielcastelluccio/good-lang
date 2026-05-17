@@ -476,15 +476,6 @@ static Node *parse_identifier(Lexer *lexer, Node *module, bool polymorphic) {
 	}
 }
 
-static Node *parse_dereference(Lexer *lexer, Node *node) {
-	Token_Data token = lexer_consume_check(lexer, CARET);
-
-	Node *derefence = ast_new(DEREFERENCE_NODE, token.location);
-	derefence->dereference.node = node;
-	derefence->dereference.assign_value = NULL;
-	return derefence;
-}
-
 static Node *parse_deoptional(Lexer *lexer, Node *node) {
 	Token_Data token = lexer_consume_check(lexer, QUESTION);
 
@@ -767,12 +758,23 @@ static Node *parse_binary_operator(Lexer *lexer, Node *left) {
 static Node *parse_structure_access(Lexer *lexer, Node *structure) {
 	Token_Data first_token = lexer_consume(lexer);
 
-	Node *structure_access = ast_new(STRUCTURE_ACCESS_NODE, first_token.location);
-	structure_access->structure_access.parent = structure;
-	structure_access->structure_access.name = lexer_consume_check(lexer, IDENTIFIER).string;
-	structure_access->structure_access.assign_value = NULL;
+	Token_Data member = lexer_peek(lexer);
+	if (member.kind == ASTERISK) {
+		lexer_consume(lexer);
 
-	return structure_access;
+		Node *dereference = ast_new(DEREFERENCE_NODE, first_token.location);
+		dereference->dereference.node = structure;
+		dereference->dereference.assign_value = NULL;
+
+		return dereference;
+	} else {
+		Node *structure_access = ast_new(STRUCTURE_ACCESS_NODE, first_token.location);
+		structure_access->structure_access.parent = structure;
+		structure_access->structure_access.name = lexer_consume_check(lexer, IDENTIFIER).string;
+		structure_access->structure_access.assign_value = NULL;
+
+		return structure_access;
+	}
 }
 
 static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
@@ -1369,7 +1371,7 @@ static Node *parse_block(Lexer *lexer) {
 }
 
 static Node *parse_pointer(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, CARET);
+	Token_Data first_token = lexer_consume(lexer);
 
 	Node *pointer = ast_new(POINTER_NODE, first_token.location);
 	Node *inner = parse_expression_or_nothing(lexer);
@@ -1661,7 +1663,7 @@ static Node *parse_expression(Lexer *lexer) {
 			result = parse_block(lexer);
 			break;
 		}
-		case CARET: {
+		case ASTERISK: {
 			result = parse_pointer(lexer);
 			break;
 		}
@@ -1724,9 +1726,6 @@ static Node *parse_expression(Lexer *lexer) {
 				lexer_consume_check(lexer, AT);
 				Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
 				result = parse_actual_identifier(result, token, false);
-				break;
-			case CARET:
-				result = parse_dereference(lexer, result);
 				break;
 			case QUESTION:
 				result = parse_deoptional(lexer, result);

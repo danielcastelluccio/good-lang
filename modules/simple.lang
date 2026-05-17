@@ -1,7 +1,7 @@
 // Do not modify, is a global so a pointer can be taken.
 def* stdout_printer = global: print_.Printer => .{ print_stdout_fn };
 
-def print_stdout_fn = fn (_: ^, char: byte) {
+def print_stdout_fn = fn (_: *, char: byte) {
 	_ = c.putchar(cast(int) char);
 };
 

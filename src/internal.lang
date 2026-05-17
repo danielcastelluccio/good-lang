@@ -69,11 +69,11 @@ Allocate_Mode :: enum {
 	FREE
 }
 
-Allocate_Fn :: fn (mode: Allocate_Mode, ptr: ^, size: uint) -> ^!Allocate_Error;
+Allocate_Fn :: fn (mode: Allocate_Mode, ptr: *, size: uint) -> *!Allocate_Error;
 
 Allocator :: struct {
 	allocate_fn: Allocate_Fn,
-	data: ^;
+	data: *
 }
 
 Context :: struct {
