@@ -32,7 +32,6 @@ typedef struct {
 		SCOPE_BINDING,
 		SCOPE_STATIC_BINDING,
 		SCOPE_STATIC_VARIABLE,
-		SCOPE_USE,
 		SCOPE_IMPORT
 	} tag;
 	union {

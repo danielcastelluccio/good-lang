@@ -1,3 +1,11 @@
 new :: fn ($T: Type, allocator: Allocator) -> ^T!Allocate_Error {
 	cast(^T!Allocate_Error) allocator.allocate_fn(ALLOC, null, size_of(T))
 }
+
+realloc :: fn (ptr: ^, size: uint, allocator: Allocator) -> ^!Allocate_Error {
+	allocator.allocate_fn(REALLOC, ptr, size)
+}
+
+free :: fn (ptr: ^, allocator: Allocator) {
+	allocator.allocate_fn(FREE, ptr, 0)
+}

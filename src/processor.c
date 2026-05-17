@@ -79,7 +79,6 @@ typedef struct {
 	enum {
 		LOOKUP_RESULT_FAIL,
 		LOOKUP_RESULT_DEFINE,
-		LOOKUP_RESULT_USE,
 		LOOKUP_RESULT_IMPORT,
 		LOOKUP_RESULT_DEFINE_INTERNAL,
 		LOOKUP_RESULT_VARIABLE,
@@ -197,7 +196,7 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 			}
 		}
 
-		for (long int i = 0; i < arrlen(scope->identifiers); i++) {
+		for (long int i = arrlen(scope->identifiers) - 1; i >= 0; i--) {
 			if (sv_eq(scope->identifiers[i].key, identifier)) {
 				Scope_Identifier scope_identifier = scope->identifiers[i].value;
 
@@ -210,8 +209,6 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_BINDING, .static_binding = scope_identifier.static_binding.value, .type = scope_identifier.static_binding.type };
 					case SCOPE_STATIC_VARIABLE:
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_STATIC_VARIABLE, .static_variable = { .node = scope_identifier.static_variable.node, .node_data = scope_identifier.static_variable.node_data }, .type = scope_identifier.static_variable.node_data->variable.type };
-					case SCOPE_USE:
-						return (Lookup_Result) { .tag = LOOKUP_RESULT_USE, .use = { .node = scope_identifier.use, .scope = scope } };
 					case SCOPE_IMPORT:
 						return (Lookup_Result) { .tag = LOOKUP_RESULT_IMPORT, .import = { .node = scope_identifier.import, .scope = scope } };
 					case SCOPE_INVALID:
@@ -2467,28 +2464,6 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 			}
 			break;
 		}
-		case LOOKUP_RESULT_USE: {
-			Scope *use_scopes = NULL;
-			for (long i = 0; i < arrlen(context->scopes); i++) {
-				arrpush(use_scopes, context->scopes[i]);
-
-				if (lookup_result.use.scope == &context->scopes[i]) break;
-			}
-			Node_Data *data = process_node_with_scopes(context, lookup_result.use.node, use_scopes);
-
-			Use_Data_Identifier *identifiers = data->use.identifiers;
-			Typed_Value typed_value = {};
-			for (long int i = 0; i < arrlen(identifiers); i++) {
-				String_View binding = identifiers[i].identifier;
-				if (sv_eq(identifier.value, binding)) {
-					typed_value = identifiers[i].typed_value;
-					break;
-				}
-			}
-			type = typed_value.type;
-			value = typed_value.value;
-			break;
-		}
 		case LOOKUP_RESULT_IMPORT: {
 			Scope *import_scopes = NULL;
 			for (long i = 0; i < arrlen(context->scopes); i++) {
@@ -2944,6 +2919,10 @@ static Node_Data *process_internal(Context *context, Node *node) {
 				if (context->scopes[i].current_type.value != NULL) {
 					*value = context->scopes[i].current_type;
 				}
+			}
+
+			if (value->value == NULL) {
+				handle_semantic_error(context, node->location, "'self' has no type context");
 			}
 
 			data->type = create_value(TYPE_TYPE_VALUE);
