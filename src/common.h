@@ -122,6 +122,7 @@ typedef struct {
 	enum {
 		CALL_ARGUMENT_NONE,
 		CALL_ARGUMENT_NODE,
+		CALL_ARGUMENT_DEFAULT_VALUE,
 		CALL_ARGUMENT_VALUE
 	} kind;
 	union {
