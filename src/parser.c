@@ -150,6 +150,40 @@ static Node *parse_actual_identifier(Token_Data token, bool polymorphic) {
 	return identifier;
 }
 
+static Node *parse_declaration(Lexer *lexer, bool polymorphic, String_View identifier, Source_Location location) {
+	lexer_consume(lexer);
+
+	Token_Data next = lexer_peek(lexer);
+
+	Node *type = parse_expression_or_nothing(lexer);
+
+	next = lexer_peek(lexer);
+	if (next.kind == COLON) {
+		lexer_consume(lexer);
+
+		Node *define = ast_new(DEFINE_NODE, location);
+		define->define.identifier = identifier;
+		define->define.public = true;
+		define->define.type = type;
+		define->define.expression = parse_expression(lexer);
+		return define;
+	}
+
+	Node *variable = ast_new(VARIABLE_NODE, location);
+	variable->variable.name = identifier;
+	variable->variable.polymorphic = polymorphic;
+	variable->variable.static_ = polymorphic;
+	variable->variable.type = type;
+	if (next.kind == EQUALS) {
+		lexer_consume(lexer);
+		variable->variable.value = parse_expression(lexer);
+	} else {
+		variable->variable.value = NULL;
+	}
+
+	return variable;
+}
+
 static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 	Token_Data token = lexer_consume_check(lexer, IDENTIFIER);
 
@@ -447,37 +481,7 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 	}
 
 	if (lexer_peek(lexer).kind == COLON) {
-		lexer_consume(lexer);
-
-		Token_Data next = lexer_peek(lexer);
-
-		Node *type = parse_expression_or_nothing(lexer);
-
-		next = lexer_peek(lexer);
-		if (next.kind == COLON) {
-			lexer_consume(lexer);
-
-			Node *define = ast_new(DEFINE_NODE, token.location);
-			define->define.identifier = token.string;
-			define->define.public = true;
-			define->define.type = type;
-			define->define.expression = parse_expression(lexer);
-			return define;
-		}
-
-		Node *variable = ast_new(VARIABLE_NODE, token.location);
-		variable->variable.name = token.string;
-		variable->variable.polymorphic = polymorphic;
-		variable->variable.static_ = polymorphic;
-		variable->variable.type = type;
-		if (next.kind == EQUALS) {
-			lexer_consume(lexer);
-			variable->variable.value = parse_expression(lexer);
-		} else {
-			variable->variable.value = NULL;
-		}
-
-		return variable;
+		return parse_declaration(lexer, polymorphic, token.string, token.location);
 	} else {
 		Node *node = parse_actual_identifier(token, polymorphic);
 		return node;
@@ -1255,6 +1259,22 @@ static Node *parse_not(Lexer *lexer) {
 	return not;
 }
 
+static Node *parse_op(Lexer *lexer) {
+	Token_Data first_token = lexer_consume(lexer);
+
+	String_View identifier = {};
+	Token_Data token = lexer_consume(lexer);
+	switch (token.kind) {
+		case PLUS:
+			identifier = cstr_to_sv("+");
+			break;
+		default:
+			assert(false);
+	}
+
+	return parse_declaration(lexer, false, identifier, first_token.location);
+}
+
 static Node *parse_run(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *run = ast_new(RUN_NODE, first_token.location);
@@ -1439,6 +1459,10 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_NOT: {
 			result = parse_not(lexer);
+			break;
+		}
+		case KEYWORD_OP: {
+			result = parse_op(lexer);
 			break;
 		}
 		case KEYWORD_RETURN: {
