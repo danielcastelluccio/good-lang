@@ -33,6 +33,7 @@ int main(int argc, char **argv) {
 	};
 	context.internal_root = internal_root;
 	context.internal_scope = internal_scope;
+	context.context_type = get_data(&context, find_define(context.internal_root, cstr_to_sv("Context")))->define.typed_value.value;
 
 	process_module_root(&context, root);
 

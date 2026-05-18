@@ -225,7 +225,8 @@ typedef struct {
 		INTERNAL_OS,
 		INTERNAL_OK,
 		INTERNAL_ERR,
-		INTERNAL_COMPILE_ERROR
+		INTERNAL_COMPILE_ERROR,
+		INTERNAL_CONTEXT
 	} kind;
 	Node **inputs; // stb_ds
 	Node *assign_value;

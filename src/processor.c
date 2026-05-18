@@ -34,7 +34,7 @@ static Node_Data *process_node_with_scopes(Context *context, Node *node, Scope *
 	return data;
 }
 
-static Node *find_define(Node *root, String_View identifier) {
+Node *find_define(Node *root, String_View identifier) {
 	for (long int i = 0; i < arrlen(root->root.statements); i++) {
 		Node *statement = root->root.statements[i];
 		if (statement->kind == DEFINE_NODE && sv_eq(statement->define.identifier, identifier)) {
@@ -3206,6 +3206,29 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			}
 
 			handle_semantic_error(context, node->location, "%.*s", (int) string.value->array_view.length->integer.value, message);
+			return data;
+		}
+		case INTERNAL_CONTEXT: {
+			Value context_type = context->context_type;
+			if (internal.assign_value != NULL) {
+				Value type = process_node(context, internal.assign_value)->type;
+
+				if (!type_assignable(context_type.value, type.value)) {
+					handle_expected_type_error(context, node, context_type, type);
+				}
+
+				return data;
+			} else {
+				if (context->temporary_context.want_pointer) {
+					data->internal.want_pointer = true;
+					data->type = create_pointer_type(context_type);
+				} else {
+					data->type = context_type;
+				}
+
+				return data;
+			}
+
 			return data;
 		}
 		default:

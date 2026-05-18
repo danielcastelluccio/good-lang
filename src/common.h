@@ -261,6 +261,7 @@ typedef struct {
 typedef struct {
 	Value value;
 	Node *node;
+	bool want_pointer;
 } Internal_Data;
 
 typedef struct {
@@ -391,6 +392,7 @@ struct Context {
 	Cached_File *cached_files; // stb_ds
 	Node *internal_root;
 	Scope internal_scope;
+	Value context_type;
 	Data *data;
 };
 

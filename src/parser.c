@@ -179,6 +179,10 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 				lexer_consume_check(lexer, PARENTHESIS_CLOSED);
 
 				return internal;
+			} else if (sv_eq_cstr(token.string, "context")) {
+				Node *internal = ast_new(INTERNAL_NODE, token.location);
+				internal->internal.kind = INTERNAL_CONTEXT;
+				return internal;
 			}
 			break;
 		case 'C':
