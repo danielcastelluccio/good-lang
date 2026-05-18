@@ -57,6 +57,8 @@ typedef struct {
 	Node *node;
 	Value node_type;
 	Value current_type;
+	size_t static_id;
+	bool has_static_id;
 } Scope;
 
 typedef struct {

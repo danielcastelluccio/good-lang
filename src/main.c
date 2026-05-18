@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 
 	Codegen codegen = llvm_codegen();
 
-	Context context = { .codegen = codegen, .data = &data };
+	Context context = { .codegen = codegen, .data = &data, .static_id = 1 };
 	arrsetcap(context.scopes, 32);
 
 	process_module_root(&context, internal_root);

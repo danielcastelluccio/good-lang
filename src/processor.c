@@ -24,6 +24,11 @@ static Node_Data *process_node_with_scopes(Context *context, Node *node, Scope *
 	if (scopes != NULL) context->scopes = scopes;
 	arrpush(context->scopes, (Scope) { .node = node });
 	context->static_id = 0;
+	for (int i = 0; i < arrlen(context->scopes); i++) {
+		if (context->scopes[i].has_static_id) {
+			context->static_id = context->scopes[i].static_id;
+		}
+	}
 
 	Node_Data *data = process_node(context, node);
 
@@ -146,7 +151,7 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 
 		if (scope->node->kind == ROOT_NODE) {
 			size_t saved_static_id = context->static_id;
-			context->static_id = 0;
+			context->static_id = 1;
 			Value_Data *module = get_data(context, scope->node)->root.module;
 			context->static_id = saved_static_id;
 
@@ -762,9 +767,18 @@ Value process_module_root(Context *context, Node *root) {
 		(*data)->root.module = result;
 	}
 
+	arrpush(context->scopes, (Scope) { .node = root } );
+
 	for (long int i = 0; i < arrlen(result->module.bodies); i++) {
 		process_node(context, result->module.bodies[i]);
 	}
+
+	result->module.scopes = NULL;
+	for (long i = 0; i < arrlen(context->scopes); i++) {
+		arrpush(result->module.scopes, context->scopes[i]);
+	}
+
+	(void) arrpop(context->scopes);
 
 	return (Value) {
 		.value = result
@@ -842,6 +856,9 @@ static bool is_trivially_evaluatable(Node *node, Node_Data *data) {
 		case STRUCTURE_ACCESS_NODE: {
 			return data->structure_access.structure_type.value->tag == MODULE_TYPE_VALUE;
 		}
+		case INTERNAL_NODE: {
+			return data->internal.value.value != NULL;
+		}
 		default:
 			return false;
 	}
@@ -906,25 +923,29 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 			continue;
 		}
 
-		Node_Data *given_data = process_node(context, call_arguments[argument_index]);
-		Value given_type = given_data->type;
+		bool uses_inferred = uses_inferred_arguments(function_arguments[argument_index].type, inferred_arguments, NULL);
+		Value given_type = {};
+		if (uses_inferred) {
+			Node_Data *given_data = process_node(context, call_arguments[argument_index]);
+			given_type = given_data->type;
 
-		Pattern_Match_Result match_result = NULL;
-		pattern_match(function_arguments[argument_index].type, given_type, context, inferred_arguments, &match_result);
-		for (long k = 0; k < arrlen(inferred_arguments); k++) {
-			Typed_Value typed_value = hmget(match_result, sv_hash(inferred_arguments[k]));
-			if (typed_value.value.value != NULL) {
-				Scope_Key_Identifier scope_identifier = {
-					.key = inferred_arguments[k],
-					.value = {
-						.tag = SCOPE_STATIC_BINDING,
-						.static_binding = {
-							.value = typed_value.value,
-							.type = typed_value.type
+			Pattern_Match_Result match_result = NULL;
+			pattern_match(function_arguments[argument_index].type, given_type, context, inferred_arguments, &match_result);
+			for (long k = 0; k < arrlen(inferred_arguments); k++) {
+				Typed_Value typed_value = hmget(match_result, sv_hash(inferred_arguments[k]));
+				if (typed_value.value.value != NULL) {
+					Scope_Key_Identifier scope_identifier = {
+						.key = inferred_arguments[k],
+						.value = {
+							.tag = SCOPE_STATIC_BINDING,
+							.static_binding = {
+								.value = typed_value.value,
+								.type = typed_value.type
+							}
 						}
-					}
-				};
-				arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
+					};
+					arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
+				}
 			}
 		}
 
@@ -942,6 +963,12 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 
 		bool wanted_static = function_arguments[argument_index].static_;
 
+		if (!uses_inferred) {
+			Temporary_Context temporary_context = { .wanted_type = wanted_type };
+			Node_Data *given_data = process_node_context(context, temporary_context, call_arguments[argument_index]);
+			given_type = given_data->type;
+		}
+
 		switch (call_arguments[argument_index]->kind) {
 			case STRING_NODE: {
 				if (wanted_type.value->tag != STRING_TYPE_VALUE) {
@@ -957,7 +984,7 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 			}
 			default: {
 				if (wanted_static) {
-					if (is_trivially_evaluatable(call_arguments[argument_index], get_data(context, call_arguments[argument_index]))) {
+					if (!is_trivially_evaluatable(call_arguments[argument_index], get_data(context, call_arguments[argument_index]))) {
 						return false;
 					}
 				}
@@ -1061,10 +1088,18 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 		}
 
 		if ((long) define_index < arrlen(lookup_result.define)) {
-			for (long i = 0; i < arrlen(context->scopes); i++) {
-				arrpush(*define_scopes, context->scopes[i]);
+			Define_Scope define = lookup_result.define[define_index];
 
-				if (lookup_result.define[define_index].scope == &context->scopes[i]) break;
+			if (define.kind == DEFINE_LOCAL) {
+				for (long i = 0; i < arrlen(context->scopes); i++) {
+					arrpush(*define_scopes, context->scopes[i]);
+
+					if (define.scope == &context->scopes[i]) break;
+				}
+			} else {
+				for (long i = 0; i < arrlen(define.scope); i++) {
+					arrpush(*define_scopes, define.scope[i]);
+				}
 			}
 
 			*define_node = lookup_result.define[define_index].node;
@@ -1348,7 +1383,7 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 
 	if (!found_match) {
 		size_t saved_static_id = context->static_id;
-		size_t new_static_id = function_node->function.static_id_counter++;
+		size_t new_static_id = ++function_node->function.static_id_counter;
 
 		context->static_id = new_static_id;
 
@@ -1360,7 +1395,7 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 			arrpush(context->scopes, (*function_value).value->function_stub.scopes[i]);
 		}
 
-		arrpush(context->scopes, (Scope) { .node = node });
+		arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = new_static_id }));
 
 		for (long int i = 0; i < arrlen(static_arguments); i++) {
 			Scope_Key_Identifier scope_identifier = {
@@ -2199,7 +2234,7 @@ static Node_Data *process_function(Context *context, Node *node, bool given_stat
 
 	context->compile_only = compile_only_parent;
 	context->returned = returned_parent;
-	
+
 	return data;
 }
 
@@ -2598,11 +2633,12 @@ static Node_Data *process_import(Context *context, Node *node) {
 
 		Node *file_node = parse_file(context->data, new_source);
 
+		size_t saved_static_id = context->static_id;
+		context->static_id = 1;
 		Scope *saved_scopes = context->scopes;
 		context->scopes = NULL;
 		value = process_module_root(context, file_node);
-		// process_node(context, file_node);
-		// value = evaluate(context, file_node);
+		context->static_id = saved_static_id;
 		context->scopes = saved_scopes;
 
 		add_module(context, source, value);
@@ -3095,14 +3131,17 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			value->value->tagged_union.data = value_data;
 
 			size_t saved_static_id = context->static_id;
-			context->static_id = 0;
+			context->static_id = 1;
 			Value type_info_type = get_data(context, find_define(context->internal_root, cstr_to_sv("Type_Info")))->define.typed_value.value;
 			context->static_id = saved_static_id;
 			data->type = type_info_type;
 			return data;
 		}
 		case INTERNAL_OS: {
+			size_t saved_static_id = context->static_id;
+			context->static_id = 1;
 			Value operating_system_type = get_data(context, find_define(context->internal_root, cstr_to_sv("Operating_System")))->define.typed_value.value;
+			context->static_id = saved_static_id;
 
 			#if defined(__linux__)
 				size_t os_value = 0;
@@ -3442,7 +3481,7 @@ static Node_Data *process_result(Context *context, Node *node) {
 
 static Node_Data *process_return(Context *context, Node *node) {
 	Return_Node return_ = node->return_;
-	
+
 	context->returned = true;
 
 	Node *current_function = NULL;
@@ -3474,7 +3513,6 @@ static Node_Data *process_return(Context *context, Node *node) {
 static Node_Data *process_root(Context *context, Node *node) {
 	Root_Node root = node->root;
 
-	arrpush(context->scopes, (Scope) { .node = node });
 	for (long int i = 0; i < arrlen(root.statements); i++) {
 		if (root.statements[i]->kind == IMPORT_NODE) {
 			Node_Data *data = process_node(context, root.statements[i]);
@@ -3486,7 +3524,6 @@ static Node_Data *process_root(Context *context, Node *node) {
 		Node *statement = root.statements[i];
 		process_node(context, statement);
 	}
-	(void) arrpop(context->scopes);
 
 	return context->temporary_context.data;
 }
@@ -4259,6 +4296,6 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 	}
 
 	context->temporary_context = saved_temporary_context;
-	
+
 	return value;
 }

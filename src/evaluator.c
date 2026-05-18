@@ -287,6 +287,7 @@ static Value evaluate_function(State *state, Node *node) {
 	}
 
 	Value function_type_value = function_type_data->function_type.value;
+	assert(function_type_value.value->tag == FUNCTION_TYPE_VALUE);
 
 	Value_Data *function_value = value_new(FUNCTION_VALUE);
 	function_value->function.type = function_type_value.value;
