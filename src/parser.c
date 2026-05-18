@@ -437,11 +437,6 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 		lexer_consume(lexer);
 
 		Token_Data next = lexer_peek(lexer);
-		// bool dollar = false;
-		// if (next.kind == DOLLAR) {
-		// 	lexer_consume(lexer);
-		// 	dollar = true;
-		// }
 
 		Node *type = parse_expression_or_nothing(lexer);
 

@@ -248,7 +248,7 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 	char *buffer_start = buffer;
 	if (pointer) {
-		buffer += sprintf(buffer, "^");
+		buffer += sprintf(buffer, "*");
 	}
 
 	switch (type_node->kind) {
@@ -351,14 +351,14 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 }
 
 static int print_type(Value type, char *buffer) {
-	if (type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE || type.node->kind == INTERNAL_NODE)) {
+	if (false && type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE || type.node->kind == INTERNAL_NODE)) {
 		return print_type_node(type.node, false, buffer);
 	}
 
 	char *buffer_start = buffer;
 	switch (type.value->tag) {
 		case POINTER_TYPE_VALUE: {
-			buffer += sprintf(buffer, "^");
+			buffer += sprintf(buffer, "*");
 			if (type.value->pointer_type.inner.value != NULL) {
 				buffer += print_type(type.value->pointer_type.inner, buffer);
 			}
@@ -404,6 +404,17 @@ static int print_type(Value type, char *buffer) {
 			for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
 				String_View name = type.value->struct_type.node->struct_type.members[i].name;
 				buffer += sprintf(buffer, "%.*s:", (int) name.len, name.ptr);
+				buffer += print_type(type.value->struct_type.members[i], buffer);
+				if (i < arrlen(type.value->struct_type.members) - 1) {
+					buffer += sprintf(buffer, ",");
+				}
+			}
+			buffer += sprintf(buffer, "}");
+			break;
+		}
+		case TUPLE_TYPE_VALUE: {
+			buffer += sprintf(buffer, "tuple{");
+			for (long int i = 0; i < arrlen(type.value->struct_type.members); i++) {
 				buffer += print_type(type.value->struct_type.members[i], buffer);
 				if (i < arrlen(type.value->struct_type.members) - 1) {
 					buffer += sprintf(buffer, ",");
@@ -808,6 +819,327 @@ static bool is_literal(Node *node) {
 		default:
 			return false;
 	}
+}
+
+static bool references_identifier(Node *node, String_View identifier) {
+	switch (node->kind) {
+		case IDENTIFIER_NODE:
+			return sv_eq(node->identifier.value, identifier);
+		case INTERNAL_NODE:
+			break;
+		default:
+			assert(false);
+	}
+	return false;
+}
+
+static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, bool want_pointer, Node *assign_value, Node **define_node) {
+	*define_node = NULL;
+	*define_scopes = NULL;
+	if (module_value.value != NULL) {
+		for (long int j = 0; j < arrlen(module_value.value->module.bodies); j++) {
+			Node *root = module_value.value->module.bodies[j];
+			for (long int i = 0; i < arrlen(root->root.statements); i++) {
+				Node *statement = root->root.statements[i];
+				if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
+					*define_node = statement;
+
+					for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
+						arrpush(*define_scopes, module_value.value->module.scopes[i]);
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	if (lookup_result.tag == LOOKUP_RESULT_DEFINE_INTERNAL) {
+		arrpush(*define_scopes, *lookup_result.define[0].scope);
+		*define_node = lookup_result.define[0].node;
+	}
+
+	if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
+		size_t define_index = 0;
+
+		bool all_functions = true;
+		for (long int i = 0; i < arrlen(lookup_result.define); i++) {
+			if (lookup_result.define[i].node->define.expression->kind != FUNCTION_NODE) {
+				all_functions = false;
+			}
+		}
+
+		if (all_functions) {
+			if (context->temporary_context.has_call_arguments) {
+				bool saved_compile_only = context->compile_only;
+
+				long int selected_count = 0;
+
+				for (long int i = 0; i < arrlen(lookup_result.define); i++) {
+					Scope *define_scopes_temp = NULL;
+
+					if (lookup_result.define[i].kind == DEFINE_LOCAL) {
+						for (long i = 0; i < arrlen(context->scopes); i++) {
+							arrpush(define_scopes_temp, context->scopes[i]);
+
+							if (lookup_result.define[i].scope == &context->scopes[i]) break;
+						}
+					} else {
+						for (long i = 0; i < arrlen(lookup_result.define[i].scope); i++) {
+							arrpush(define_scopes_temp, lookup_result.define[i].scope[i]);
+						}
+					}
+
+					Define_Scope define = lookup_result.define[i];
+					Node *function_node = define.node->define.expression;
+					Node *function_type_node = function_node->function.function_type;
+					assert(function_node->kind == FUNCTION_NODE);
+
+					arrpush(define_scopes_temp, (Scope) { .node = function_node });
+
+					Call_Argument *call_arguments = context->temporary_context.call_arguments;
+
+					Node **call_arguments_rearranged = NULL;
+					arrsetlen(call_arguments_rearranged, arrlen(function_type_node->function_type.arguments));
+
+					long int index = 0;
+					for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
+						Function_Argument argument = function_type_node->function_type.arguments[i];
+						if (argument.inferred) continue;
+
+						call_arguments_rearranged[index] = NULL;
+
+						index++;
+					}
+
+					long int noninferred_count = index;
+					arrsetlen(call_arguments_rearranged, noninferred_count);
+
+					index = 0;
+					for (long int i = 0; i < arrlen(call_arguments); i++) {
+						if (call_arguments[i].identifier.ptr != NULL) {
+							for (long int j = 0; j < arrlen(function_type_node->function_type.arguments); j++) {
+								if (sv_eq(call_arguments[i].identifier, function_type_node->function_type.arguments[j].identifier)) {
+									index = j;
+									break;
+								}
+							}
+						}
+
+						call_arguments_rearranged[index] = call_arguments[i].node;
+						index++;
+					}
+
+					bool invalid = false;
+					for (long int j = 0; j < arrlen(call_arguments_rearranged); j++) {
+						if (call_arguments_rearranged[j] == NULL && function_type_node->function_type.arguments[j].default_value == NULL) {
+							invalid = true;
+							break;
+						}
+					}
+
+					if (invalid) {
+						continue;
+					}
+
+					String_View *inferred_arguments = NULL;
+					Function_Argument *arguments = function_type_node->function_type.arguments;
+					size_t *arguments_order = NULL;
+					arrsetlen(arguments_order, arrlen(arguments));
+					for (long int j = 0; j < arrlen(arguments); j++) {
+						arguments_order[j] = j;
+						if (arguments[j].inferred) {
+							arrpush(inferred_arguments, arguments[j].identifier);
+						}
+					}
+
+					for (long int j = 0; j < arrlen(arguments); j++) {
+						for (long int k = j + 1; k < arrlen(arguments); k++) {
+							if (!arguments[arguments_order[j]].inferred && references_identifier(arguments[arguments_order[j]].type, arguments[arguments_order[k]].identifier)) {
+								size_t temp = arguments_order[k];
+								arguments_order[k] = arguments_order[j];
+								arguments_order[j] = temp;
+							}
+						}
+					}
+
+					for (long j = 0; j < arrlen(arguments_order); j++) {
+						long argument_index = arguments_order[j];
+
+						if (function_type_node->function_type.arguments[argument_index].inferred) {
+							continue;
+						}
+
+						long call_argument_index = 0;
+						for (long int k = 0; k < argument_index; k++) {
+							if (function_type_node->function_type.arguments[k].inferred) continue;
+
+							call_argument_index++;
+						}
+
+						reset_node(context, function_type_node->function_type.arguments[argument_index].type);
+
+						Node_Data *given_data = process_node(context, call_arguments_rearranged[call_argument_index]);
+						Value given_type = given_data->type;
+						Pattern_Match_Result match_result = NULL;
+						pattern_match(function_type_node->function_type.arguments[argument_index].type, given_type, context, inferred_arguments, &match_result);
+
+						for (long k = 0; k < arrlen(inferred_arguments); k++) {
+							Typed_Value typed_value = hmget(match_result, sv_hash(inferred_arguments[k]));
+							if (typed_value.value.value != NULL) {
+								Scope_Key_Identifier scope_identifier = {
+									.key = inferred_arguments[k],
+									.value = {
+										.tag = SCOPE_STATIC_BINDING,
+										.static_binding = {
+											.value = typed_value.value,
+											.type = typed_value.type
+										}
+									}
+								};
+								arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
+							}
+						}
+
+						process_node_with_scopes(context, function_type_node->function_type.arguments[argument_index].type, define_scopes_temp);
+						Value wanted_type = evaluate(context, function_type_node->function_type.arguments[argument_index].type);
+						bool wanted_static = function_type_node->function_type.arguments[argument_index].static_;
+
+						switch (call_arguments_rearranged[call_argument_index]->kind) {
+							case STRING_NODE: {
+								if (wanted_type.value->tag != STRING_TYPE_VALUE) {
+									invalid = true;
+								}
+								break;
+							}
+							case NUMBER_NODE: {
+								if (wanted_type.value->tag != INTEGER_TYPE_VALUE && wanted_type.value->tag != FLOAT_TYPE_VALUE) {
+									invalid = true;
+								}
+								break;
+							}
+							default: {
+								if (wanted_static) {
+									if (call_arguments_rearranged[call_argument_index]->kind == IDENTIFIER_NODE) {
+										if (given_data->identifier.kind != IDENTIFIER_VALUE) {
+											invalid = true;
+										}
+									}
+								}
+
+								if (!value_equal(wanted_type.value, given_type.value)) {
+									invalid = true;
+								}
+								break;
+							}
+						}
+
+						if (!invalid && wanted_static) {
+							Scope_Key_Identifier scope_identifier = {
+								.key = function_type_node->function_type.arguments[argument_index].identifier,
+								.value = {
+									.tag = SCOPE_STATIC_BINDING,
+									.static_binding = {
+										.value = evaluate(context, call_arguments_rearranged[call_argument_index]),
+										.type = given_type
+									}
+								}
+							};
+							arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
+						}
+
+						reset_node(context, function_type_node->function_type.arguments[argument_index].type);
+						reset_node(context, call_arguments_rearranged[call_argument_index]);
+					}
+
+					(void) arrpop(define_scopes_temp);
+
+					if (invalid) {
+						continue;
+					}
+
+					define_index = i;
+					selected_count++;
+				}
+
+				if (selected_count == 0) {
+					handle_semantic_error(context, node->location, "Function overload not found");
+				} else if (selected_count > 1) {
+					handle_semantic_error(context, node->location, "Multiple valid overloads found");
+				}
+
+				context->compile_only = saved_compile_only;
+			} else {
+				if (arrlen(lookup_result.define) > 1) {
+					handle_semantic_error(context, node->location, "Multiple valid overloads found");
+				}
+
+				define_index = 0;
+			}
+		}
+
+		if ((long) define_index < arrlen(lookup_result.define)) {
+			for (long i = 0; i < arrlen(context->scopes); i++) {
+				arrpush(*define_scopes, context->scopes[i]);
+
+				if (lookup_result.define[define_index].scope == &context->scopes[i]) break;
+			}
+
+			*define_node = lookup_result.define[define_index].node;
+		}
+	}
+
+	Value type = {};
+	Value value = {};
+
+	if (*define_node != NULL) {
+		Typed_Value typed_value = process_node_with_scopes(context, *define_node, *define_scopes)->define.typed_value;
+
+		type = typed_value.type;
+		value = typed_value.value;
+
+		if ((*define_node)->define.special) {
+			switch (type.value->tag) {
+				case GLOBAL_TYPE_VALUE: {
+					type = type.value->global_type.type;
+
+					if (want_pointer) {
+						Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
+						pointer_type->pointer_type.inner = type;
+						type = (Value) { .value = pointer_type };
+					}
+
+					if (assign_value != NULL) {
+						Temporary_Context temporary_context = { .wanted_type = type };
+						Value value_type = process_node_context(context, temporary_context, assign_value)->type;
+						if (!type_assignable(type.value, value_type.value)) {
+							handle_expected_type_error(context, node, type, value_type);
+						}
+					}
+					break;
+				}
+				case CONST_TYPE_VALUE: {
+					Value const_type = type;
+
+					type = context->temporary_context.wanted_type;
+
+					if (type.value == NULL) {
+						switch (const_type.value->const_type.type) {
+							case NUMBER:
+								type = create_integer_type(true, context->codegen.default_integer_size);
+								break;
+							default:
+								assert(false);
+						}
+					}
+					break;
+				}
+				default:
+					assert(false);
+			}
+		}
+	}
+
+	return (Typed_Value) { .type = type, .value = value };
 }
 
 typedef struct {
@@ -1375,7 +1707,7 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 
 	Value left_type;
 	Value right_type;
-	if (binary_operator.left->kind == NUMBER_NODE) {
+	if (is_literal(binary_operator.left)) {
 		right_type = process_node(context, binary_operator.right)->type;
 		Temporary_Context temporary_context = { .wanted_type = right_type };
 		left_type = process_node_context(context, temporary_context, binary_operator.left)->type;
@@ -1389,6 +1721,8 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 		handle_mismatched_type_error(context, node, left_type, right_type);
 	}
 
+	Node_Data *data = context->temporary_context.data;
+
 	Value type = left_type;
 	if (type.value->tag == INTEGER_TYPE_VALUE) {}
 	else if (type.value->tag == FLOAT_TYPE_VALUE) {}
@@ -1396,7 +1730,35 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 	else if (can_compare(type.value) && (binary_operator.operator == OP_EQUALS || binary_operator.operator == OP_NOT_EQUALS)) {}
 	else if (type.value->tag == BOOLEAN_TYPE_VALUE && (binary_operator.operator == OP_AND || binary_operator.operator == OP_OR)) {}
 	else {
-		handle_type_error(node, "Cannot operate on %s", left_type);
+		// handle_type_error(node, "Cannot operate on %s", left_type);
+		assert(binary_operator.operator == OP_ADD);
+
+		Temporary_Context saved_temporary_context = context->temporary_context;
+
+		Call_Argument *call_arguments = NULL;
+		arrpush(call_arguments, ((Call_Argument) { .node = binary_operator.left }));
+		arrpush(call_arguments, ((Call_Argument) { .node = binary_operator.right }));
+
+		context->temporary_context = (Temporary_Context) {
+			.call_arguments = call_arguments,
+			.has_call_arguments = true
+		};
+
+		Lookup_Result lookup_result = lookup(context, cstr_to_sv("op_add"));
+		Node *define_node = NULL;
+		Scope *define_scopes = NULL;
+		Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, cstr_to_sv("op_plus"), &define_scopes, false, NULL, &define_node);
+
+		context->temporary_context = saved_temporary_context;
+
+		if (typed_value.value.value == NULL) {
+			handle_semantic_error(context, node->location, "Operator 'op_add' not found");
+		}
+
+		process_call_generic(context, node, typed_value.value, &typed_value.type, call_arguments);
+
+		data->binary_operator.function = typed_value.value;
+		data->binary_operator.function_type = typed_value.type;
 	}
 
 	Value result_type = {};
@@ -1422,7 +1784,6 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 			break;
 	}
 
-	Node_Data *data = context->temporary_context.data;
 	data->binary_operator.type = left_type;
 	data->type = result_type;
 	return data;
@@ -1575,7 +1936,7 @@ static Node_Data *process_cast(Context *context, Node *node) {
 static Node_Data *process_call(Context *context, Node *node) {
 	Call_Node call = node->call;
 
-	Temporary_Context temporary_context = { .call_arguments = call.arguments };
+	Temporary_Context temporary_context = { .call_arguments = call.arguments, .has_call_arguments = true };
 	Node_Data *function_data = process_node_context(context, temporary_context, call.function);
 	Value function_type = function_data->type;
 
@@ -2071,270 +2432,6 @@ static Node_Data *process_global(Context *context, Node *node) {
 	Node_Data *data = context->temporary_context.data;
 	data->type = global_type;
 	return data;
-}
-
-static bool references_identifier(Node *node, String_View identifier) {
-	switch (node->kind) {
-		case IDENTIFIER_NODE:
-			return sv_eq(node->identifier.value, identifier);
-		case INTERNAL_NODE:
-			break;
-		default:
-			assert(false);
-	}
-	return false;
-}
-
-static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, bool want_pointer, Node *assign_value, Node **define_node) {
-	*define_node = NULL;
-	*define_scopes = NULL;
-	if (module_value.value != NULL) {
-		for (long int j = 0; j < arrlen(module_value.value->module.bodies); j++) {
-			Node *root = module_value.value->module.bodies[j];
-			for (long int i = 0; i < arrlen(root->root.statements); i++) {
-				Node *statement = root->root.statements[i];
-				if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
-					*define_node = statement;
-
-					for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
-						arrpush(*define_scopes, module_value.value->module.scopes[i]);
-					}
-					break;
-				}
-			}
-		}
-	}
-
-	if (lookup_result.tag == LOOKUP_RESULT_DEFINE_INTERNAL) {
-		arrpush(*define_scopes, *lookup_result.define[0].scope);
-		*define_node = lookup_result.define[0].node;
-	}
-
-	if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
-		size_t define_index = 0;
-		if (arrlen(lookup_result.define) > 1) {
-			assert(context->temporary_context.call_arguments != NULL);
-
-			long int selected_count = 0;
-
-			for (long int i = 0; i < arrlen(lookup_result.define); i++) {
-				Scope *define_scopes_temp = NULL;
-
-				if (lookup_result.define[i].kind == DEFINE_LOCAL) {
-					for (long i = 0; i < arrlen(context->scopes); i++) {
-						arrpush(define_scopes_temp, context->scopes[i]);
-
-						if (lookup_result.define[i].scope == &context->scopes[i]) break;
-					}
-				} else {
-					for (long i = 0; i < arrlen(lookup_result.define[i].scope); i++) {
-						arrpush(define_scopes_temp, lookup_result.define[i].scope[i]);
-					}
-				}
-
-				Define_Scope define = lookup_result.define[i];
-				Node *function_node = define.node->define.expression;
-				Node *function_type_node = function_node->function.function_type;
-				assert(function_node->kind == FUNCTION_NODE);
-
-				arrpush(define_scopes_temp, (Scope) { .node = function_node });
-
-				Call_Argument *call_arguments = context->temporary_context.call_arguments;
-
-				Node **call_arguments_rearranged = NULL;
-				arrsetlen(call_arguments_rearranged, arrlen(function_type_node->function_type.arguments));
-
-				long int index = 0;
-				for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
-					Function_Argument argument = function_type_node->function_type.arguments[i];
-					if (argument.inferred) continue;
-
-					call_arguments_rearranged[index] = NULL;
-
-					index++;
-				}
-
-				long int noninferred_count = index;
-				arrsetlen(call_arguments_rearranged, noninferred_count);
-
-				index = 0;
-				for (long int i = 0; i < arrlen(call_arguments); i++) {
-					if (call_arguments[i].identifier.ptr != NULL) {
-						for (long int j = 0; j < arrlen(function_type_node->function_type.arguments); j++) {
-							if (sv_eq(call_arguments[i].identifier, function_type_node->function_type.arguments[j].identifier)) {
-								index = j;
-								break;
-							}
-						}
-					}
-
-					call_arguments_rearranged[index] = call_arguments[i].node;
-					index++;
-				}
-
-				bool invalid = false;
-				for (long int j = 0; j < arrlen(call_arguments_rearranged); j++) {
-					if (call_arguments_rearranged[j] == NULL && function_type_node->function_type.arguments[j].default_value == NULL) {
-						invalid = true;
-						break;
-					}
-				}
-
-				if (invalid) {
-					continue;
-				}
-
-				Function_Argument *arguments = function_type_node->function_type.arguments;
-				size_t *arguments_order = NULL;
-				arrsetlen(arguments_order, arrlen(arguments));
-				for (long int j = 0; j < arrlen(arguments); j++) {
-					arguments_order[j] = j;
-				}
-
-				for (long int j = 0; j < arrlen(arguments); j++) {
-					for (long int k = j + 1; k < arrlen(arguments); k++) {
-						if (references_identifier(arguments[arguments_order[j]].type, arguments[arguments_order[k]].identifier)) {
-							size_t temp = arguments_order[k];
-							arguments_order[k] = arguments_order[j];
-							arguments_order[j] = temp;
-						}
-					}
-				}
-
-				for (long int j = 0; j < arrlen(arguments_order); j++) {
-					long int argument_index = arguments_order[j];
-
-					process_node_with_scopes(context, function_type_node->function_type.arguments[argument_index].type, define_scopes_temp);
-					Value wanted_type = evaluate(context, function_type_node->function_type.arguments[argument_index].type);
-					bool wanted_static = function_type_node->function_type.arguments[argument_index].static_;
-
-					Node_Data *given_data = process_node(context, call_arguments_rearranged[argument_index]);
-					Value given_type = given_data->type;
-					switch (call_arguments_rearranged[argument_index]->kind) {
-						case STRING_NODE: {
-							if (wanted_type.value->tag != STRING_TYPE_VALUE) {
-								invalid = true;
-							}
-							break;
-						}
-						case NUMBER_NODE: {
-							if (wanted_type.value->tag != INTEGER_TYPE_VALUE && wanted_type.value->tag != FLOAT_TYPE_VALUE) {
-								invalid = true;
-							}
-							break;
-						}
-						default: {
-							if (wanted_static) {
-								if (call_arguments_rearranged[argument_index]->kind == IDENTIFIER_NODE) {
-									if (given_data->identifier.kind != IDENTIFIER_VALUE) {
-										invalid = true;
-									}
-								}
-							}
-
-							if (!value_equal(wanted_type.value, given_type.value)) {
-								invalid = true;
-							}
-							break;
-						}
-					}
-
-					if (!invalid && wanted_static) {
-						Scope_Key_Identifier scope_identifier = {
-							.key = function_type_node->function_type.arguments[argument_index].identifier,
-							.value = {
-								.tag = SCOPE_STATIC_BINDING,
-								.static_binding = {
-									.value = evaluate(context, call_arguments_rearranged[argument_index]),
-									.type = given_type
-								}
-							}
-						};
-						arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
-					}
-
-					reset_node(context, function_type_node->function_type.arguments[argument_index].type);
-					reset_node(context, call_arguments_rearranged[argument_index]);
-				}
-
-				(void) arrpop(define_scopes_temp);
-
-				if (invalid) {
-					continue;
-				}
-
-				define_index = i;
-				selected_count++;
-			}
-
-			if (selected_count == 0) {
-				handle_semantic_error(context, node->location, "Function overload not found");
-			} else if (selected_count > 1) {
-				handle_semantic_error(context, node->location, "Multiple valid overloads found");
-			}
-		}
-
-		for (long i = 0; i < arrlen(context->scopes); i++) {
-			arrpush(*define_scopes, context->scopes[i]);
-
-			if (lookup_result.define[define_index].scope == &context->scopes[i]) break;
-		}
-
-		*define_node = lookup_result.define[define_index].node;
-	}
-
-	Value type = {};
-	Value value = {};
-
-	if (*define_node != NULL) {
-		Typed_Value typed_value = process_node_with_scopes(context, *define_node, *define_scopes)->define.typed_value;
-
-		type = typed_value.type;
-		value = typed_value.value;
-
-		if ((*define_node)->define.special) {
-			switch (type.value->tag) {
-				case GLOBAL_TYPE_VALUE: {
-					type = type.value->global_type.type;
-
-					if (want_pointer) {
-						Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
-						pointer_type->pointer_type.inner = type;
-						type = (Value) { .value = pointer_type };
-					}
-
-					if (assign_value != NULL) {
-						Temporary_Context temporary_context = { .wanted_type = type };
-						Value value_type = process_node_context(context, temporary_context, assign_value)->type;
-						if (!type_assignable(type.value, value_type.value)) {
-							handle_expected_type_error(context, node, type, value_type);
-						}
-					}
-					break;
-				}
-				case CONST_TYPE_VALUE: {
-					Value const_type = type;
-
-					type = context->temporary_context.wanted_type;
-
-					if (type.value == NULL) {
-						switch (const_type.value->const_type.type) {
-							case NUMBER:
-								type = create_integer_type(true, context->codegen.default_integer_size);
-								break;
-							default:
-								assert(false);
-						}
-					}
-					break;
-				}
-				default:
-					assert(false);
-			}
-		}
-	}
-
-	return (Typed_Value) { .type = type, .value = value };
 }
 
 static Node_Data *process_identifier(Context *context, Node *node) {

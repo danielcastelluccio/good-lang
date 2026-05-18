@@ -1082,6 +1082,13 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 	Binary_Op_Node binary_operator = node->binary_op;
 	Binary_Operator_Data binary_operator_data = get_data(&state->context, node)->binary_operator;
 
+	if (binary_operator_data.function.value != NULL) {
+		Call_Argument_Value *arguments = NULL;
+		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = binary_operator.left }));
+		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = binary_operator.right }));
+		return generate_call_generic2(generate_value(binary_operator_data.function.value, binary_operator_data.function_type.value, state), binary_operator_data.function_type.value, arguments, state);
+	}
+
 	LLVMValueRef left_value = generate_node(binary_operator.left, state);
 	LLVMValueRef right_value = generate_node(binary_operator.right, state);
 

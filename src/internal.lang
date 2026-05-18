@@ -77,5 +77,6 @@ Allocator :: struct {
 }
 
 Context :: struct {
-	allocator: Allocator;
+	allocator: Allocator,
+	value: int
 }

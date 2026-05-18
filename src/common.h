@@ -236,6 +236,8 @@ typedef struct {
 
 typedef struct {
 	Value type;
+	Value function;
+	Value function_type;
 } Binary_Operator_Data;
 
 typedef struct {
@@ -373,6 +375,7 @@ typedef struct {
 	Value wanted_type;
 	bool want_pointer;
 	Call_Argument *call_arguments;
+	bool has_call_arguments;
 	Node_Data *data;
 } Temporary_Context;
 
