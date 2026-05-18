@@ -45,8 +45,9 @@ void set_assign_value(Node *node, Node *assign_value, bool static_) {
 			break;
 		}
 		case INTERNAL_NODE: {
-			assert(node->internal.kind == INTERNAL_EMBED || node->internal.kind == INTERNAL_CONTEXT);
+			assert(node->internal.kind == INTERNAL_EMBED || node->internal.kind == INTERNAL_CONTEXT || node->internal.kind == INTERNAL_GLOBAL_VALUE);
 			node->internal.assign_value = assign_value;
+
 			node->internal.assign_static = static_;
 			break;
 		}

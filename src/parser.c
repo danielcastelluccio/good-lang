@@ -240,6 +240,19 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 				return internal;
 			}
 			break;
+		case 'g':
+			if (sv_eq_cstr(token.string, "global_value")) {
+				Node *internal = ast_new(INTERNAL_NODE, token.location);
+				internal->internal.kind = INTERNAL_GLOBAL_VALUE;
+				internal->internal.assign_value = NULL;
+
+				internal->internal.inputs = NULL;
+				lexer_consume_check(lexer, PARENTHESIS_OPEN);
+				arrpush(internal->internal.inputs, parse_expression(lexer));
+				lexer_consume_check(lexer, PARENTHESIS_CLOSED);
+				return internal;
+			}
+			break;
 		case 'f':
 			if (sv_eq_cstr(token.string, "false")) {
 				Node *boolean = ast_new(BOOLEAN_NODE, token.location);
@@ -449,7 +462,8 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 			define->define.public = true;
 			define->define.type = type;
 			define->define.expression = parse_expression(lexer);
-			define->define.special = define->define.expression->kind == GLOBAL_NODE || define->define.expression->kind == CONST_NODE;
+			// define->define.special = define->define.expression->kind == GLOBAL_NODE || define->define.expression->kind == CONST_NODE;
+			define->define.special = false;
 			return define;
 		}
 

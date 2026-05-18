@@ -347,7 +347,7 @@ static int print_type_node(Node *type_node, bool pointer, char *buffer) {
 }
 
 static int print_type(Value type, char *buffer) {
-	if (false && type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE || type.node->kind == INTERNAL_NODE)) {
+	if (type.node != NULL && (type.node->kind == CALL_NODE || type.node->kind == IDENTIFIER_NODE || type.node->kind == INTERNAL_NODE)) {
 		return print_type_node(type.node, false, buffer);
 	}
 
@@ -3328,6 +3328,35 @@ static Node_Data *process_internal(Context *context, Node *node) {
 					data->type = create_pointer_type(context_type);
 				} else {
 					data->type = context_type;
+				}
+
+				return data;
+			}
+
+			return data;
+		}
+		case INTERNAL_GLOBAL_VALUE: {
+			Value type = process_node(context, internal.inputs[0])->type.value->global_type.type;
+			Value value = evaluate(context, internal.inputs[0]);
+			data->internal.saved_value = (Typed_Value) {
+				.type = type,
+				.value = value
+			};
+
+			if (internal.assign_value != NULL) {
+				Value type = process_node(context, internal.assign_value)->type;
+
+				if (!type_assignable(type.value, type.value)) {
+					handle_expected_type_error(context, node, type, type);
+				}
+
+				return data;
+			} else {
+				if (context->temporary_context.want_pointer) {
+					data->internal.want_pointer = true;
+					data->type = create_pointer_type(type);
+				} else {
+					data->type = type;
 				}
 
 				return data;

@@ -1612,6 +1612,21 @@ static LLVMValueRef generate_internal(Node *node, State *state) {
 				}
 			}
 		}
+		case INTERNAL_GLOBAL_VALUE: {
+			LLVMValueRef global_var = generate_value(internal_data.saved_value.value.value, internal_data.saved_value.type.value, state);
+
+			if (internal.assign_value != NULL) {
+				LLVMValueRef value = generate_node(internal.assign_value, state);
+				LLVMBuildStore(state->llvm_builder, value, global_var);
+				return NULL;
+			} else {
+				if (internal_data.want_pointer) {
+					return global_var;
+				} else {
+					return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(internal_data.saved_value.type.value, state), global_var, "");
+				}
+			}
+		}
 		default:
 			assert(false);
 			return NULL;
@@ -1920,6 +1935,16 @@ static LLVMValueRef generate_string_value(Value_Data *value, Value_Data *type, S
 	return struct_value;
 }
 
+static LLVMValueRef generate_global_value(Value_Data *value, Value_Data *type, State *state) {
+	Global_Value global_value = value->global;
+
+	LLVMValueRef global_llvm_value = LLVMAddGlobal(state->llvm_module, create_llvm_type(type, state), "");
+	LLVMSetValueName2(global_llvm_value, global_value.node->global.extern_.ptr, global_value.node->global.extern_.len);
+	LLVMSetInitializer(global_llvm_value, generate_value(global_value.value.value, type, state));
+
+	return global_llvm_value;
+}
+
 static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *state) {
 	LLVMValueRef cached_result = hmget(state->generated_cache, value);
 	if (cached_result != NULL) {
@@ -1951,6 +1976,9 @@ static LLVMValueRef generate_value(Value_Data *value, Value_Data *type, State *s
 			break;
 		case STRING_VALUE:
 			result = generate_string_value(value, type, state);
+			break;
+		case GLOBAL_VALUE:
+			result = generate_global_value(value, type, state);
 			break;
 		case NONE_VALUE:
 			result = NULL;

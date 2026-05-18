@@ -1,14 +1,14 @@
-def! FILE = struct {};
+FILE :: struct {}
 
-def! printf = fn (s: *[_, null]byte, ..) -> int extern "printf";
-def! sprintf = fn (str: *[_, null]byte, format: *[_]byte, ..) -> int extern "sprintf";
-def! putchar = fn (c: int) -> int extern "putchar";
+printf :: fn (s: *[_, null]byte, ..) -> int extern "printf"
+sprintf :: fn (str: *[_, null]byte, format: *[_]byte, ..) -> int extern "sprintf"
+putchar :: fn (c: int) -> int extern "putchar"
 
-def! malloc = fn (size: u64) -> ?* extern "malloc";
-def! free = fn (ptr: *) extern "free";
-def! realloc = fn (ptr: *, size: u64) -> ?* extern "realloc";
+malloc :: fn (size: u64) -> ?* extern "malloc"
+free :: fn (ptr: *) extern "free"
+realloc :: fn (ptr: *, size: u64) -> ?* extern "realloc"
 
-def! fopen = fn (path: *[_, null]byte, mode: *[_, null]byte) -> *FILE extern "fopen";
-def! fread = fn (buffer: *[_, null]byte, size: u64, count: u64, stream: *FILE) -> u64 extern "fread";
+fopen :: fn (path: *[_, null]byte, mode: *[_, null]byte) -> *FILE extern "fopen"
+fread :: fn (buffer: *[_, null]byte, size: u64, count: u64, stream: *FILE) -> u64 extern "fread"
 
-def! strlen = fn (s: *[_]byte) -> u64 extern "strlen";
+strlen :: fn (s: *[_]byte) -> u64 extern "strlen"

@@ -265,6 +265,7 @@ typedef struct {
 
 typedef struct {
 	Value value;
+	Typed_Value saved_value;
 	Node *node;
 	bool want_pointer;
 } Internal_Data;
