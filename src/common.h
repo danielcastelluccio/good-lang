@@ -29,7 +29,6 @@ typedef struct {
 	enum {
 		SCOPE_INVALID,
 		SCOPE_VARIABLE,
-		SCOPE_DEFINE,
 		SCOPE_BINDING,
 		SCOPE_STATIC_BINDING,
 		SCOPE_STATIC_VARIABLE,
@@ -63,7 +62,6 @@ typedef struct {
 typedef struct {
 	enum {
 		IDENTIFIER_VARIABLE,
-		IDENTIFIER_GLOBAL,
 		IDENTIFIER_ARGUMENT,
 		IDENTIFIER_BINDING,
 		IDENTIFIER_VALUE,
@@ -73,7 +71,6 @@ typedef struct {
 	} kind;
 	union {
 		Node *variable;
-		Node *global;
 		Variable_Definition static_variable;
 		size_t argument_index;
 		Value value;
