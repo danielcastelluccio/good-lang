@@ -1,11 +1,12 @@
 // Do not modify, is a global so a pointer can be taken.
-def* stdout_printer = global: print_.Printer => .{ print_stdout_fn };
+// def* stdout_printer = global: print_.Printer => .{ print_stdout_fn };
 
 def print_stdout_fn = fn (_: *, char: byte) {
 	_ = c.putchar(cast(int) char);
 };
 
 def! print = fn ($fmt: string, args: $T) {
+	var stdout_printer: print_.Printer = .{ print_stdout_fn };
 	stdout_printer$$print(fmt, args);
 };
 

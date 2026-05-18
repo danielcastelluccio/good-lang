@@ -26,11 +26,16 @@ int main(int argc, char **argv) {
 
 	Codegen codegen = llvm_codegen();
 
-	Context context = process(&data, internal_root, codegen);
+	Context context = { .codegen = codegen, .data = &data };
+	arrsetcap(context.scopes, 32);
+
+	process_module_root(&context, internal_root);
+
 	Scope internal_scope = {
 		.node = internal_root,
 		.identifiers = NULL
 	};
+
 	context.internal_root = internal_root;
 	context.internal_scope = internal_scope;
 	context.context_type = get_data(&context, find_define(context.internal_root, cstr_to_sv("Context")))->define.typed_value.value;

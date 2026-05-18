@@ -1190,13 +1190,23 @@ static LLVMValueRef generate_variable(Node *node, State *state) {
 		return NULL;
 	}
 
-	LLVMValueRef allocated_variable_llvm = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(get_data(&state->context, node)->variable.type.value, state), "");
-	if (variable.value != NULL) {
-		LLVMValueRef llvm_value = generate_node(variable.value, state);
-		LLVMBuildStore(state->llvm_builder, llvm_value, allocated_variable_llvm);
-	}
+	LLVMValueRef allocated_variable_llvm;
+	if (state->llvm_builder != NULL) {
+		allocated_variable_llvm = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(get_data(&state->context, node)->variable.type.value, state), "");
 
-	hmput(state->variables, node, allocated_variable_llvm);
+		if (variable.value != NULL) {
+			LLVMValueRef llvm_value = generate_node(variable.value, state);
+			LLVMBuildStore(state->llvm_builder, llvm_value, allocated_variable_llvm);
+		}
+
+		hmput(state->variables, node, allocated_variable_llvm);
+	} else {
+		allocated_variable_llvm = LLVMAddGlobal(state->llvm_module, create_llvm_type(get_data(&state->context, node)->variable.type.value, state), "");
+
+		if (variable.value != NULL) {
+			assert(false);
+		}
+	}
 
 	return NULL;
 }
