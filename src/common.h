@@ -66,8 +66,7 @@ typedef struct {
 		IDENTIFIER_BINDING,
 		IDENTIFIER_VALUE,
 		IDENTIFIER_STATIC_VARIABLE,
-		IDENTIFIER_UNDERSCORE,
-		IDENTIFIER_SPECIAL_VALUE
+		IDENTIFIER_UNDERSCORE
 	} kind;
 	union {
 		Node *variable;
@@ -195,7 +194,6 @@ typedef struct {
 	bool want_pointer;
 	bool pointer_access;
 	Value value;
-	bool special;
 } Structure_Access_Data;
 
 typedef struct {

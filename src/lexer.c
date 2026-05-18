@@ -95,7 +95,6 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			if (streq_len(identifier, len, "cast", 4)) result = KEYWORD_CAST;
 			else if (streq_len(identifier, len, "case", 4)) result = KEYWORD_CASE;
 			else if (streq_len(identifier, len, "catch", 5)) result = KEYWORD_CATCH;
-			else if (streq_len(identifier, len, "const", 5)) result = KEYWORD_CONST;
 			break;
 		case 'd':
 			if (streq_len(identifier, len, "defer", 5)) result = KEYWORD_DEFER;
@@ -449,8 +448,6 @@ char *token_to_string(Token_Kind kind) {
 			return "case";
 		case KEYWORD_CATCH:
 			return "catch";
-		case KEYWORD_CONST:
-			return "const";
 		case KEYWORD_DEFER:
 			return "defer";
 		case KEYWORD_EXTERN:

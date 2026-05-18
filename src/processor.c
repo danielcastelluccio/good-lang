@@ -798,7 +798,7 @@ static bool references_identifier(Node *node, String_View identifier) {
 	return false;
 }
 
-static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, bool want_pointer, Node *assign_value, Node **define_node) {
+static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, Node **define_node) {
 	*define_node = NULL;
 	*define_scopes = NULL;
 	if (module_value.value != NULL) {
@@ -1066,50 +1066,8 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 
 	if (*define_node != NULL) {
 		Typed_Value typed_value = process_node_with_scopes(context, *define_node, *define_scopes)->define.typed_value;
-
 		type = typed_value.type;
 		value = typed_value.value;
-
-		if ((*define_node)->define.special) {
-			switch (type.value->tag) {
-				case GLOBAL_TYPE_VALUE: {
-					type = type.value->global_type.type;
-
-					if (want_pointer) {
-						Value_Data *pointer_type = value_new(POINTER_TYPE_VALUE);
-						pointer_type->pointer_type.inner = type;
-						type = (Value) { .value = pointer_type };
-					}
-
-					if (assign_value != NULL) {
-						Temporary_Context temporary_context = { .wanted_type = type };
-						Value value_type = process_node_context(context, temporary_context, assign_value)->type;
-						if (!type_assignable(type.value, value_type.value)) {
-							handle_expected_type_error(context, node, type, value_type);
-						}
-					}
-					break;
-				}
-				case CONST_TYPE_VALUE: {
-					Value const_type = type;
-
-					type = context->temporary_context.wanted_type;
-
-					if (type.value == NULL) {
-						switch (const_type.value->const_type.type) {
-							case NUMBER:
-								type = create_integer_type(true, context->codegen.default_integer_size);
-								break;
-							default:
-								assert(false);
-						}
-					}
-					break;
-				}
-				default:
-					assert(false);
-			}
-		}
 	}
 
 	return (Typed_Value) { .type = type, .value = value };
@@ -1705,7 +1663,7 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 		Lookup_Result lookup_result = lookup(context, cstr_to_sv("op_add"));
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
-		Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, cstr_to_sv("op_plus"), &define_scopes, false, NULL, &define_node);
+		Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, cstr_to_sv("op_plus"), &define_scopes, &define_node);
 
 		context->temporary_context = saved_temporary_context;
 
@@ -1964,19 +1922,6 @@ static Node_Data *process_catch(Context *context, Node *node) {
 	data->catch.type = result_type;
 
 	data->type = result_type.value->result_type.value;
-	return data;
-}
-
-static Node_Data *process_const(Context *context, Node *node) {
-	Const_Node const_ = node->const_;
-
-	process_node(context, const_.value);
-
-	Value const_type = create_value(CONST_TYPE_VALUE);
-	const_type.value->const_type.type = NUMBER;
-
-	Node_Data *data = context->temporary_context.data;
-	data->type = create_value(CONST_TYPE_VALUE);
 	return data;
 }
 
@@ -2387,7 +2332,7 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 
 	Node *define_node = NULL;
 	Scope *define_scopes = NULL;
-	Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, identifier.value, &define_scopes, data->identifier.want_pointer, identifier.assign_value, &define_node);
+	Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, identifier.value, &define_scopes, &define_node);
 	if (typed_value.type.value != NULL) {
 		type = typed_value.type;
 		value = typed_value.value;
@@ -2501,13 +2446,7 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 
 	if (value.value != NULL) {
 		value.node = node;
-
-		if (define_node != NULL && define_node->define.special) {
-			data->identifier.kind = IDENTIFIER_SPECIAL_VALUE;
-		} else {
-			data->identifier.kind = IDENTIFIER_VALUE;
-		}
-
+		data->identifier.kind = IDENTIFIER_VALUE;
 		data->identifier.value = value;
 	}
 
@@ -3737,12 +3676,10 @@ static Node_Data *process_structure_access(Context *context, Node *node) {
 
 		Node *define_node = NULL;
 		Scope *define_scopes = NULL;
-		Typed_Value typed_value = lookup_resolve_define(context, module_value, node, (Lookup_Result) { .tag = LOOKUP_RESULT_FAIL }, structure_access.name, &define_scopes, data->structure_access.want_pointer, structure_access.assign_value, &define_node);
+		Typed_Value typed_value = lookup_resolve_define(context, module_value, node, (Lookup_Result) { .tag = LOOKUP_RESULT_FAIL }, structure_access.name, &define_scopes, &define_node);
 
 		if (typed_value.value.value != NULL) {
 			typed_value.value.node = node;
-
-			data->structure_access.special = define_node != NULL && define_node->define.special;
 
 			data->structure_access.value = typed_value.value;
 		}
@@ -4208,9 +4145,6 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			break;
 		case CATCH_NODE:
 			value = process_catch(context, node);
-			break;
-		case CONST_NODE:
-			value = process_const(context, node);
 			break;
 		case DEFINE_NODE:
 			value = process_define(context, node);

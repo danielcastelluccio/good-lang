@@ -462,8 +462,6 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 			define->define.public = true;
 			define->define.type = type;
 			define->define.expression = parse_expression(lexer);
-			// define->define.special = define->define.expression->kind == GLOBAL_NODE || define->define.expression->kind == CONST_NODE;
-			define->define.special = false;
 			return define;
 		}
 
@@ -1105,16 +1103,6 @@ static Node *parse_global(Lexer *lexer) {
 	return global;
 }
 
-static Node *parse_const(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *const_ = ast_new(CONST_NODE, first_token.location);
-
-	const_->const_.value = parse_expression(lexer);
-
-	return const_;
-}
-
 static Node *parse_switch(Lexer *lexer, bool static_) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
@@ -1411,10 +1399,6 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_CAST: {
 			result = parse_cast(lexer);
-			break;
-		}
-		case KEYWORD_CONST: {
-			result = parse_const(lexer);
 			break;
 		}
 		case KEYWORD_DEFER: {
