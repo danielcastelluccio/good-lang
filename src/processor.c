@@ -728,30 +728,6 @@ static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments,
 	}
 }
 
-static Custom_Operator_Function find_custom_operator(Context *context, Value type, String_View operator_id) {
-	if (type.value->tag == STRUCT_TYPE_VALUE) {
-		Node **operators = type.value->struct_type.node->struct_type.operators;
-		for (long int i = 0; i < arrlen(operators); i++) {
-			Node *operator = operators[i];
-			if (sv_eq(operator->operator.identifier, operator_id)) {
-				Scope *scopes = NULL;
-				for (long i = 0; i < arrlen(type.value->struct_type.scopes); i++) {
-					arrpush(scopes, type.value->struct_type.scopes[i]);
-				}
-
-				Operator_Data data = process_node_with_scopes(context, operator, scopes)->operator;
-	
-				return (Custom_Operator_Function) {
-					.function = data.typed_value.value.value,
-					.function_type = data.typed_value.type,
-				};
-			}
-		}
-	}
-
-	return (Custom_Operator_Function) {};
-}
-
 Typed_Value preprocess_node(Context *context, Node *node) {
 	Node_Data **data = get_data_ref(context, node);
 	if (*data != NULL) {
@@ -821,6 +797,8 @@ static bool references_identifier(Node *node, String_View identifier) {
 	switch (node->kind) {
 		case IDENTIFIER_NODE:
 			return sv_eq(node->identifier.value, identifier);
+		case POINTER_NODE:
+			return references_identifier(node->pointer_type.inner, identifier);
 		case INTERNAL_NODE:
 			break;
 		default:
@@ -972,7 +950,10 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 							call_argument_index++;
 						}
 
+						size_t saved_static_id = context->static_id;
+						context->static_id = 0;
 						reset_node(context, function_type_node->function_type.arguments[argument_index].type);
+						context->static_id = saved_static_id;
 
 						Node_Data *given_data = process_node(context, call_arguments_rearranged[call_argument_index]);
 						Value given_type = given_data->type;
@@ -997,7 +978,12 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 						}
 
 						process_node_with_scopes(context, function_type_node->function_type.arguments[argument_index].type, define_scopes_temp);
+
+						saved_static_id = context->static_id;
+						context->static_id = 0;
 						Value wanted_type = evaluate(context, function_type_node->function_type.arguments[argument_index].type);
+						context->static_id = saved_static_id;
+
 						bool wanted_static = function_type_node->function_type.arguments[argument_index].static_;
 
 						switch (call_arguments_rearranged[call_argument_index]->kind) {
@@ -1592,48 +1578,33 @@ static Node_Data *process_array_access(Context *context, Node *node) {
 		array_type = array_type.value->pointer_type.inner;
 	}
 
-	Custom_Operator_Function custom_operator_function = find_custom_operator(context, array_type, cstr_to_sv("[]"));
-
-	if (custom_operator_function.function == NULL
-			&& array_type.value->tag != ARRAY_TYPE_VALUE
+	if (array_type.value->tag != ARRAY_TYPE_VALUE
 			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE
 			&& array_type.value->tag != STRING_TYPE_VALUE) {
 		handle_type_error(node, "Cannot perform array access operation on %s", array_type);
 	}
 
 	Value item_type = {};
-	if (custom_operator_function.function == NULL) {
-		switch (array_type.value->tag) {
-			case ARRAY_TYPE_VALUE: {
-				item_type = array_type.value->array_type.inner;
-				break;
-			}
-			case ARRAY_VIEW_TYPE_VALUE: {
-				item_type = array_type.value->array_view_type.inner;
-				break;
-			}
-			case STRING_TYPE_VALUE: {
-				item_type = create_integer_type(false, 8);
-				break;
-			}
-			default:
-				assert(false);
+	switch (array_type.value->tag) {
+		case ARRAY_TYPE_VALUE: {
+			item_type = array_type.value->array_type.inner;
+			break;
 		}
-	} else {
-		Node **arguments = NULL;
-		arrpush(arguments, array_access.parent);
-		arrpush(arguments, array_access.index);
-
-		assert(false);
-		// custom_operator_function.function = process_call_generic(context, node, (Value) { .value = custom_operator_function.function }, &custom_operator_function.function_type, arguments).function.value;
-
-		item_type = custom_operator_function.function_type.value->function_type.return_type.value->pointer_type.inner;
+		case ARRAY_VIEW_TYPE_VALUE: {
+			item_type = array_type.value->array_view_type.inner;
+			break;
+		}
+		case STRING_TYPE_VALUE: {
+			item_type = create_integer_type(false, 8);
+			break;
+		}
+		default:
+			assert(false);
 	}
 
 	Node_Data *data = context->temporary_context.data;
 	data->array_access.array_type = array_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
-	data->array_access.custom_operator_function = custom_operator_function;
 	data->array_access.item_type = item_type;
 	data->array_access.pointer_access = raw_array_type.value->tag == POINTER_TYPE_VALUE;
 
@@ -1949,47 +1920,6 @@ static Node_Data *process_call(Context *context, Node *node) {
 	data->call.function_value = function_value;
 	data->call.arguments = call_generic_result.arguments;
 	data->type = function_type.value->function_type.return_type;
-	return data;
-}
-
-static Node_Data *process_call_method(Context *context, Node *node) {
-	Call_Method_Node call_method = node->call_method;
-
-	Call_Argument *arguments = NULL;
-	Call_Argument argument = {
-		.identifier = {},
-		.node = call_method.argument1
-	};
-	arrpush(arguments, argument);
-	for (long int i = 0; i < arrlen(call_method.arguments); i++) {
-		Call_Argument argument = {
-			.identifier = {},
-			.node = call_method.arguments[i]
-		};
-		arrpush(arguments, argument);
-	}
-
-	Value argument1_type = process_node(context, call_method.argument1)->type;
-	if (argument1_type.value->tag != POINTER_TYPE_VALUE) {
-		reset_node(context, call_method.argument1);
-
-		Temporary_Context temporary_context = { .want_pointer = true };
-		argument1_type = process_node_context(context, temporary_context, call_method.argument1)->type;
-	}
-
-	Custom_Operator_Function custom_operator_function = find_custom_operator(context, argument1_type.value->pointer_type.inner, call_method.method);
-	if (custom_operator_function.function == NULL) {
-		char type_string[128] = {};
-		print_type_outer(argument1_type.value->pointer_type.inner, type_string);
-		handle_semantic_error(context, node->location, "Method '%.*s' not found for %s", (int) call_method.method.len, call_method.method.ptr, type_string);
-	}
-
-	custom_operator_function.function = process_call_generic(context, node, (Value) { .value = custom_operator_function.function }, &custom_operator_function.function_type, arguments).function.value;
-
-	Node_Data *data = context->temporary_context.data;
-	data->call_method.arguments = arguments;
-	data->call_method.custom_operator_function = custom_operator_function;
-	data->type = custom_operator_function.function_type.value->function_type.return_type;
 	return data;
 }
 
@@ -4292,9 +4222,6 @@ Node_Data *process_node_context(Context *context, Temporary_Context temporary_co
 			break;
 		case CALL_NODE:
 			value = process_call(context, node);
-			break;
-		case CALL_METHOD_NODE:
-			value = process_call_method(context, node);
 			break;
 		case CHARACTER_NODE:
 			value = process_character(context, node);

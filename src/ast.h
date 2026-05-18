@@ -94,12 +94,6 @@ typedef struct {
 } Call_Node;
 
 typedef struct {
-	Node *argument1;
-	String_View method;
-	Node **arguments; // stb_ds
-} Call_Method_Node;
-
-typedef struct {
 	String_View value;
 } Character_Node;
 
@@ -313,7 +307,6 @@ typedef struct {
 
 typedef struct {
 	Structure_Member *members; // stb_ds
-	Node **operators; // stb_ds
 	// bool inherit_function;
 } Struct_Type_Node;
 
@@ -378,7 +371,6 @@ typedef enum {
 	BREAK_NODE,
 	CAST_NODE,
 	CALL_NODE,
-	CALL_METHOD_NODE,
 	CHARACTER_NODE,
 	CATCH_NODE,
 	CONST_NODE,
@@ -437,7 +429,6 @@ struct Node {
 		Break_Node break_;
 		Cast_Node cast;
 		Call_Node call;
-		Call_Method_Node call_method;
 		Character_Node character;
 		Catch_Node catch;
 		Const_Node const_;

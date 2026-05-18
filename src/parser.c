@@ -811,34 +811,6 @@ static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 	}
 }
 
-static Node *parse_call_method(Lexer *lexer, Node *argument1) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *call_method = ast_new(CALL_METHOD_NODE, first_token.location);
-	call_method->call_method.argument1 = argument1;
-	call_method->call_method.method = lexer_consume_check(lexer, IDENTIFIER).string;
-
-	call_method->call_method.arguments = NULL;
-	lexer_consume_check(lexer, PARENTHESIS_OPEN);
-	if (lexer_peek(lexer).kind != PARENTHESIS_CLOSED) {
-		while (true) {
-			arrpush(call_method->call_method.arguments, parse_expression(lexer));
-
-			Token_Data token = lexer_peek(lexer);
-			if (token.kind == COMMA) {
-				lexer_consume(lexer);
-			} else if (token.kind == PARENTHESIS_CLOSED) {
-				break;
-			} else {
-				handle_token_error_no_expected(lexer, token);
-			}
-		}
-	}
-	lexer_consume_check(lexer, PARENTHESIS_CLOSED);
-
-	return call_method;
-}
-
 static Node *parse_assign(Lexer *lexer, Node *target, bool static_) {
 	lexer_consume(lexer);
 
@@ -848,88 +820,33 @@ static Node *parse_assign(Lexer *lexer, Node *target, bool static_) {
 	return target;
 }
 
-static Node *parse_operator(Lexer *lexer) {
-	Token_Data first_token = lexer_consume_check(lexer, KEYWORD_OP);
-
-	Token_Data identifier = lexer_consume(lexer);
-	String_View operator_id = {};
-	switch (identifier.kind) {
-		case IDENTIFIER:
-			operator_id = identifier.string;
-			break;
-		case BRACE_OPEN:
-			lexer_consume_check(lexer, BRACE_CLOSED);
-			operator_id = cstr_to_sv("[]");
-			break;
-		default:
-			assert(false);
-	}
-
-	lexer_consume_check(lexer, EQUALS);
-
-	Node *expression = parse_expression(lexer);
-
-	Node *operator = ast_new(OPERATOR_NODE, first_token.location);
-	operator->operator.identifier = operator_id;
-	operator->operator.expression = expression;
-	return operator;
-}
-
 static Node *parse_struct_type(Lexer *lexer) {
 	Token_Data first_token = lexer_consume(lexer);
 
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
-
-	// if (lexer_peek(lexer).kind == AT) {
-	// 	lexer_consume(lexer);
-	// 	struct_->struct_type.inherit_function = true;
-	// } else {
-	// 	struct_->struct_type.inherit_function = false;
-	// }
 	
+	// struct_->struct_type.inherit_function = false;
 	Function_Argument *arguments = NULL;
 	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
 		arguments = parse_arguments(lexer).arguments;
+		// struct_->struct_type.inherit_function = true;
 		(void) arguments;
 	}
 
 	struct_->struct_type.members = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
-	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED && !lexer_peek_check(lexer, KEYWORD_OP)) {
-		while (true) {
-			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-			lexer_consume_check(lexer, COLON);
-			Node *type = parse_expression(lexer);
+	while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
+		Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+		lexer_consume_check(lexer, COLON);
+		Node *type = parse_expression(lexer);
 
-			Structure_Member member = {
-				.name = identifier.string,
-				.type = type
-			};
-			arrpush(struct_->struct_type.members, member);
+		Structure_Member member = {
+			.name = identifier.string,
+			.type = type
+		};
+		arrpush(struct_->struct_type.members, member);
 
-			Token_Data token = lexer_peek(lexer);
-			if (token.kind == COMMA) {
-				lexer_consume(lexer);
-			} else if (token.kind == SEMICOLON) {
-				lexer_consume(lexer);
-				break;
-			} else if (token.kind == CURLY_BRACE_CLOSED) {
-				break;
-			} else {
-				handle_token_error_no_expected(lexer, token);
-			}
-		}
-	}
-
-	struct_->struct_type.operators = NULL;
-	if (lexer_peek_check(lexer, KEYWORD_OP)) {
-		while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-			arrpush(struct_->struct_type.operators, parse_operator(lexer));
-
-			if (lexer_peek(lexer).kind == SEMICOLON) {
-				lexer_consume(lexer);
-			}
-	 	}
+		lexer_consume_check(lexer, SEMICOLON);
 	}
 
 	lexer_consume_check(lexer, CURLY_BRACE_CLOSED);
@@ -991,27 +908,18 @@ static Node *parse_tagged_union_type(Lexer *lexer) {
 
 	tagged_union->tagged_union_type.members = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
-	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-		while (true) {
-			String_View name = lexer_consume_check(lexer, IDENTIFIER).string;
-			lexer_consume_check(lexer, COLON);
-			Node *type = parse_expression(lexer);
+	while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
+		String_View name = lexer_consume_check(lexer, IDENTIFIER).string;
+		lexer_consume_check(lexer, COLON);
+		Node *type = parse_expression(lexer);
 
-			Structure_Member member = {
-				.name = name,
-				.type = type
-			};
-			arrpush(tagged_union->tagged_union_type.members, member);
+		Structure_Member member = {
+			.name = name,
+			.type = type
+		};
+		arrpush(tagged_union->tagged_union_type.members, member);
 
-			Token_Data token = lexer_peek(lexer);
-			if (token.kind == COMMA) {
-				lexer_consume(lexer);
-			} else if (token.kind == CURLY_BRACE_CLOSED) {
-				break;
-			} else {
-				handle_token_error_no_expected(lexer, token);
-			}
-		}
+		lexer_consume_check(lexer, SEMICOLON);
 	}
 	lexer_consume_check(lexer, CURLY_BRACE_CLOSED);
 
@@ -1025,61 +933,16 @@ static Node *parse_enum_type(Lexer *lexer) {
 
 	enum_->enum_type.items = NULL;
 	lexer_consume_check(lexer, CURLY_BRACE_OPEN);
-	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
-		while (true) {
-			Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
+	while (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
+		Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
 
-			arrpush(enum_->enum_type.items, identifier.string);
+		arrpush(enum_->enum_type.items, identifier.string);
 
-			Token_Data token = lexer_peek(lexer);
-			if (token.kind == COMMA) {
-				lexer_consume(lexer);
-			} else if (token.kind == CURLY_BRACE_CLOSED) {
-				break;
-			} else {
-				handle_token_error_no_expected(lexer, token);
-			}
-		}
+		lexer_consume_check(lexer, SEMICOLON);
 	}
 	lexer_consume_check(lexer, CURLY_BRACE_CLOSED);
 
 	return enum_;
-}
-
-static Node *parse_define(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *define = ast_new(DEFINE_NODE, first_token.location);
-
-	if (lexer_peek_check(lexer, EXCLAMATION)) {
-		lexer_consume(lexer);
-		define->define.public = true;
-	} else {
-		define->define.public = false;
-	}
-
-	if (lexer_peek_check(lexer, ASTERISK)) {
-		lexer_consume(lexer);
-		define->define.special = true;
-	} else {
-		define->define.special = false;
-	}
-
-	Token_Data identifier = lexer_consume_check(lexer, IDENTIFIER);
-
-	if (lexer_peek(lexer).kind == COLON) {
-		lexer_consume_check(lexer, COLON);
-		define->define.type = parse_expression(lexer);
-	} else {
-		define->define.type = NULL;
-	}
-
-	lexer_consume_check(lexer, EQUALS);
-
-	define->define.identifier = identifier.string;
-	define->define.expression = parse_expression(lexer);
-
-	return define;
 }
 
 static Node *parse_return(Lexer *lexer) {
@@ -1089,37 +952,6 @@ static Node *parse_return(Lexer *lexer) {
 	return_->return_.value = parse_expression_or_nothing(lexer);
 
 	return return_;
-}
-
-static Node *parse_variable(Lexer *lexer) {
-	Token_Data first_token = lexer_consume(lexer);
-
-	Node *variable = ast_new(VARIABLE_NODE, first_token.location);
-
-	if (lexer_peek_check(lexer, DOLLAR)) {
-		lexer_consume(lexer);
-		variable->variable.static_ = true;
-	} else {
-		variable->variable.static_ = false;
-	}
-
-	variable->variable.name = lexer_consume_check(lexer, IDENTIFIER).string;
-
-	if (lexer_peek(lexer).kind == COLON) {
-		lexer_consume_check(lexer, COLON);
-		variable->variable.type = parse_expression(lexer);
-	} else {
-		variable->variable.type = NULL;
-	}
-
-	if (lexer_peek(lexer).kind == EQUALS) {
-		lexer_consume_check(lexer, EQUALS);
-		variable->variable.value = parse_expression(lexer);
-	} else {
-		variable->variable.value = NULL;
-	}
-
-	return variable;
 }
 
 static Node *parse_break(Lexer *lexer) {
@@ -1283,16 +1115,11 @@ static Node *parse_const(Lexer *lexer) {
 	return const_;
 }
 
-static Node *parse_switch(Lexer *lexer) {
+static Node *parse_switch(Lexer *lexer, bool static_) {
 	Token_Data first_token = lexer_consume(lexer);
 	Node *switch_ = ast_new(SWITCH_NODE, first_token.location);
 
-	if (lexer_peek_check(lexer, DOLLAR)) {
-		lexer_consume(lexer);
-		switch_->switch_.static_ = true;
-	} else {
-		switch_->switch_.static_ = false;
-	}
+	switch_->switch_.static_ = static_;
 
 	switch_->switch_.condition = parse_expression(lexer);
 
@@ -1559,6 +1386,9 @@ static Node *parse_expression(Lexer *lexer) {
 				case KEYWORD_IF:
 					result = parse_if(lexer, true);
 					break;
+				case KEYWORD_SWITCH:
+					result = parse_switch(lexer, true);
+					break;
 				case KEYWORD_WHILE:
 					result = parse_while(lexer, true);
 					break;
@@ -1585,10 +1415,6 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_CONST: {
 			result = parse_const(lexer);
-			break;
-		}
-		case KEYWORD_DEF: {
-			result = parse_define(lexer);
 			break;
 		}
 		case KEYWORD_DEFER: {
@@ -1644,7 +1470,7 @@ static Node *parse_expression(Lexer *lexer) {
 			break;
 		}
 		case KEYWORD_SWITCH: {
-			result = parse_switch(lexer);
+			result = parse_switch(lexer, false);
 			break;
 		}
 		case KEYWORD_TAGGED_UNION: {
@@ -1653,10 +1479,6 @@ static Node *parse_expression(Lexer *lexer) {
 		}
 		case KEYWORD_UNION: {
 			result = parse_union_type(lexer);
-			break;
-		}
-		case KEYWORD_VAR: {
-			result = parse_variable(lexer);
 			break;
 		}
 		case KEYWORD_WHILE: {
@@ -1722,9 +1544,6 @@ static Node *parse_expression(Lexer *lexer) {
 				break;
 			case BRACE_OPEN:
 				result = parse_array_access_or_slice(lexer, result);
-				break;
-			case DOLLAR_DOLLAR:
-				result = parse_call_method(lexer, result);
 				break;
 			case EXCLAMATION:
 				result = parse_result(lexer, result);

@@ -1,82 +1,82 @@
 Struct_Item :: struct {
-	name: []u8,
-	type: type
+	name: []u8;
+	type: type;
 }
 
 Union_Item :: struct {
-	name: []u8,
-	type: type
+	name: []u8;
+	type: type;
 }
 
 Tagged_Union_Item :: struct {
-	name: []u8,
-	type: type
+	name: []u8;
+	type: type;
 }
 
 Type_Info :: tagged_union {
 	Integer: struct {
-		size: uint8,
-		signed: bool
-	},
+		size: uint8;
+		signed: bool;
+	};
 	Struct: struct {
-		members: []Struct_Item
-	},
+		members: []Struct_Item;
+	};
 	Union: struct {
-		members: []Union_Item
-	},
+		members: []Union_Item;
+	};
 	Tagged_Union: struct {
-		members: []Tagged_Union_Item
-	},
+		members: []Tagged_Union_Item;
+	};
 	Enum: struct {
-		values: [][]u8
-	},
+		values: [][]u8;
+	};
 	Optional: struct {
-		type: type
-	},
+		type: type;
+	};
 	Array: struct {
-		size: uint,
-		type: type
-	},
+		size: uint;
+		type: type;
+	};
 	Array_View: struct {
-		type: type
-	},
+		type: type;
+	};
 	Tuple: struct {
-		members: []type
-	},
+		members: []type;
+	};
 	Byte: struct {
-	},
+	};
 	Pointer: struct {
-	},
+	};
 	Boolean: struct {
-	},
+	};
 	String: struct {
-	}
+	};
 }
 
 Operating_System :: enum {
-	LINUX,
-	MACOS,
-	WINDOWS
+	LINUX;
+	MACOS;
+	WINDOWS;
 }
 
 Allocate_Error :: enum {
-	OUT_OF_MEMORY
+	OUT_OF_MEMORY;
 }
 
 Allocate_Mode :: enum {
-	ALLOC,
-	REALLOC,
-	FREE
+	ALLOC;
+	REALLOC;
+	FREE;
 }
 
 Allocate_Fn :: fn (mode: Allocate_Mode, ptr: *, size: uint) -> *!Allocate_Error;
 
 Allocator :: struct {
-	allocate_fn: Allocate_Fn,
-	data: *
+	allocate_fn: Allocate_Fn;
+	data: *;
 }
 
 Context :: struct {
-	allocator: Allocator,
-	value: int
+	allocator: Allocator;
+	value: int;
 }

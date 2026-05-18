@@ -9,3 +9,15 @@ realloc :: fn (ptr: *, size: uint, allocator: Allocator) -> *!Allocate_Error {
 free :: fn (ptr: *, allocator: Allocator) {
 	allocator.allocate_fn(FREE, ptr, 0)
 }
+
+print_stdout_fn :: fn (_: *, char: byte) {
+	_ = c.putchar(cast(int) char);
+}
+
+print :: fn ($fmt: string, args: $T) {
+	stdout_printer: print_.Printer = .{ print_stdout_fn };
+	print_.print(&stdout_printer, fmt, args);
+}
+
+c :: import "c";
+print_ :: import "print";

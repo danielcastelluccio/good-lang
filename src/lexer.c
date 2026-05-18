@@ -98,8 +98,7 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			else if (streq_len(identifier, len, "const", 5)) result = KEYWORD_CONST;
 			break;
 		case 'd':
-			if (streq_len(identifier, len, "def", 3)) result = KEYWORD_DEF;
-			else if (streq_len(identifier, len, "defer", 5)) result = KEYWORD_DEFER;
+			if (streq_len(identifier, len, "defer", 5)) result = KEYWORD_DEFER;
 			break;
 		case 'e':
 			if (streq_len(identifier, len, "extern", 6)) result = KEYWORD_EXTERN;
@@ -144,9 +143,6 @@ static Token_Kind get_range_token_kind(char *source, size_t start, size_t end) {
 			break;
 		case 'u':
 			if (streq_len(identifier, len, "union", 5)) result = KEYWORD_UNION;
-			break;
-		case 'v':
-			if (streq_len(identifier, len, "var", 3)) result = KEYWORD_VAR;
 			break;
 		case 'w':
 			if (streq_len(identifier, len, "while", 5)) result = KEYWORD_WHILE;
@@ -290,11 +286,6 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(PERCENT, lexer);
 			break;
 		case '$':
-			if (lexer->source[lexer->position] == '$') {
-				increment_position(lexer);
-				result = create_token(DOLLAR_DOLLAR, lexer);
-				break;
-			}
 			result = create_token(DOLLAR, lexer);
 			break;
 		case '.': {
@@ -460,8 +451,6 @@ char *token_to_string(Token_Kind kind) {
 			return "catch";
 		case KEYWORD_CONST:
 			return "const";
-		case KEYWORD_DEF:
-			return "def";
 		case KEYWORD_DEFER:
 			return "defer";
 		case KEYWORD_EXTERN:
@@ -504,8 +493,6 @@ char *token_to_string(Token_Kind kind) {
 			return "or";
 		case KEYWORD_UNION:
 			return "union";
-		case KEYWORD_VAR:
-			return "var";
 		case KEYWORD_WHILE:
 			return "while";
 		case COLON:
@@ -538,8 +525,6 @@ char *token_to_string(Token_Kind kind) {
 			return "@";
 		case DOLLAR:
 			return "$";
-		case DOLLAR_DOLLAR:
-			return "$$";
 		case HASH:
 			return "#";
 		case VERTICAL_BAR:
