@@ -1181,7 +1181,8 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 
 	String_View *inferred_arguments = NULL;
 
-	Node *function_node = (*function_value).value->function_stub.node->function_stub.node;
+	Node *function_stub_node = (*function_value).value->function_stub.node;
+	Node *function_node = function_stub_node->function_stub.node;
 	Node *function_type_node = function_node->function.function_type;
 
 	bool pattern_match_fail = false;
@@ -1342,15 +1343,6 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 	}
 
 	Value *static_argument_values = NULL;
-	for (long i = 0; i < arrlen(context->scopes); i++) {
-		for (long j = 0; j < arrlen(context->scopes[i].identifiers); j++) {
-			Scope_Key_Identifier identifier = context->scopes[i].identifiers[j];
-			if (identifier.value.tag == SCOPE_STATIC_BINDING) {
-				arrpush(static_argument_values, identifier.value.static_binding.value);
-			}
-		}
-	}
-
 	for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
 		Function_Argument argument = function_type_node->function_type.arguments[i];
 		if (argument.static_) {
@@ -1358,15 +1350,9 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 		}
 	}
 
-	arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
-	Node_Data *function_data = get_data(context, function_node);
-	if (function_data == NULL) {
-		function_data = data_create(context, function_node);
-	}
-	(void) arrpop(context->scopes);
+	Node_Data *function_data = get_data(context, function_stub_node);
 
 	bool found_match = false;
-
 	Static_Argument_Variation *function_values = function_data->function.function_values;
 	for (long int i = 0; i < arrlen(function_values); i++) {
 		bool match = arrlen(function_values[i].static_arguments) == arrlen(static_argument_values);
