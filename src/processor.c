@@ -152,7 +152,9 @@ static Lookup_Result lookup(Context *context, String_View identifier) {
 		if (scope->node->kind == ROOT_NODE) {
 			size_t saved_static_id = context->static_id;
 			context->static_id = 1;
+			arrpush(context->scopes, ((Scope) { .node = scope->node, .has_static_id = true, .static_id = 1 }));
 			Value_Data *module = get_data(context, scope->node)->root.module;
+			(void) arrpop(context->scopes);
 			context->static_id = saved_static_id;
 
 			for (long int i = 0; i < arrlen(module->module.bodies); i++) {
@@ -767,7 +769,7 @@ Value process_module_root(Context *context, Node *root) {
 		(*data)->root.module = result;
 	}
 
-	arrpush(context->scopes, (Scope) { .node = root } );
+	arrpush(context->scopes, ((Scope) { .node = root, .has_static_id = true, .static_id = 1 }) );
 
 	for (long int i = 0; i < arrlen(result->module.bodies); i++) {
 		process_node(context, result->module.bodies[i]);
@@ -951,15 +953,21 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 
 		size_t saved_static_id = context->static_id;
 		context->static_id = 0;
+
+		arrpush(define_scopes_temp, ((Scope) { .node = function_node, .has_static_id = true, .static_id = 0 }));
+
+		Scope *saved_scopes = context->scopes;
+		context->scopes = define_scopes_temp;
+
 		reset_node(context, function_arguments[argument_index].type);
-		context->static_id = saved_static_id;
 
-		process_node_with_scopes(context, function_arguments[argument_index].type, define_scopes_temp);
+		process_node(context, function_arguments[argument_index].type);
 
-		saved_static_id = context->static_id;
-		context->static_id = 0;
 		Value wanted_type = evaluate(context, function_arguments[argument_index].type);
+
+		context->scopes = saved_scopes;
 		context->static_id = saved_static_id;
+		(void) arrpop(define_scopes_temp);
 
 		bool wanted_static = function_arguments[argument_index].static_;
 
@@ -1268,9 +1276,11 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 			bool compile_only_saved = context->compile_only;
 			size_t saved_static_id = context->static_id;
 			context->static_id = 0;
+			arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
 			reset_node(context, function_arguments[function_arg_index].type);
 			process_node(context, function_arguments[function_arg_index].type);
 			wanted_type = evaluate(context, function_arguments[function_arg_index].type);
+			(void) arrpop(context->scopes);
 			context->static_id = saved_static_id;
 			context->compile_only = compile_only_saved;
 		}
@@ -1353,11 +1363,13 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 
 	size_t saved_saved_static_id = context->static_id;
 	context->static_id = 0;
+	arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
 	Node_Data *function_data = get_data(context, (*function_value).value->function_stub.node);
 	if (function_data == NULL) {
 		function_data = data_create(context, (*function_value).value->function_stub.node);
 	}
 	context->static_id = saved_saved_static_id;
+	(void) arrpop(context->scopes);
 
 	bool found_match = false;
 
@@ -1387,8 +1399,6 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 
 		context->static_id = new_static_id;
 
-		reset_node(context, (*function_value).value->function_stub.node);
-
 		Scope *saved_scopes = context->scopes;
 		context->scopes = NULL;
 		for (long int i = 0; i < arrlen((*function_value).value->function_stub.scopes); i++) {
@@ -1396,6 +1406,8 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 		}
 
 		arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = new_static_id }));
+
+		reset_node(context, (*function_value).value->function_stub.node);
 
 		for (long int i = 0; i < arrlen(static_arguments); i++) {
 			Scope_Key_Identifier scope_identifier = {
@@ -1965,12 +1977,16 @@ static Node_Data *process_define(Context *context, Node *node) {
 
 	Node_Data *data = context->temporary_context.data;
 
+	// arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
+
 	Typed_Value initial = preprocess_node(context, define.expression);
 	data->define.typed_value = initial;
 
 	Temporary_Context temporary_context = { .wanted_type = wanted_type };
 	Value type = process_node_context(context, temporary_context, define.expression)->type;
 	Value value = evaluate(context, define.expression);
+
+	// (void) arrpop(context->scopes);
 
 	data->define.typed_value = (Typed_Value) {
 		.value = value,
@@ -2092,10 +2108,13 @@ static Node_Data *process_for(Context *context, Node *node) {
 				length = 0;
 		}
 
+		arrlast(context->scopes).has_static_id = true;
+
 		size_t saved_static_id = context->static_id;
 		for (size_t i = 0; i < length; i++) {
-			context->static_id = node->for_.static_id_counter++;
+			context->static_id = ++node->for_.static_id_counter;
 			arrpush(data->for_.static_ids, context->static_id);
+			arrlast(context->scopes).static_id = node->for_.static_id_counter;
 
 			Typed_Value typed_value;
 			switch (looped_value_type.value->tag) {
@@ -2166,9 +2185,9 @@ static Node_Data *process_for(Context *context, Node *node) {
 		}
 
 		process_node(context, for_.body);
-
-		(void) arrpop(context->scopes);
 	}
+
+	(void) arrpop(context->scopes);
 
 	data->for_.types = item_types;
 	return data;
@@ -2192,7 +2211,6 @@ static Node_Data *process_function(Context *context, Node *node, bool given_stat
 	}
 
 	Node_Data *data = data_create(context, node);
-
 	if (static_argument && !given_static_arguments) {
 		data->type = create_value(FUNCTION_TYPE_STUB_VALUE);
 		context->compile_only = compile_only_parent;
@@ -2477,6 +2495,16 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 		value.node = node;
 		data->identifier.kind = IDENTIFIER_VALUE;
 		data->identifier.value = value;
+	}
+
+	if (node->location.row == 78 && node->location.column == 7) {
+		printf("====\n");
+		for (int i = 0; i < arrlen(context->scopes); i++) {
+			if (context->scopes[i].has_static_id) {
+				printf("%zu\n", context->scopes[i].static_id);
+			}
+		}
+		printf("%p\n", value.value);
 	}
 
 	data->identifier.type = type;
@@ -3132,7 +3160,9 @@ static Node_Data *process_internal(Context *context, Node *node) {
 
 			size_t saved_static_id = context->static_id;
 			context->static_id = 1;
+			arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 1 }));
 			Value type_info_type = get_data(context, find_define(context->internal_root, cstr_to_sv("Type_Info")))->define.typed_value.value;
+			(void) arrpop(context->scopes);
 			context->static_id = saved_static_id;
 			data->type = type_info_type;
 			return data;
@@ -3140,7 +3170,9 @@ static Node_Data *process_internal(Context *context, Node *node) {
 		case INTERNAL_OS: {
 			size_t saved_static_id = context->static_id;
 			context->static_id = 1;
+			arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 1 }));
 			Value operating_system_type = get_data(context, find_define(context->internal_root, cstr_to_sv("Operating_System")))->define.typed_value.value;
+			(void) arrpop(context->scopes);
 			context->static_id = saved_static_id;
 
 			#if defined(__linux__)
@@ -4079,14 +4111,17 @@ static Node_Data *process_while(Context *context, Node *node) {
 		assert(while_.else_body == NULL);
 
 		size_t saved_static_id = context->static_id;
-		context->static_id = node->while_.static_id_counter++;
+		context->static_id = ++node->while_.static_id_counter;
+		arrlast(context->scopes).has_static_id = true;
+		arrlast(context->scopes).static_id = node->while_.static_id_counter;
 		process_node(context, while_.condition);
 		while (evaluate(context, while_.condition).value->boolean.value) {
 			arrpush(data->while_.static_ids, context->static_id);
 
 			process_node(context, while_.body);
 
-			context->static_id = node->while_.static_id_counter++;
+			context->static_id = ++node->while_.static_id_counter;
+			arrlast(context->scopes).static_id = node->while_.static_id_counter;
 
 			process_node(context, while_.condition);
 		}
@@ -4128,6 +4163,9 @@ static Node_Data *process_while(Context *context, Node *node) {
 }
 
 Node_Data *process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
+	Node_Data **data1 = get_data_ref(context, node);
+	(void) data1;
+
 	preprocess_node(context, node);
 
 	Node_Data **data = get_data_ref(context, node);

@@ -239,7 +239,10 @@ static void generate_define(Node *node, State *state) {
 	assert(node->kind == DEFINE_NODE);
 	Define_Node define = node->define;
 	if (sv_eq_cstr(define.identifier, "main")) {
+		size_t saved_static_id = state->context.static_id;
+		state->context.static_id = 1;
 		Node_Data *data = get_data(&state->context, node);
+		state->context.static_id = saved_static_id;
 		if (data == NULL) {
 			return;
 		}

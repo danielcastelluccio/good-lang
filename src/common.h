@@ -397,6 +397,7 @@ struct Context {
 	Scope internal_scope;
 	Value context_type;
 	Data *data;
+	bool codegen2;
 };
 
 Value get_type(Context *context, Node *node);
