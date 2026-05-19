@@ -1623,9 +1623,6 @@ static LLVMValueRef generate_root(Node *node, State *state) {
 	Root_Node root = node->root;
 
 	for (long int i = 0; i < arrlen(root.statements); i++) {
-		// if (root.statements[i]->kind == DEFINE_NODE) {
-		// 	printf("statement %.*s\n", root.statements[i]->define.identifier.len, root.statements[i]->define.identifier.ptr);
-		// }
 		generate_node(root.statements[i], state);
 	}
 

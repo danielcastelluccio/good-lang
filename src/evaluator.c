@@ -272,20 +272,6 @@ static Value evaluate_function(State *state, Node *node) {
 	Function_Node function = node->function;
 
 	Node_Data *function_type_data = get_data(state->context, function.function_type);
-	if (function_type_data == NULL) {
-		Value_Data *value = value_new(FUNCTION_STUB_VALUE);
-		value->function_stub.node = node;
-
-		Scope *scopes = NULL;
-		for (long int i = 0; i < arrlen(state->context->scopes); i++) {
-			arrpush(scopes, state->context->scopes[i]);
-		}
-
-		value->function_stub.scopes = scopes;
-
-		return create_value_data(value, node);
-	}
-
 	Value function_type_value = function_type_data->function_type.value;
 	assert(function_type_value.value->tag == FUNCTION_TYPE_VALUE);
 
@@ -297,10 +283,24 @@ static Value evaluate_function(State *state, Node *node) {
 		function_value->function.body = NULL;
 	}
 
-	function_value->function.static_id = state->context->static_id;
+	function_value->function.static_id = 1;
 	function_value->function.node = node;
 
 	return create_value_data(function_value, node);
+}
+
+static Value evaluate_function_stub(State *state, Node *node) {
+	Value_Data *value = value_new(FUNCTION_STUB_VALUE);
+	value->function_stub.node = node;
+
+	Scope *scopes = NULL;
+	for (long int i = 0; i < arrlen(state->context->scopes); i++) {
+		arrpush(scopes, state->context->scopes[i]);
+	}
+
+	value->function_stub.scopes = scopes;
+
+	return create_value_data(value, node);
 }
 
 static Value evaluate_function_type(State *state, Node *node) {
@@ -584,7 +584,7 @@ static Value evaluate_call(State *state, Node *node) {
 
 	Value_Data *result = NULL;
 
-	size_t saved_static_argument_id = state->context->static_id;
+	size_t saved_static_id = state->context->static_id;
 	state->context->static_id = function.value->function.static_id;
 
 	Value *saved_function_arguments = function_arguments;
@@ -619,7 +619,7 @@ static Value evaluate_call(State *state, Node *node) {
 
 	function_arguments = saved_function_arguments;
 	function_node = saved_function_node;
-	state->context->static_id = saved_static_argument_id;
+	state->context->static_id = saved_static_id;
 
 	return clone_value(create_value_data(result, node));
 }
@@ -1115,6 +1115,7 @@ static Value evaluate_import(State *state, Node *node) {
 static Value evaluate_state(State *state, Node *node) {
 	switch (node->kind) {
 		case FUNCTION_NODE:          return evaluate_function(state, node);
+		case FUNCTION_STUB_NODE:     return evaluate_function_stub(state, node);
 		case FUNCTION_TYPE_NODE:     return evaluate_function_type(state, node);
 		case STRUCT_TYPE_NODE:       return evaluate_struct_type(state, node);
 		case UNION_TYPE_NODE:        return evaluate_union_type(state, node);

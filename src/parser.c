@@ -216,6 +216,7 @@ static Node *parse_identifier(Lexer *lexer, bool polymorphic) {
 			} else if (sv_eq_cstr(token.string, "context")) {
 				Node *internal = ast_new(INTERNAL_NODE, token.location);
 				internal->internal.kind = INTERNAL_CONTEXT;
+				internal->internal.assign_value = NULL;
 				return internal;
 			}
 			break;
@@ -1143,7 +1144,7 @@ static Node *parse_switch(Lexer *lexer, bool static_) {
 
 static bool needs_semicolon(Node *node) {
 	Node_Kind kind = node->kind;
-	return !(kind == IF_NODE || kind == WHILE_NODE || kind == FOR_NODE || (kind == DEFINE_NODE && (node->define.expression->kind == FUNCTION_NODE || node->define.expression->kind == STRUCT_TYPE_NODE || node->define.expression->kind == UNION_TYPE_NODE || node->define.expression->kind == TAGGED_UNION_TYPE_NODE || node->define.expression->kind == ENUM_TYPE_NODE)));
+	return !(kind == IF_NODE || kind == WHILE_NODE || kind == FOR_NODE || (kind == DEFINE_NODE && (node->define.expression->kind == FUNCTION_NODE || node->define.expression->kind == FUNCTION_STUB_NODE || node->define.expression->kind == STRUCT_TYPE_NODE || node->define.expression->kind == UNION_TYPE_NODE || node->define.expression->kind == TAGGED_UNION_TYPE_NODE || node->define.expression->kind == ENUM_TYPE_NODE)));
 }
 
 static Node *parse_block(Lexer *lexer) {
@@ -1306,6 +1307,14 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 	Function_Argument *arguments = result.arguments;
 	bool variadic = result.variadic;
 
+	bool has_static = false;
+	for (long i = 0; i < arrlen(arguments); i++) {
+		if (arguments[i].static_) {
+			has_static = true;
+			break;
+		}
+	}
+
 	Node *return_ = NULL;
 	if (lexer_peek(lexer).kind == MINUS_ARROW) {
 		lexer_consume(lexer);
@@ -1334,8 +1343,16 @@ static Node *parse_function_or_function_type(Lexer *lexer) {
 		function->function.body = body;
 		function->function.extern_ = extern_;
 		function->function.static_id_counter = 0;
+
+		if (has_static) {
+			Node *function_stub = ast_new(FUNCTION_STUB_NODE, first_token.location);
+			function_stub->function_stub.node = function;
+			function = function_stub;
+		}
+
 		return function;
 	} else {
+		assert(!has_static);
 		return function_type;
 	}
 }

@@ -53,8 +53,8 @@ uint64_t round_up_pow2_64(uint64_t v) {
     return 1ull << (64 - __builtin_clzll(v - 1));
 }
 
-void ensure_capacity(Context *context, Node *node) {
-	size_t new_count = round_up_pow2_64(context->static_id + 1);
+void ensure_capacity(Node *node, size_t static_id) {
+	size_t new_count = round_up_pow2_64(static_id + 1);
 	if (new_count > node->data_count) {
 		if (new_count > 1) {
 			Node_Data *data = node->data;
@@ -77,97 +77,83 @@ void ensure_capacity(Context *context, Node *node) {
 }
 
 void set_data(Context *context, Node *node, Node_Data *value) {
-	ensure_capacity(context, node);
+	size_t static_id = context->static_id;
 
-	size_t saved_static_id = context->static_id;
-
-	if (!context->codegen2) {
-	for (int i = 0; i < arrlen(context->scopes); i++) {
-		if (context->scopes[i].has_static_id) {
-			context->static_id = context->scopes[i].static_id;
+	if (arrlen(context->scopes) > 0) {
+		for (int i = 0; i < arrlen(context->scopes); i++) {
+			if (context->scopes[i].has_static_id) {
+				static_id = context->scopes[i].static_id;
+			}
 		}
 	}
-	}
 
-	// assert(context->static_id == saved_static_id);
+	ensure_capacity(node, static_id);
 
 	if (node->data_count == 1) {
 		node->data = value;
 	} else {
-		node->datas[context->static_id] = value;
+		node->datas[static_id] = value;
 	}
-
-	context->static_id = saved_static_id;
 }
 
 Node_Data *get_data(Context *context, Node *node) {
-	ensure_capacity(context, node);
+	size_t static_id = context->static_id;
 
-	size_t saved_static_id = context->static_id;
-
-	if (!context->codegen2) {
-	for (int i = 0; i < arrlen(context->scopes); i++) {
-		if (context->scopes[i].has_static_id) {
-			context->static_id = context->scopes[i].static_id;
+	if (arrlen(context->scopes) > 0) {
+		for (int i = 0; i < arrlen(context->scopes); i++) {
+			if (context->scopes[i].has_static_id) {
+				static_id = context->scopes[i].static_id;
+			}
 		}
 	}
-	}
 
-	// assert(context->static_id == saved_static_id);
+	ensure_capacity(node, static_id);
 
 	if (node->data_count == 1) {
 		return node->data;
 	} else {
-		return node->datas[context->static_id];
+		return node->datas[static_id];
 	}
-
-	context->static_id = saved_static_id;
 }
 
 Node_Data **get_data_ref(Context *context, Node *node) {
-	ensure_capacity(context, node);
+	size_t static_id = context->static_id;
 
-	size_t saved_static_id = context->static_id;
-
-	if (!context->codegen2) {
-	for (int i = 0; i < arrlen(context->scopes); i++) {
-		if (context->scopes[i].has_static_id) {
-			context->static_id = context->scopes[i].static_id;
+	if (arrlen(context->scopes) > 0) {
+		for (int i = 0; i < arrlen(context->scopes); i++) {
+			if (context->scopes[i].has_static_id) {
+				static_id = context->scopes[i].static_id;
+			}
 		}
 	}
-	}
-	// assert(context->static_id == saved_static_id);
+
+	ensure_capacity(node, static_id);
 
 	if (node->data_count == 1) {
 		return &node->data;
 	} else {
-		return &node->datas[context->static_id];
+		return &node->datas[static_id];
 	}
-
-	context->static_id = saved_static_id;
 }
 
 void reset_node(Context *context, Node *node) {
-	ensure_capacity(context, node);
+	size_t static_id = context->static_id;
 
-	size_t saved_static_id = context->static_id;
-
-	if (!context->codegen2) {
-	for (int i = 0; i < arrlen(context->scopes); i++) {
-		if (context->scopes[i].has_static_id) {
-			context->static_id = context->scopes[i].static_id;
+	if (arrlen(context->scopes) > 0) {
+		for (int i = 0; i < arrlen(context->scopes); i++) {
+			if (context->scopes[i].has_static_id) {
+				static_id = context->scopes[i].static_id;
+			}
 		}
 	}
-	}
-	// assert(context->static_id == saved_static_id);
+
+	ensure_capacity(node, static_id);
 
 	if (node->data_count == 1) {
 		node->data = NULL;
 	} else {
-		node->datas[context->static_id] = NULL;
+		node->datas[static_id] = NULL;
 	}
-
-	context->static_id = saved_static_id;
 }
 
 Node_Data *data_create(Context *context, Node *node) {

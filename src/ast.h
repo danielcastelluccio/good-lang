@@ -144,6 +144,10 @@ typedef struct {
 } Function_Node;
 
 typedef struct {
+	Node *node;
+} Function_Stub_Node;
+
+typedef struct {
 	String_View identifier;
 	Node *type;
 	bool static_;
@@ -375,6 +379,7 @@ typedef enum {
 	ENUM_TYPE_NODE,
 	FOR_NODE,
 	FUNCTION_NODE,
+	FUNCTION_STUB_NODE,
 	FUNCTION_TYPE_NODE,
 	GLOBAL_NODE,
 	IDENTIFIER_NODE,
@@ -432,6 +437,7 @@ struct Node {
 		Enum_Type_Node enum_type;
 		For_Node for_;
 		Function_Node function;
+		Function_Stub_Node function_stub;
 		Function_Type_Node function_type;
 		Global_Node global;
 		Identifier_Node identifier;
