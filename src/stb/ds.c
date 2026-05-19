@@ -25,12 +25,7 @@ void *new_realloc(void *p, size_t s) {
 	return result;
 }
 
-void fake_free(void *c, void *p) {
-	(void) c;
-	(void) p;
-}
-
 #define STBDS_REALLOC(c,p,s) new_realloc(p,s)
-#define STBDS_FREE(c,p) fake_free(c, p)
+#define STBDS_FREE(c,p) do { (void) c; (void) p; } while (0)
 
 #include "ds.h"

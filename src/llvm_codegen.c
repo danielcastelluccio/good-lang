@@ -283,28 +283,12 @@ static LLVMValueRef generate_block(Node *node, State *state) {
 	return NULL;
 }
 
-static Function_Argument_Value get_noninferred_argument(Function_Argument_Value *arguments, long int index) {
-	long int j = 0;
-	for (long int i = 0; i < arrlen(arguments); i++) {
-		if (arguments[i].inferred) continue;
-
-		if (j == index) {
-			return arguments[i];
-		}
-
-		j++;
-	}
-
-	assert(false);
-	return (Function_Argument_Value) {};
-}
-
-static LLVMValueRef generate_call_generic2(LLVMValueRef function_llvm_value, Value_Data *function_type, Call_Argument_Value *arguments, State *state) {
+static LLVMValueRef generate_call_generic(LLVMValueRef function_llvm_value, Value_Data *function_type, Call_Argument_Value *arguments, State *state) {
 	assert(function_llvm_value != NULL);
 
 	LLVMValueRef *llvm_arguments = NULL;
 	for (long int i = 0; i < arrlen(arguments); i++) {
-		if (get_noninferred_argument(function_type->function_type.arguments, i).static_) continue;
+		if (function_type->function_type.arguments[i].static_) continue;
 		switch (arguments[i].kind) {
 			case CALL_ARGUMENT_NODE: {
 				arrpush(llvm_arguments, generate_node(arguments[i].node, state));
@@ -312,6 +296,9 @@ static LLVMValueRef generate_call_generic2(LLVMValueRef function_llvm_value, Val
 			}
 			case CALL_ARGUMENT_VALUE: {
 				arrpush(llvm_arguments, generate_value(arguments[i].value.value.value, arguments[i].value.type.value, state));
+				break;
+			}
+			case CALL_ARGUMENT_NONE: {
 				break;
 			}
 			default:
@@ -332,9 +319,9 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	Value function_type = call_data.function_type;
 
 	if (call_data.function_value.value != NULL) {
-		return generate_call_generic2(generate_value(call_data.function_value.value, call_data.function_type.value, state), function_type.value, call_data.arguments, state);
+		return generate_call_generic(generate_value(call_data.function_value.value, call_data.function_type.value, state), function_type.value, call_data.arguments, state);
 	} else {
-		return generate_call_generic2(generate_node(call.function, state), function_type.value, call_data.arguments, state);
+		return generate_call_generic(generate_node(call.function, state), function_type.value, call_data.arguments, state);
 	}
 }
 
@@ -1026,7 +1013,7 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 		Call_Argument_Value *arguments = NULL;
 		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = binary_operator.left }));
 		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = binary_operator.right }));
-		return generate_call_generic2(generate_value(binary_operator_data.function.value, binary_operator_data.function_type.value, state), binary_operator_data.function_type.value, arguments, state);
+		return generate_call_generic(generate_value(binary_operator_data.function.value, binary_operator_data.function_type.value, state), binary_operator_data.function_type.value, arguments, state);
 	}
 
 	LLVMValueRef left_value = generate_node(binary_operator.left, state);

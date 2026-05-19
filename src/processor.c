@@ -626,18 +626,18 @@ static String_View expand_escapes(String_View sv, Value type) {
 }
 
 typedef struct { size_t key; Typed_Value value; } *Pattern_Match_Result;
-static bool pattern_match(Node *node, Value value, Context *context, String_View *inferred_arguments, Pattern_Match_Result *match_result) {
+static void pattern_match(Node *node, Value value, Context *context, String_View *inferred_arguments, Pattern_Match_Result *match_result) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (value.value->tag == POINTER_TYPE_VALUE) {
-				return pattern_match(node->pointer_type.inner, value.value->pointer_type.inner, context, inferred_arguments, match_result);
+				pattern_match(node->pointer_type.inner, value.value->pointer_type.inner, context, inferred_arguments, match_result);
 			}
 			break;
 		}
 		case ARRAY_TYPE_NODE: {
 			if (value.value->tag == ARRAY_TYPE_VALUE) {
-				if (!pattern_match(node->array_type.inner, value.value->array_type.inner, context, inferred_arguments, match_result)) return false;
-				return pattern_match(node->array_type.size, value.value->array_type.size, context, inferred_arguments, match_result);
+				pattern_match(node->array_type.inner, value.value->array_type.inner, context, inferred_arguments, match_result);
+				pattern_match(node->array_type.size, value.value->array_type.size, context, inferred_arguments, match_result);
 			}
 			break;
 		}
@@ -659,13 +659,6 @@ static bool pattern_match(Node *node, Value value, Context *context, String_View
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
 				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
-					Typed_Value previous_value = hmget(*match_result, sv_hash(inferred_arguments[i]));
-					if (previous_value.value.value != NULL) {
-						if (!value_equal(previous_value.value.value, value.value)) {
-							return false;
-						}
-					}
-
 					Typed_Value typed_value = {
 						.value = value,
 						.type = create_value(TYPE_TYPE_VALUE)
@@ -679,23 +672,21 @@ static bool pattern_match(Node *node, Value value, Context *context, String_View
 		default:
 			break;
 	}
-
-	return true;
 }
 
-static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments, String_View **used_inferred_arguments) {
+static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments, String_View **used_inferred_arguments, bool declare_only) {
 	switch (node->kind) {
 		case POINTER_NODE: {
 			if (node->pointer_type.inner == NULL) return false;
-			return uses_inferred_arguments(node->pointer_type.inner, inferred_arguments, used_inferred_arguments);
+			return uses_inferred_arguments(node->pointer_type.inner, inferred_arguments, used_inferred_arguments, declare_only);
 		}
 		case ARRAY_TYPE_NODE: {
-			return uses_inferred_arguments(node->array_type.inner, inferred_arguments, used_inferred_arguments) || uses_inferred_arguments(node->array_type.size, inferred_arguments, used_inferred_arguments);
+			return uses_inferred_arguments(node->array_type.inner, inferred_arguments, used_inferred_arguments, declare_only) || uses_inferred_arguments(node->array_type.size, inferred_arguments, used_inferred_arguments, declare_only);
 		}
 		case CALL_NODE: {
 			bool uses = false;
 			for (long int i = 0; i < arrlen(node->call.arguments); i++) {
-				if (uses_inferred_arguments(node->call.arguments[i].node, inferred_arguments, used_inferred_arguments)) {
+				if (uses_inferred_arguments(node->call.arguments[i].node, inferred_arguments, used_inferred_arguments, declare_only)) {
 					uses = true;
 				}
 			}
@@ -703,7 +694,7 @@ static bool uses_inferred_arguments(Node *node, String_View *inferred_arguments,
 		}
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
-				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
+				if (sv_eq(inferred_arguments[i], node->identifier.value) && (!declare_only || node->identifier.polymorphic)) {
 					if (used_inferred_arguments != NULL) arrpush(*used_inferred_arguments, node->identifier.value);
 					return true;
 				}
@@ -855,6 +846,28 @@ static bool is_trivially_evaluatable(Node *node, Node_Data *data) {
 	}
 }
 
+static size_t *get_arguments_order(Function_Argument *function_arguments) {
+	long argument_count = arrlen(function_arguments);
+
+	size_t *arguments_order = NULL;
+	arrsetlen(arguments_order, argument_count);
+	for (long j = 0; j < argument_count; j++) {
+		arguments_order[j] = j;
+	}
+
+	for (long j = 0; j < argument_count; j++) {
+		for (long k = j + 1; k < argument_count; k++) {
+			if (!function_arguments[arguments_order[j]].inferred && references_identifier(function_arguments[arguments_order[j]].type, function_arguments[arguments_order[k]].identifier)) {
+				size_t temp = arguments_order[k];
+				arguments_order[k] = arguments_order[j];
+				arguments_order[j] = temp;
+			}
+		}
+	}
+
+	return arguments_order;
+}
+
 static bool is_valid_overload(Context *context, Define_Scope define) {
 	Scope *define_scopes_temp = NULL;
 
@@ -881,31 +894,18 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 
 	long argument_count = arrlen(function_arguments);
 
+	String_View *inferred_arguments = NULL;
 	for (long j = 0; j < argument_count; j++) {
 		if (call_arguments[j] == NULL && !function_arguments[j].inferred && function_arguments[j].default_value == NULL) {
 			return false;
 		}
-	}
 
-	String_View *inferred_arguments = NULL;
-	size_t *arguments_order = NULL;
-	arrsetlen(arguments_order, argument_count);
-	for (long j = 0; j < argument_count; j++) {
-		arguments_order[j] = j;
 		if (function_arguments[j].inferred) {
 			arrpush(inferred_arguments, function_arguments[j].identifier);
 		}
 	}
 
-	for (long j = 0; j < argument_count; j++) {
-		for (long k = j + 1; k < argument_count; k++) {
-			if (!function_arguments[arguments_order[j]].inferred && references_identifier(function_arguments[arguments_order[j]].type, function_arguments[arguments_order[k]].identifier)) {
-				size_t temp = arguments_order[k];
-				arguments_order[k] = arguments_order[j];
-				arguments_order[j] = temp;
-			}
-		}
-	}
+	size_t *arguments_order = get_arguments_order(function_arguments);
 
 	for (long j = 0; j < argument_count; j++) {
 		long argument_index = arguments_order[j];
@@ -914,7 +914,7 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 			continue;
 		}
 
-		bool uses_inferred = uses_inferred_arguments(function_arguments[argument_index].type, inferred_arguments, NULL);
+		bool uses_inferred = uses_inferred_arguments(function_arguments[argument_index].type, inferred_arguments, NULL, false);
 		Value given_type = {};
 		if (uses_inferred) {
 			Node_Data *given_data = process_node(context, call_arguments[argument_index]);
@@ -1116,249 +1116,109 @@ typedef struct {
 	Call_Argument_Value *arguments;
 } Process_Call_Generic_Result;
 
-Call_Argument_Value *compute_call_argument_values(Context *context, Node *node, Node *function_type_node, Call_Argument *call_arguments) {
-	Call_Argument_Value *call_argument_values = NULL;
-	arrsetlen(call_argument_values, arrlen(function_type_node->function_type.arguments));
+void resolve_function_stub(Context *context, Node *node, Value *function_value, Value *function_type, Node **call_arguments) {
+	assert((*function_value).value->tag == FUNCTION_STUB_VALUE);
 
-	long int index = 0;
-	for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
-		Function_Argument argument = function_type_node->function_type.arguments[i];
-		if (argument.inferred) continue;
-
-		call_argument_values[index] = (Call_Argument_Value) {
-			.kind = CALL_ARGUMENT_NONE
-		};
-
-		index++;
+	Scope *function_scopes = NULL;
+	for (long int i = 0; i < arrlen((*function_value).value->function_stub.scopes); i++) {
+		arrpush(function_scopes, (*function_value).value->function_stub.scopes[i]);
 	}
-
-	long int noninferred_count = index;
-	arrsetlen(call_argument_values, noninferred_count);
-
-	index = 0;
-	for (long int i = 0; i < arrlen(call_arguments); i++) {
-		if (call_arguments[i].identifier.ptr != NULL) {
-			for (long int j = 0; j < arrlen(function_type_node->function_type.arguments); j++) {
-				if (sv_eq(call_arguments[i].identifier, function_type_node->function_type.arguments[j].identifier)) {
-					index = j;
-					break;
-				}
-			}
-		}
-
-		if (index >= arrlen(call_argument_values)) {
-			handle_semantic_error(context, node->location, "Too many arguments");
-		}
-
-		call_argument_values[index] = (Call_Argument_Value) {
-			.kind = CALL_ARGUMENT_NODE,
-			.node = call_arguments[i].node
-		};
-		index++;
-	}
-
-	index = 0;
-	for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
-		Function_Argument argument = function_type_node->function_type.arguments[i];
-		if (argument.inferred) continue;
-
-		if (call_argument_values[index].kind == CALL_ARGUMENT_NONE && argument.default_value != NULL) {
-			Call_Argument_Value call_argument = { .kind = CALL_ARGUMENT_DEFAULT_VALUE };
-			call_argument_values[index] = call_argument;
-		}
-
-		index++;
-	}
-
-	return call_argument_values;
-}
-
-void resolve_function_stub(Context *context, Node *node, Value *function_value, Value *function_type, Call_Argument_Value *call_argument_values) {
-	typedef struct {
-		String_View identifier;
-		Typed_Value value;
-	} Static_Argument_Value;
-
-	String_View *inferred_arguments = NULL;
 
 	Node *function_stub_node = (*function_value).value->function_stub.node;
 	Node *function_node = function_stub_node->function_stub.node;
 	Node *function_type_node = function_node->function.function_type;
 
-	bool pattern_match_fail = false;
 	bool compile_only_parent = context->compile_only;
-	Static_Argument_Value *static_arguments = NULL;
 
 	Function_Argument *function_arguments = function_type_node->function_type.arguments;
 
-	for (long int k = 0; k < arrlen(function_arguments); k++) {
+	long argument_count = arrlen(function_arguments);
+
+	String_View *inferred_arguments = NULL;
+	for (long int k = 0; k < argument_count; k++) {
 		if (function_arguments[k].inferred) {
 			arrpush(inferred_arguments, function_arguments[k].identifier);
-
-			if (function_arguments[k].default_value != NULL) {
-				process_node(context, function_arguments[k].default_value);
-			}
 		}
 	}
 
-	String_View *used_inferred_arguments = NULL;
-	long int function_argument_index = 0;
-	for (long int i = 0; i < arrlen(call_argument_values); i++) {
-		if (call_argument_values[i].kind != CALL_ARGUMENT_NODE) continue;
+	size_t *arguments_order = get_arguments_order(function_arguments);
 
-		while (function_arguments[function_argument_index].inferred) {
-			function_argument_index++;
-		}
+	arrpush(function_scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
 
-		Node *node = call_argument_values[i].node;
-		Value type = get_type(context, node);
-		if (type.value == NULL) {
-			if (function_argument_index < arrlen(function_arguments) && !is_literal(node) && uses_inferred_arguments(function_arguments[function_argument_index].type, inferred_arguments, &used_inferred_arguments)) {
-				process_node(context, node);
-			}
-		}
+	Value *static_arguments = NULL;
+	for (long i = 0; i < argument_count; i++) {
+		size_t argument = arguments_order[i];
 
-		function_argument_index++;
-	}
+		if (function_arguments[argument].inferred) continue;
 
-	function_argument_index = 0;
-	for (long int i = 0; i < arrlen(call_argument_values); i++) {
-		if (call_argument_values[i].kind != CALL_ARGUMENT_NODE) continue;
+		if (function_arguments[argument].static_) {
+			Scope *saved_scopes = context->scopes;
+			context->scopes = function_scopes;
 
-		while (function_arguments[function_argument_index].inferred) {
-			function_argument_index++;
-		}
+			process_node(context, function_arguments[argument].type);
+			Value wanted_type = evaluate(context, function_arguments[argument].type);
 
-		Node *node = call_argument_values[i].node;
-		Value type = get_type(context, node);
-		if (type.value == NULL) {
-			if (function_argument_index < arrlen(function_arguments) && is_literal(node) && uses_inferred_arguments(function_arguments[function_argument_index].type, inferred_arguments, NULL) && !uses_inferred_arguments(function_arguments[function_argument_index].type, used_inferred_arguments, NULL)) {
-				process_node(context, node);
-			}
-		}
+			context->scopes = saved_scopes;
 
-		function_argument_index++;
-	}
+			Temporary_Context temporary_context = { .wanted_type = wanted_type };
+			process_node_context(context, temporary_context, call_arguments[argument]);
+			Value value = evaluate(context, call_arguments[argument]);
 
-	assert(arrlen(call_argument_values) + arrlen(inferred_arguments) == arrlen(function_arguments));
+			arrpush(static_arguments, value);
 
-	Pattern_Match_Result result = NULL;
-	for (long int call_arg_index = 0; call_arg_index < arrlen(call_argument_values); call_arg_index++) {
-		long int function_arg_index = 0;
-		long int i = 0;
-		for (; function_arg_index < arrlen(function_arguments); function_arg_index++) {
-			if (function_arguments[function_arg_index].inferred) continue;
-
-			if (i == call_arg_index) break;
-
-			i++;
-		}
-
-		if (function_arg_index >= arrlen(function_arguments)) break;
-		if (!function_arguments[function_arg_index].static_) continue;
-
-		Value wanted_type = {};
-		if (!function_arguments[function_arg_index].inferred) {
-			bool compile_only_saved = context->compile_only;
-			arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
-			reset_node(context, function_arguments[function_arg_index].type);
-			process_node(context, function_arguments[function_arg_index].type);
-			wanted_type = evaluate(context, function_arguments[function_arg_index].type);
-			(void) arrpop(context->scopes);
-			context->compile_only = compile_only_saved;
-		}
-
-		Temporary_Context temporary_context = { .wanted_type = wanted_type };
-		Value type = process_node_context(context, temporary_context, call_argument_values[call_arg_index].node)->type;
-
-		Static_Argument_Value static_argument = {
-			.identifier = function_arguments[function_arg_index].identifier,
-			.value = { .value = evaluate(context, call_argument_values[call_arg_index].node), .type = type }
-		};
-		arrpush(static_arguments, static_argument);
-	}
-
-	for (long int call_arg_index = 0; call_arg_index < arrlen(call_argument_values); call_arg_index++) {
-		long int function_arg_index = 0;
-		long int i = 0;
-		for (; function_arg_index < arrlen(function_arguments); function_arg_index++) {
-			if (function_arguments[function_arg_index].inferred) continue;
-
-			if (i == call_arg_index) break;
-
-			i++;
-		}
-
-		if (function_arguments[function_arg_index].inferred || function_arguments[function_arg_index].static_) continue;
-
-		Node *argument = function_arguments[function_arg_index].type;
-		Value argument_type = get_type(context, call_argument_values[call_arg_index].node);
-		if (argument_type.value != NULL) {
-			if (!pattern_match(argument, argument_type, context, inferred_arguments, &result)) {
-				pattern_match_fail = true;
-			}
-		}
-	}
-
-	if (function_type_node->function_type.return_ != NULL && context->temporary_context.wanted_type.value != NULL) {
-		if (!pattern_match(function_type_node->function_type.return_, context->temporary_context.wanted_type, context, inferred_arguments, &result)) {
-			pattern_match_fail = true;
-		}
-	}
-
-	for (long int k = 0; k < arrlen(function_arguments); k++) {
-		if (!function_arguments[k].inferred) continue;
-
-		Typed_Value typed_value = hmget(result, sv_hash(function_arguments[k].identifier));
-		if (typed_value.value.value == NULL && function_arguments[k].default_value != NULL) {
-			typed_value.type = get_type(context, function_arguments[k].default_value);
-			typed_value.value = evaluate(context, function_arguments[k].default_value);
-		}
-
-		if (typed_value.value.value != NULL) {
-			Static_Argument_Value static_argument = {
-				.identifier = function_arguments[k].identifier,
-				.value = typed_value
+			Scope_Key_Identifier scope_identifier = {
+				.key = function_arguments[argument].identifier,
+				.value = {
+					.tag = SCOPE_STATIC_BINDING,
+					.static_binding = (Typed_Value) { .value = value, .type = wanted_type }
+				}
 			};
-
-			arrpush(static_arguments, static_argument);
+			arrpush(arrlast(function_scopes).identifiers, scope_identifier);
 		} else {
-			pattern_match_fail = true;
+			String_View *used_inferred_arguments = NULL;
+			if (uses_inferred_arguments(function_arguments[argument].type, inferred_arguments, &used_inferred_arguments, true)) {
+				Node_Data *data = process_node(context, call_arguments[argument]);
+
+				Pattern_Match_Result result = {};
+				pattern_match(function_arguments[argument].type, data->type, context, inferred_arguments, &result);
+
+				assert(hmlen(result) == arrlen(used_inferred_arguments));
+
+				for (long j = 0; j < arrlen(used_inferred_arguments); j++) {
+					Typed_Value value = hmget(result, sv_hash(used_inferred_arguments[j]));
+
+					arrpush(static_arguments, value.value);
+
+					Scope_Key_Identifier scope_identifier = {
+						.key = used_inferred_arguments[j],
+						.value = {
+							.tag = SCOPE_STATIC_BINDING,
+							.static_binding = value
+						}
+					};
+					arrpush(arrlast(function_scopes).identifiers, scope_identifier);
+				}
+			}
 		}
 	}
 
-	if (pattern_match_fail) {
-		handle_semantic_error(context, node->location, "Pattern matching failed");
-	}
+	Scope_Key_Identifier *identifiers = arrlast(function_scopes).identifiers;
 
-	struct { size_t key; Typed_Value value; } *static_arguments_map = NULL;;
-	for (long int i = 0; i < arrlen(static_arguments); i++) {
-		hmput(static_arguments_map, sv_hash(static_arguments[i].identifier), static_arguments[i].value);
-	}
+	(void) arrpop(function_scopes);
 
 	Scope *saved_scopes = context->scopes;
-	context->scopes = NULL;
-	for (long int i = 0; i < arrlen((*function_value).value->function_stub.scopes); i++) {
-		arrpush(context->scopes, (*function_value).value->function_stub.scopes[i]);
-	}
-
-	Value *static_argument_values = NULL;
-	for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
-		Function_Argument argument = function_type_node->function_type.arguments[i];
-		if (argument.static_) {
-			arrpush(static_argument_values, hmget(static_arguments_map, sv_hash(argument.identifier)).value);
-		}
-	}
+	context->scopes = function_scopes;
 
 	Node_Data *function_data = get_data(context, function_stub_node);
 
 	bool found_match = false;
 	Static_Argument_Variation *function_values = function_data->function.function_values;
 	for (long int i = 0; i < arrlen(function_values); i++) {
-		bool match = arrlen(function_values[i].static_arguments) == arrlen(static_argument_values);
+		assert(arrlen(function_values[i].static_arguments) == arrlen(static_arguments));
+		bool match = true;
 		if (match) {
 			for (long int j = 0; j < arrlen(function_values[i].static_arguments); j++) {
-				if (!value_equal(function_values[i].static_arguments[j].value, static_argument_values[j].value)) {
+				if (!value_equal(function_values[i].static_arguments[j].value, static_arguments[j].value)) {
 					match = false;
 					break;
 				}
@@ -1377,28 +1237,14 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 		size_t new_static_id = ++function_node->function.static_id_counter;
 
 		arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = new_static_id }));
-
-		reset_node(context, function_node);
-
-		for (long int i = 0; i < arrlen(static_arguments); i++) {
-			Scope_Key_Identifier scope_identifier = {
-				.key = static_arguments[i].identifier,
-				.value = {
-					.tag = SCOPE_STATIC_BINDING,
-					.static_binding = static_arguments[i].value
-				}
-			};
-			arrpush(arrlast(context->scopes).identifiers, scope_identifier);
-		}
-
-		assert((*function_value).value->tag == FUNCTION_STUB_VALUE);
+		arrlast(context->scopes).identifiers = identifiers;
 
 		*function_type = process_function(context, function_node)->type;
 		*function_value = evaluate(context, function_node);
 		(*function_value).value->function.static_id = new_static_id;
 
 		Static_Argument_Variation static_argument_variation = {
-			.static_arguments = static_argument_values,
+			.static_arguments = static_arguments,
 			.value = { .value = *function_value, .type = *function_type }
 		};
 		arrpush(function_data->function.function_values, static_argument_variation);
@@ -1410,24 +1256,35 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 	context->compile_only = compile_only_parent;
 }
 
-void fill_call_defaults(Value *function_type, Call_Argument_Value *call_argument_values) {
-	long int index = 0;
-	for (long int i = 0; i < arrlen(function_type->value->function_type.arguments); i++) {
-		Function_Argument_Value argument = function_type->value->function_type.arguments[i];
-		if (argument.inferred) continue;
+Call_Argument_Value *fill_call_defaults(Value *function_type, Node **call_arguments) {
+	Call_Argument_Value *call_argument_values = NULL;
+	arrsetlen(call_argument_values, arrlen(call_arguments));
 
-		if (call_argument_values[index].kind == CALL_ARGUMENT_DEFAULT_VALUE && argument.default_value.value != NULL) {
-			Call_Argument_Value call_argument = { .kind = CALL_ARGUMENT_VALUE };
-			call_argument.value.value = argument.default_value;
-			call_argument.value.type = argument.type;
-			call_argument_values[index] = call_argument;
+	Function_Argument_Value *function_arguments = function_type->value->function_type.arguments;
+
+	for (long int i = 0; i < arrlen(call_arguments); i++) {
+		if (call_arguments[i] != NULL) {
+			call_argument_values[i] = (Call_Argument_Value) {
+				.kind = CALL_ARGUMENT_NODE,
+				.node = call_arguments[i]
+			};
+		} else if (call_arguments[i] == NULL && function_arguments[i].default_value.value != NULL) {
+			call_argument_values[i] = (Call_Argument_Value) {
+				.kind = CALL_ARGUMENT_VALUE,
+			};
+
+			call_argument_values[i].value.value = function_arguments[i].default_value;
+			call_argument_values[i].value.type = function_arguments[i].type;
+		} else {
+			call_argument_values[i] = (Call_Argument_Value) { .kind = CALL_ARGUMENT_NONE };
+			assert(call_arguments[i] == NULL && function_arguments[i].inferred);
 		}
-
-		index++;
 	}
+
+	return call_argument_values;
 }
 
-static Process_Call_Generic_Result process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Call_Argument *call_arguments) {
+static Process_Call_Generic_Result process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Call_Argument *call_arguments_in) {
 	Node *function_type_node = NULL;
 	if (function_type->value->tag == FUNCTION_TYPE_STUB_VALUE) {
 		function_type_node = function_value.value->function_stub.node->function_stub.node->function.function_type;
@@ -1437,17 +1294,18 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 
 	assert(function_type_node->kind == FUNCTION_TYPE_NODE);
 
-	Call_Argument_Value *call_argument_values = compute_call_argument_values(context, node, function_type_node, call_arguments);
-	long int noninferred_count = arrlen(call_argument_values);
+	Function_Argument *function_arguments = function_type_node->function_type.arguments;
+	Node **call_arguments = order_call_args(function_type_node, call_arguments_in);
+	long argument_count = arrlen(call_arguments);
 
-	for (long int i = 0; i < noninferred_count; i++) {
-		if (call_argument_values[i].kind == CALL_ARGUMENT_NONE) {
+	for (long int i = 0; i < argument_count; i++) {
+		if (call_arguments[i] == NULL && !function_arguments[i].inferred && function_arguments[i].default_value == NULL) {
 			handle_semantic_error(context, node->location, "Value not supplied for all arguments");
 		}
 	}
 
 	if (function_value.value != NULL && function_value.value->tag == FUNCTION_STUB_VALUE) {
-		resolve_function_stub(context, node, &function_value, function_type, call_argument_values);
+		resolve_function_stub(context, node, &function_value, function_type, call_arguments);
 	}
 
 	if (function_type->value->tag != FUNCTION_TYPE_VALUE) {
@@ -1456,36 +1314,25 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 
 	assert(function_type->value->tag == FUNCTION_TYPE_VALUE);
 
-	fill_call_defaults(function_type, call_argument_values);
+	Call_Argument_Value *call_argument_values = fill_call_defaults(function_type, call_arguments);
 
 	Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
-	for (long int argument_index = 0; argument_index < arrlen(call_argument_values); argument_index++) {
-		if (call_argument_values[argument_index].kind == CALL_ARGUMENT_VALUE) continue;
+	for (long int i = 0; i < argument_count; i++) {
+		if (call_argument_values[i].kind != CALL_ARGUMENT_NODE) continue;
 
-		long int function_arg_index = 0;
-		long int i = 0;
-		for (; function_arg_index < arrlen(function_type_arguments); function_arg_index++) {
-			if (function_type_arguments[function_arg_index].inferred) continue;
-
-			if (i == argument_index) break;
-
-			i++;
-		}
-
-		if (function_arg_index < arrlen(function_type_arguments) && function_type_arguments[function_arg_index].static_) continue;
+		if (function_type_arguments[i].static_) continue;
 
 		Value wanted_type = {};
-		if (function_arg_index < arrlen(function_type_arguments) || !function_type->value->function_type.variadic) {
-			wanted_type = function_type_arguments[function_arg_index].type;
+		if (!function_type->value->function_type.variadic) {
+			wanted_type = function_type_arguments[i].type;
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = wanted_type };
-		Value type = process_node_context(context, temporary_context, call_argument_values[argument_index].node)->type;
+		Value type = process_node_context(context, temporary_context, call_argument_values[i].node)->type;
 
 		if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
 			handle_expected_type_error(context, node, wanted_type, type);
 		}
-		function_arg_index++;
 	}
 
 	return (Process_Call_Generic_Result) {
@@ -4102,8 +3949,7 @@ static Node_Data *process_while(Context *context, Node *node) {
 }
 
 Node_Data *process_node_context(Context *context, Temporary_Context temporary_context, Node *node) {
-	Node_Data **data1 = get_data_ref(context, node);
-	(void) data1;
+	assert(node != NULL);
 
 	preprocess_node(context, node);
 

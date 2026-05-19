@@ -21,6 +21,7 @@ Node_Data *data_new() {
 }
 
 Value get_type(Context *context, Node *node) {
+	assert(node != NULL);
 	Node_Data *data = get_data(context, node);
 	if (data == NULL) return (Value) {};
 	return data->type;
