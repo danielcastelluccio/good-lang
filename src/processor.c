@@ -1002,9 +1002,6 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 			};
 			arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
 		}
-
-		reset_node(context, function_arguments[argument_index].type);
-		reset_node(context, call_arguments[argument_index]);
 	}
 
 	(void) arrpop(define_scopes_temp);
@@ -1371,27 +1368,66 @@ void add_module(Context *context, char *path, Value value) {
 	arrpush(context->cached_files, file);
 }
 
+Typed_Value resolve_op(Context *context, Node *node, String_View operator_name, Call_Argument *call_arguments) {
+	Temporary_Context saved_temporary_context = context->temporary_context;
+
+	context->temporary_context = (Temporary_Context) {
+		.call_arguments = call_arguments,
+		.has_call_arguments = true
+	};
+
+	Lookup_Result lookup_result = lookup(context, operator_name);
+	Node *define_node = NULL;
+	Scope *define_scopes = NULL;
+	Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, operator_name, &define_scopes, &define_node);
+
+	context->temporary_context = saved_temporary_context;
+
+	if (typed_value.value.value == NULL) {
+		handle_semantic_error(context, node->location, "Operator '%.*s' not found", (int) operator_name.len, operator_name.ptr);
+	}
+
+	Process_Call_Generic_Result result = process_call_generic(context, node, typed_value.value, &typed_value.type, call_arguments);
+	typed_value.value = result.function;
+
+	return typed_value;
+}
+
 static Node_Data *process_array_access(Context *context, Node *node) {
 	Array_Access_Node array_access = node->array_access;
 
 	Value raw_array_type = process_node(context, array_access.parent)->type;
-	if (array_access.assign_value != NULL || (context->temporary_context.want_pointer && raw_array_type.value->tag == ARRAY_TYPE_VALUE)) {
+	if (array_access.assign_value != NULL || (context->temporary_context.want_pointer && raw_array_type.value->tag == ARRAY_TYPE_VALUE) || (raw_array_type.value->tag != ARRAY_TYPE_VALUE && raw_array_type.value->tag != ARRAY_VIEW_TYPE_VALUE && raw_array_type.value->tag != STRING_TYPE_VALUE)) {
 		raw_array_type = process_enforce_pointer(context, array_access.parent, raw_array_type);
 	}
-
-	Temporary_Context temporary_context = { .wanted_type = create_integer_type(false, context->codegen.default_integer_size) };
-	process_node_context(context, temporary_context, array_access.index);
 
 	Value array_type = raw_array_type;
 	if (array_type.value->tag == POINTER_TYPE_VALUE) {
 		array_type = array_type.value->pointer_type.inner;
 	}
 
+	Node_Data *data = context->temporary_context.data;
+
 	if (array_type.value->tag != ARRAY_TYPE_VALUE
 			&& array_type.value->tag != ARRAY_VIEW_TYPE_VALUE
 			&& array_type.value->tag != STRING_TYPE_VALUE) {
-		handle_type_error(node, "Cannot perform array access operation on %s", array_type);
+		Call_Argument *call_arguments = NULL;
+		arrpush(call_arguments, ((Call_Argument) { .node = array_access.parent }));
+		arrpush(call_arguments, ((Call_Argument) { .node = array_access.index }));
+
+		if (array_access.assign_value != NULL) {
+			arrpush(call_arguments, ((Call_Argument) { .node = array_access.assign_value }));
+
+			data->array_access.function = resolve_op(context, node, cstr_to_sv("[]="), call_arguments);
+		} else {
+			data->array_access.function = resolve_op(context, node, cstr_to_sv("[]"), call_arguments);
+			data->type = data->array_access.function.value.value->function.type->function_type.return_type;
+		}
+		return data;
 	}
+
+	Temporary_Context temporary_context = { .wanted_type = create_integer_type(false, context->codegen.default_integer_size) };
+	process_node_context(context, temporary_context, array_access.index);
 
 	Value item_type = {};
 	switch (array_type.value->tag) {
@@ -1411,7 +1447,6 @@ static Node_Data *process_array_access(Context *context, Node *node) {
 			assert(false);
 	}
 
-	Node_Data *data = context->temporary_context.data;
 	data->array_access.array_type = array_type;
 	data->array_access.want_pointer = context->temporary_context.want_pointer;
 	data->array_access.item_type = item_type;
@@ -1478,6 +1513,39 @@ static bool can_compare(Value_Data *type) {
 	return false;
 }
 
+static char *get_operator_name(Binary_Op_Node_Kind kind) {
+	switch (kind) {
+		case OP_ADD:
+			return "+";
+		case OP_SUBTRACT:
+			return "-";
+		case OP_MULTIPLY:
+			return "*";
+		case OP_DIVIDE:
+			return "/";
+		case OP_MODULUS:
+			return "%";
+		case OP_EQUALS:
+			return "==";
+		case OP_NOT_EQUALS:
+			return "!=";
+		case OP_GREATER:
+			return ">";
+		case OP_GREATER_EQUALS:
+			return ">=";
+		case OP_LESS:
+			return "<";
+		case OP_LESS_EQUALS:
+			return "<=";
+		case OP_AND:
+			return "&&";
+		case OP_OR:
+			return "||";
+	}
+	assert(false);
+	return NULL;
+}
+
 static Node_Data *process_binary_op(Context *context, Node *node) {
 	Binary_Op_Node binary_operator = node->binary_op;
 
@@ -1506,35 +1574,12 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 	else if (can_compare(type.value) && (binary_operator.operator == OP_EQUALS || binary_operator.operator == OP_NOT_EQUALS)) {}
 	else if (type.value->tag == BOOLEAN_TYPE_VALUE && (binary_operator.operator == OP_AND || binary_operator.operator == OP_OR)) {}
 	else {
-		// handle_type_error(node, "Cannot operate on %s", left_type);
-		assert(binary_operator.operator == OP_ADD);
-
-		Temporary_Context saved_temporary_context = context->temporary_context;
-
 		Call_Argument *call_arguments = NULL;
 		arrpush(call_arguments, ((Call_Argument) { .node = binary_operator.left }));
 		arrpush(call_arguments, ((Call_Argument) { .node = binary_operator.right }));
 
-		context->temporary_context = (Temporary_Context) {
-			.call_arguments = call_arguments,
-			.has_call_arguments = true
-		};
-
-		Lookup_Result lookup_result = lookup(context, cstr_to_sv("+"));
-		Node *define_node = NULL;
-		Scope *define_scopes = NULL;
-		Typed_Value typed_value = lookup_resolve_define(context, (Value) {}, node, lookup_result, cstr_to_sv("+"), &define_scopes, &define_node);
-
-		context->temporary_context = saved_temporary_context;
-
-		if (typed_value.value.value == NULL) {
-			handle_semantic_error(context, node->location, "Operator '+' not found");
-		}
-
-		process_call_generic(context, node, typed_value.value, &typed_value.type, call_arguments);
-
-		data->binary_operator.function = typed_value.value;
-		data->binary_operator.function_type = typed_value.type;
+		String_View operator_name = cstr_to_sv(get_operator_name(binary_operator.operator));
+		data->binary_operator.function = resolve_op(context, node, operator_name, call_arguments);
 	}
 
 	Value result_type = {};
@@ -2531,15 +2576,6 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			return data;
 		}
 		case INTERNAL_INT: {
-			// process_node(context, internal.inputs[0]);
-			// process_node(context, internal.inputs[1]);
-
-			// value->value = value_new(INTEGER_TYPE_VALUE);
-			// value->value->integer_type.signed_ = evaluate(context, internal.inputs[0]).value->boolean.value;
-			// value->value->integer_type.size = evaluate(context, internal.inputs[1]).value->integer.value;
-
-			// data->type = (Value) { .value = value_new(TYPE_TYPE_VALUE) };
-			// return data;
 			value->value = value_new(INTEGER_TYPE_VALUE);
 			value->value->integer_type.size = context->codegen.default_integer_size;
 			value->value->integer_type.signed_ = true;

@@ -122,7 +122,6 @@ typedef struct {
 	enum {
 		CALL_ARGUMENT_NONE,
 		CALL_ARGUMENT_NODE,
-		CALL_ARGUMENT_DEFAULT_VALUE,
 		CALL_ARGUMENT_VALUE
 	} kind;
 	union {
@@ -225,6 +224,7 @@ typedef struct {
 	Value item_type;
 	bool want_pointer;
 	bool pointer_access;
+	Typed_Value function;
 } Array_Access_Data;
 
 typedef struct {
@@ -235,8 +235,7 @@ typedef struct {
 
 typedef struct {
 	Value type;
-	Value function;
-	Value function_type;
+	Typed_Value function;
 } Binary_Operator_Data;
 
 typedef struct {

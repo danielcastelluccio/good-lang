@@ -1269,6 +1269,59 @@ static Node *parse_op(Lexer *lexer) {
 		case PLUS:
 			identifier = cstr_to_sv("+");
 			break;
+		case MINUS:
+			identifier = cstr_to_sv("-");
+			break;
+		case ASTERISK:
+			identifier = cstr_to_sv("*");
+			break;
+		case SLASH:
+			identifier = cstr_to_sv("/");
+			break;
+		case PERCENT:
+			identifier = cstr_to_sv("%");
+			break;
+		case EQUALS_EQUALS:
+			identifier = cstr_to_sv("==");
+			break;
+		case EXCLAMATION_EQUALS:
+			identifier = cstr_to_sv("!=");
+			break;
+		case GREATER:
+			identifier = cstr_to_sv(">");
+			break;
+		case GREATER_EQUALS:
+			identifier = cstr_to_sv(">=");
+			break;
+		case LESS:
+			identifier = cstr_to_sv("<");
+			break;
+		case LESS_EQUALS:
+			identifier = cstr_to_sv("<=");
+			break;
+		case KEYWORD_AND:
+			identifier = cstr_to_sv("and");
+			break;
+		case KEYWORD_OR:
+			identifier = cstr_to_sv("or");
+			break;
+		case BRACE_OPEN:
+			token = lexer_consume(lexer);
+			if (token.kind == BRACE_CLOSED) {
+				token = lexer_peek(lexer);
+
+				if (token.kind == EQUALS) {
+					lexer_consume(lexer);
+					identifier = cstr_to_sv("[]=");
+					break;
+				} else {
+					identifier = cstr_to_sv("[]");
+					break;
+				}
+			} else {
+				assert(false);
+			}
+			break;
 		default:
 			assert(false);
 	}

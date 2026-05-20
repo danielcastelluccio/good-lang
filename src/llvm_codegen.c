@@ -843,8 +843,20 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 static LLVMValueRef generate_array_access(Node *node, State *state) {
 	assert(node->kind == ARRAY_ACCESS_NODE);
 	Array_Access_Node array_access = node->array_access;
-
 	Array_Access_Data array_access_data = get_data(&state->context, node)->array_access;
+
+	if (array_access_data.function.value.value != NULL) {
+		Call_Argument_Value *arguments = NULL;
+		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = array_access.parent }));
+		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = array_access.index }));
+
+		if (array_access.assign_value != NULL) {
+			arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = array_access.assign_value }));
+			return generate_call_generic(generate_value(array_access_data.function.value.value, array_access_data.function.type.value, state), array_access_data.function.type.value, arguments, state);
+		} else {
+			return generate_call_generic(generate_value(array_access_data.function.value.value, array_access_data.function.type.value, state), array_access_data.function.type.value, arguments, state);
+		}
+	}
 
 	Value_Data *array_type = array_access_data.array_type.value;
 
@@ -1009,11 +1021,11 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 	Binary_Op_Node binary_operator = node->binary_op;
 	Binary_Operator_Data binary_operator_data = get_data(&state->context, node)->binary_operator;
 
-	if (binary_operator_data.function.value != NULL) {
+	if (binary_operator_data.function.value.value != NULL) {
 		Call_Argument_Value *arguments = NULL;
 		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = binary_operator.left }));
 		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = binary_operator.right }));
-		return generate_call_generic(generate_value(binary_operator_data.function.value, binary_operator_data.function_type.value, state), binary_operator_data.function_type.value, arguments, state);
+		return generate_call_generic(generate_value(binary_operator_data.function.value.value, binary_operator_data.function.type.value, state), binary_operator_data.function.type.value, arguments, state);
 	}
 
 	LLVMValueRef left_value = generate_node(binary_operator.left, state);
