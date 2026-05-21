@@ -820,6 +820,10 @@ static Node **order_call_args(Node *function_type_node, Call_Argument *call_argu
 			index++;
 		}
 
+		if (index >= arrlen(call_arguments_rearranged)) {
+			return NULL;
+		}
+
 		call_arguments_rearranged[index] = call_arguments[i].node;
 		index++;
 	}
@@ -868,264 +872,53 @@ static size_t *get_arguments_order(Function_Argument *function_arguments) {
 	return arguments_order;
 }
 
-static bool is_valid_overload(Context *context, Define_Scope define) {
-	Scope *define_scopes_temp = NULL;
+Call_Argument_Value *fill_call_defaults(Value function_type, Node **call_arguments) {
+	Call_Argument_Value *call_argument_values = NULL;
+	arrsetlen(call_argument_values, arrlen(call_arguments));
 
-	if (define.kind == DEFINE_LOCAL) {
-		for (long i = 0; i < arrlen(context->scopes); i++) {
-			arrpush(define_scopes_temp, context->scopes[i]);
+	Function_Argument_Value *function_arguments = function_type.value->function_type.arguments;
 
-			if (define.scope == &context->scopes[i]) break;
-		}
-	} else {
-		for (long i = 0; i < arrlen(define.scope); i++) {
-			arrpush(define_scopes_temp, define.scope[i]);
-		}
-	}
-
-	Node *function_node = define.node->define.expression;
-	Node *function_type_node = function_node->function.function_type;
-
-	arrpush(define_scopes_temp, (Scope) { .node = function_node });
-
-	Node **call_arguments = order_call_args(function_type_node, context->temporary_context.call_arguments);
-
-	Function_Argument *function_arguments = function_type_node->function_type.arguments;
-
-	long argument_count = arrlen(function_arguments);
-
-	String_View *inferred_arguments = NULL;
-	for (long j = 0; j < argument_count; j++) {
-		if (call_arguments[j] == NULL && !function_arguments[j].inferred && function_arguments[j].default_value == NULL) {
-			return false;
-		}
-
-		if (function_arguments[j].inferred) {
-			arrpush(inferred_arguments, function_arguments[j].identifier);
-		}
-	}
-
-	size_t *arguments_order = get_arguments_order(function_arguments);
-
-	for (long j = 0; j < argument_count; j++) {
-		long argument_index = arguments_order[j];
-
-		if (function_arguments[argument_index].inferred) {
-			continue;
-		}
-
-		bool uses_inferred = uses_inferred_arguments(function_arguments[argument_index].type, inferred_arguments, NULL, false);
-		Value given_type = {};
-		if (uses_inferred) {
-			Node_Data *given_data = process_node(context, call_arguments[argument_index]);
-			given_type = given_data->type;
-
-			Pattern_Match_Result match_result = NULL;
-			pattern_match(function_arguments[argument_index].type, given_type, context, inferred_arguments, &match_result);
-			for (long k = 0; k < arrlen(inferred_arguments); k++) {
-				Typed_Value typed_value = hmget(match_result, sv_hash(inferred_arguments[k]));
-				if (typed_value.value.value != NULL) {
-					Scope_Key_Identifier scope_identifier = {
-						.key = inferred_arguments[k],
-						.value = {
-							.tag = SCOPE_STATIC_BINDING,
-							.static_binding = {
-								.value = typed_value.value,
-								.type = typed_value.type
-							}
-						}
-					};
-					arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
-				}
-			}
-		}
-
-		arrpush(define_scopes_temp, ((Scope) { .node = function_node, .has_static_id = true, .static_id = 0 }));
-
-		Scope *saved_scopes = context->scopes;
-		context->scopes = define_scopes_temp;
-
-		reset_node(context, function_arguments[argument_index].type);
-
-		process_node(context, function_arguments[argument_index].type);
-
-		Value wanted_type = evaluate(context, function_arguments[argument_index].type);
-
-		context->scopes = saved_scopes;
-		(void) arrpop(define_scopes_temp);
-
-		bool wanted_static = function_arguments[argument_index].static_;
-
-		if (!uses_inferred) {
-			Temporary_Context temporary_context = { .wanted_type = wanted_type };
-			Node_Data *given_data = process_node_context(context, temporary_context, call_arguments[argument_index]);
-			given_type = given_data->type;
-		}
-
-		switch (call_arguments[argument_index]->kind) {
-			case STRING_NODE: {
-				if (wanted_type.value->tag != STRING_TYPE_VALUE) {
-					return false;
-				}
-				break;
-			}
-			case NUMBER_NODE: {
-				if (wanted_type.value->tag != INTEGER_TYPE_VALUE && wanted_type.value->tag != FLOAT_TYPE_VALUE) {
-					return false;
-				}
-				break;
-			}
-			default: {
-				if (wanted_static) {
-					if (!is_trivially_evaluatable(call_arguments[argument_index], get_data(context, call_arguments[argument_index]))) {
-						return false;
-					}
-				}
-
-				if (!value_equal(wanted_type.value, given_type.value)) {
-					return false;
-				}
-				break;
-			}
-		}
-
-		if (wanted_static) {
-			Scope_Key_Identifier scope_identifier = {
-				.key = function_arguments[argument_index].identifier,
-				.value = {
-					.tag = SCOPE_STATIC_BINDING,
-					.static_binding = {
-						.value = evaluate(context, call_arguments[argument_index]),
-						.type = given_type
-					}
-				}
+	for (long int i = 0; i < arrlen(call_arguments); i++) {
+		if (call_arguments[i] != NULL) {
+			call_argument_values[i] = (Call_Argument_Value) {
+				.kind = CALL_ARGUMENT_NODE,
+				.node = call_arguments[i]
 			};
-			arrpush(arrlast(define_scopes_temp).identifiers, scope_identifier);
+		} else if (call_arguments[i] == NULL && function_arguments[i].default_value.value != NULL) {
+			call_argument_values[i] = (Call_Argument_Value) {
+				.kind = CALL_ARGUMENT_VALUE,
+			};
+
+			call_argument_values[i].value.value = function_arguments[i].default_value;
+			call_argument_values[i].value.type = function_arguments[i].type;
+		} else {
+			call_argument_values[i] = (Call_Argument_Value) { .kind = CALL_ARGUMENT_NONE };
+			assert(call_arguments[i] == NULL && function_arguments[i].inferred);
 		}
 	}
 
-	(void) arrpop(define_scopes_temp);
-
-	return true;
-}
-
-static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, Node **define_node) {
-	*define_node = NULL;
-	*define_scopes = NULL;
-	if (module_value.value != NULL) {
-		for (long int j = 0; j < arrlen(module_value.value->module.bodies); j++) {
-			Node *root = module_value.value->module.bodies[j];
-			for (long int i = 0; i < arrlen(root->root.statements); i++) {
-				Node *statement = root->root.statements[i];
-				if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
-					*define_node = statement;
-
-					for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
-						arrpush(*define_scopes, module_value.value->module.scopes[i]);
-					}
-					break;
-				}
-			}
-		}
-	}
-
-	if (lookup_result.tag == LOOKUP_RESULT_DEFINE_INTERNAL) {
-		arrpush(*define_scopes, *lookup_result.define[0].scope);
-		*define_node = lookup_result.define[0].node;
-	}
-
-	if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
-		size_t define_index = 0;
-
-		bool all_functions = true;
-		for (long int i = 0; i < arrlen(lookup_result.define); i++) {
-			if (lookup_result.define[i].node->define.expression->kind != FUNCTION_NODE) {
-				all_functions = false;
-			}
-		}
-
-		if (all_functions) {
-			if (context->temporary_context.has_call_arguments) {
-				bool saved_compile_only = context->compile_only;
-
-				long int selected_count = 0;
-
-				for (long int i = 0; i < arrlen(lookup_result.define); i++) {
-					bool valid = is_valid_overload(context, lookup_result.define[i]);
-
-					if (!valid) {
-						continue;
-					}
-
-					define_index = i;
-					selected_count++;
-				}
-
-				if (selected_count == 0) {
-					handle_semantic_error(context, node->location, "Function overload not found");
-				} else if (selected_count > 1) {
-					handle_semantic_error(context, node->location, "Multiple valid overloads found");
-				}
-
-				context->compile_only = saved_compile_only;
-			} else {
-				if (arrlen(lookup_result.define) > 1) {
-					handle_semantic_error(context, node->location, "Multiple valid overloads found");
-				}
-
-				define_index = 0;
-			}
-		}
-
-		if ((long) define_index < arrlen(lookup_result.define)) {
-			Define_Scope define = lookup_result.define[define_index];
-
-			if (define.kind == DEFINE_LOCAL) {
-				for (long i = 0; i < arrlen(context->scopes); i++) {
-					arrpush(*define_scopes, context->scopes[i]);
-
-					if (define.scope == &context->scopes[i]) break;
-				}
-			} else {
-				for (long i = 0; i < arrlen(define.scope); i++) {
-					arrpush(*define_scopes, define.scope[i]);
-				}
-			}
-
-			*define_node = lookup_result.define[define_index].node;
-		}
-	}
-
-	Value type = {};
-	Value value = {};
-
-	if (*define_node != NULL) {
-		Typed_Value typed_value = process_node_with_scopes(context, *define_node, *define_scopes)->define.typed_value;
-		type = typed_value.type;
-		value = typed_value.value;
-	}
-
-	return (Typed_Value) { .type = type, .value = value };
+	return call_argument_values;
 }
 
 typedef struct {
-	Value function;
-	Call_Argument_Value *arguments;
-} Process_Call_Generic_Result;
+	Node *function_node;
+	Node *function_stub_node;
+	Value *static_arguments;
+	Scope_Key_Identifier *identifiers;
+	Scope *function_scopes;
+} Resolve_Static_Arguments_Result;
 
-void resolve_function_stub(Context *context, Node *node, Value *function_value, Value *function_type, Node **call_arguments) {
-	assert((*function_value).value->tag == FUNCTION_STUB_VALUE);
+Resolve_Static_Arguments_Result resolve_static_arguments(Context *context, Node *node, Value function_value, Node **call_arguments) {
+	assert(function_value.value->tag == FUNCTION_STUB_VALUE);
 
 	Scope *function_scopes = NULL;
-	for (long int i = 0; i < arrlen((*function_value).value->function_stub.scopes); i++) {
-		arrpush(function_scopes, (*function_value).value->function_stub.scopes[i]);
+	for (long int i = 0; i < arrlen(function_value.value->function_stub.scopes); i++) {
+		arrpush(function_scopes, function_value.value->function_stub.scopes[i]);
 	}
 
-	Node *function_stub_node = (*function_value).value->function_stub.node;
+	Node *function_stub_node = function_value.value->function_stub.node;
 	Node *function_node = function_stub_node->function_stub.node;
 	Node *function_type_node = function_node->function.function_type;
-
-	bool compile_only_parent = context->compile_only;
 
 	Function_Argument *function_arguments = function_type_node->function_type.arguments;
 
@@ -1200,8 +993,27 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 	}
 
 	Scope_Key_Identifier *identifiers = arrlast(function_scopes).identifiers;
-
 	(void) arrpop(function_scopes);
+
+	return (Resolve_Static_Arguments_Result) {
+		.function_node = function_node,
+		.function_stub_node	= function_stub_node,
+		.static_arguments = static_arguments,
+		.identifiers = identifiers,
+		.function_scopes = function_scopes
+	};
+}
+
+// TODO: node just shouldn't be an argument
+void resolve_function_stub(Context *context, Node *node, Value *function_value, Value *function_type, Node **call_arguments) {
+	bool compile_only_parent = context->compile_only;
+
+	Resolve_Static_Arguments_Result result = resolve_static_arguments(context, node, *function_value, call_arguments);
+	Node *function_node = result.function_node;
+	Node *function_stub_node = result.function_stub_node;
+	Value *static_arguments = result.static_arguments;
+	Scope_Key_Identifier *identifiers = result.identifiers;
+	Scope *function_scopes = result.function_scopes;
 
 	Scope *saved_scopes = context->scopes;
 	context->scopes = function_scopes;
@@ -1245,41 +1057,228 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 			.value = { .value = *function_value, .type = *function_type }
 		};
 		arrpush(function_data->function.function_values, static_argument_variation);
+
+		(void) arrpop(context->scopes);
 	}
 
-	(void) arrpop(context->scopes);
 	context->scopes = saved_scopes;
 
 	context->compile_only = compile_only_parent;
 }
 
-Call_Argument_Value *fill_call_defaults(Value *function_type, Node **call_arguments) {
-	Call_Argument_Value *call_argument_values = NULL;
-	arrsetlen(call_argument_values, arrlen(call_arguments));
+static bool is_valid_overload(Context *context, Define_Scope define) {
+	Scope *define_scopes_temp = NULL;
 
-	Function_Argument_Value *function_arguments = function_type->value->function_type.arguments;
+	if (define.kind == DEFINE_LOCAL) {
+		for (long i = 0; i < arrlen(context->scopes); i++) {
+			arrpush(define_scopes_temp, context->scopes[i]);
 
-	for (long int i = 0; i < arrlen(call_arguments); i++) {
-		if (call_arguments[i] != NULL) {
-			call_argument_values[i] = (Call_Argument_Value) {
-				.kind = CALL_ARGUMENT_NODE,
-				.node = call_arguments[i]
-			};
-		} else if (call_arguments[i] == NULL && function_arguments[i].default_value.value != NULL) {
-			call_argument_values[i] = (Call_Argument_Value) {
-				.kind = CALL_ARGUMENT_VALUE,
-			};
-
-			call_argument_values[i].value.value = function_arguments[i].default_value;
-			call_argument_values[i].value.type = function_arguments[i].type;
-		} else {
-			call_argument_values[i] = (Call_Argument_Value) { .kind = CALL_ARGUMENT_NONE };
-			assert(call_arguments[i] == NULL && function_arguments[i].inferred);
+			if (define.scope == &context->scopes[i]) break;
+		}
+	} else {
+		for (long i = 0; i < arrlen(define.scope); i++) {
+			arrpush(define_scopes_temp, define.scope[i]);
 		}
 	}
 
-	return call_argument_values;
+	Node *function_node = define.node->define.expression;
+	if (function_node->kind == FUNCTION_STUB_NODE) {
+		function_node = function_node->function_stub.node;
+	}
+
+	Node *function_type_node = function_node->function.function_type;
+
+	Node **call_arguments = order_call_args(function_type_node, context->temporary_context.call_arguments);
+
+	if (arrlen(call_arguments) < arrlen(context->temporary_context.call_arguments)) {
+		return false;
+	}
+
+	long argument_count = arrlen(call_arguments);
+
+	Function_Argument *function_arguments = function_type_node->function_type.arguments;
+	for (long int i = 0; i < argument_count; i++) {
+		if (call_arguments[i] == NULL && !function_arguments[i].inferred && function_arguments[i].default_value == NULL) {
+			return false;
+		}
+	}
+
+	arrpush(define_scopes_temp, (Scope) { .node = define.node });
+	Scope *saved_scopes = context->scopes;
+	context->scopes = define_scopes_temp;
+
+	Typed_Value typed_value = process_node(context, define.node)->define.typed_value;
+	Value function_value = typed_value.value;
+	Value function_type = typed_value.type;
+
+	context->scopes = saved_scopes;
+	(void) arrpop(define_scopes_temp);
+
+	Function_Argument_Value *function_argument_values = NULL;
+	if (function_value.value->tag == FUNCTION_STUB_VALUE) {
+		Resolve_Static_Arguments_Result result = resolve_static_arguments(context, define.node, function_value, call_arguments);
+
+		Scope *saved_scopes = context->scopes;
+		context->scopes = result.function_scopes;
+
+		arrpush(context->scopes, ((Scope) { .node = function_node, .has_static_id = true, .static_id = 0 }));
+		arrlast(context->scopes).identifiers = result.identifiers;
+
+		for (int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
+			Function_Argument argument = function_type_node->function_type.arguments[i];
+			Value type = {};
+			if (argument.type != NULL) {
+				reset_node(context, argument.type);
+				process_node(context, argument.type);
+				type = evaluate(context, argument.type);
+			}
+
+			Function_Argument_Value argument_value = {
+				.identifier = argument.identifier,
+				.type = type,
+				.static_ = argument.static_,
+				.inferred = argument.inferred
+			};
+			arrpush(function_argument_values, argument_value);
+		}
+
+		(void) arrpop(context->scopes);
+
+		context->scopes = saved_scopes;
+	} else {
+		function_argument_values = function_type.value->function_type.arguments;
+	}
+
+	for (long int i = 0; i < argument_count; i++) {
+		if (call_arguments[i] == NULL) continue;
+		if (function_argument_values[i].inferred) continue;
+
+		Value wanted_type = {};
+		if (!function_type.value->function_type.variadic) {
+			wanted_type = function_argument_values[i].type;
+		}
+
+		Temporary_Context temporary_context = { .wanted_type = wanted_type };
+		Value type = process_node_context(context, temporary_context, call_arguments[i])->type;
+
+		if (wanted_type.value != NULL && !type_assignable(wanted_type.value, type.value)) {
+			return false;
+		}
+	}
+
+	return true;
 }
+
+static Typed_Value lookup_resolve_define(Context *context, Value module_value, Node *node, Lookup_Result lookup_result, String_View identifier, Scope **define_scopes, Node **define_node) {
+	*define_node = NULL;
+	*define_scopes = NULL;
+	if (module_value.value != NULL) {
+		for (long int j = 0; j < arrlen(module_value.value->module.bodies); j++) {
+			Node *root = module_value.value->module.bodies[j];
+			for (long int i = 0; i < arrlen(root->root.statements); i++) {
+				Node *statement = root->root.statements[i];
+				if (statement->kind == DEFINE_NODE && statement->define.public && sv_eq(statement->define.identifier, identifier)) {
+					*define_node = statement;
+
+					for (long i = 0; i < arrlen(module_value.value->module.scopes); i++) {
+						arrpush(*define_scopes, module_value.value->module.scopes[i]);
+					}
+					break;
+				}
+			}
+		}
+	}
+
+	if (lookup_result.tag == LOOKUP_RESULT_DEFINE_INTERNAL) {
+		arrpush(*define_scopes, *lookup_result.define[0].scope);
+		*define_node = lookup_result.define[0].node;
+	}
+
+	if (lookup_result.tag == LOOKUP_RESULT_DEFINE) {
+		size_t define_index = 0;
+
+		bool all_functions = true;
+		for (long int i = 0; i < arrlen(lookup_result.define); i++) {
+			Node *define = lookup_result.define[i].node;
+			if (define->define.expression->kind != FUNCTION_NODE && define->define.expression->kind != FUNCTION_STUB_NODE) {
+				all_functions = false;
+			}
+		}
+
+		if (all_functions) {
+			if (context->temporary_context.has_call_arguments) {
+				bool saved_compile_only = context->compile_only;
+
+				long int selected_count = 0;
+
+				for (long int i = 0; i < arrlen(lookup_result.define); i++) {
+					bool valid = is_valid_overload(context, lookup_result.define[i]);
+
+					if (!valid) {
+						continue;
+					}
+
+					define_index = i;
+					selected_count++;
+				}
+
+				if (selected_count == 0) {
+					handle_semantic_error(context, node->location, "Function overload not found");
+				} else if (selected_count > 1) {
+					handle_semantic_error(context, node->location, "Multiple valid overloads found");
+				}
+
+				context->compile_only = saved_compile_only;
+			} else {
+				if (arrlen(lookup_result.define) > 1) {
+					handle_semantic_error(context, node->location, "Multiple valid overloads found");
+				}
+
+				define_index = 0;
+			}
+		} else {
+			if (arrlen(lookup_result.define) > 1) {
+				handle_semantic_error(context, node->location, "Multiple identifiers found");
+			}
+
+			define_index = 0;
+		}
+
+		if ((long) define_index < arrlen(lookup_result.define)) {
+			Define_Scope define = lookup_result.define[define_index];
+
+			if (define.kind == DEFINE_LOCAL) {
+				for (long i = 0; i < arrlen(context->scopes); i++) {
+					arrpush(*define_scopes, context->scopes[i]);
+
+					if (define.scope == &context->scopes[i]) break;
+				}
+			} else {
+				for (long i = 0; i < arrlen(define.scope); i++) {
+					arrpush(*define_scopes, define.scope[i]);
+				}
+			}
+
+			*define_node = lookup_result.define[define_index].node;
+		}
+	}
+
+	Value type = {};
+	Value value = {};
+
+	if (*define_node != NULL) {
+		Typed_Value typed_value = process_node_with_scopes(context, *define_node, *define_scopes)->define.typed_value;
+		type = typed_value.type;
+		value = typed_value.value;
+	}
+
+	return (Typed_Value) { .type = type, .value = value };
+}
+
+typedef struct {
+	Value function;
+	Call_Argument_Value *arguments;
+} Process_Call_Generic_Result;
 
 static Process_Call_Generic_Result process_call_generic(Context *context, Node *node, Value function_value, Value *function_type, Call_Argument *call_arguments_in) {
 	Node *function_type_node = NULL;
@@ -1311,7 +1310,7 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 
 	assert(function_type->value->tag == FUNCTION_TYPE_VALUE);
 
-	Call_Argument_Value *call_argument_values = fill_call_defaults(function_type, call_arguments);
+	Call_Argument_Value *call_argument_values = fill_call_defaults(*function_type, call_arguments);
 
 	Function_Argument_Value *function_type_arguments = function_type->value->function_type.arguments;
 	for (long int i = 0; i < argument_count; i++) {
