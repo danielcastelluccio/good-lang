@@ -641,21 +641,19 @@ static void pattern_match(Node *node, Value value, Context *context, String_View
 			}
 			break;
 		}
-		// case CALL_NODE: {
-		// 	if (value.value->tag == STRUCT_TYPE_VALUE) {
-		// 		process_node(context, node->call.function);
-		// 		Node *function_node = evaluate(context, node->call.function).value->function.node;
+		case CALL_NODE: {
+			if (value.value->tag == STRUCT_TYPE_VALUE) {
+				process_node(context, node->call.function);
+				Node *function_node = evaluate(context, node->call.function).value->function.node;
 
-		// 		if (function_node == value.value->struct_type.inherited_node) {
-		// 			for (long int i = 0; i < arrlen(node->call.arguments); i++) {
-		// 				if (!pattern_match(node->call.arguments[i], value.value->struct_type.inherited_arguments[i], context, inferred_arguments, match_result)) {
-		// 					return false;
-		// 				}
-		// 			}
-		// 		}
-		// 	}
-		// 	break;
-		// }
+				if (function_node == value.value->struct_type.inherited_node) {
+					for (long int i = 0; i < arrlen(node->call.arguments); i++) {
+						pattern_match(node->call.arguments[i].node, value.value->struct_type.inherited_arguments[i], context, inferred_arguments, match_result);
+					}
+				}
+			}
+			break;
+		}
 		case IDENTIFIER_NODE: {
 			for (long int i = 0; i < arrlen(inferred_arguments); i++) {
 				if (sv_eq(inferred_arguments[i], node->identifier.value)) {
@@ -786,6 +784,13 @@ static bool references_identifier(Node *node, String_View identifier) {
 			return sv_eq(node->identifier.value, identifier);
 		case POINTER_NODE:
 			return references_identifier(node->pointer_type.inner, identifier);
+		case CALL_NODE:
+			for (int i = 0; i < arrlen(node->call.arguments); i++) {
+				if (references_identifier(node->call.arguments[i].node, identifier)) {
+					return true;
+				}
+			}
+			return false;
 		case INTERNAL_NODE:
 			break;
 		default:
@@ -3635,13 +3640,13 @@ static Node_Data *process_structure_access(Context *context, Node *node) {
 			case ARRAY_VIEW_TYPE_VALUE: {
 				if (sv_eq_cstr(structure_access.name, "len")) {
 					item_type = create_integer_type(false, context->codegen.default_integer_size);
-				} else if (sv_eq_cstr(structure_access.name, "ptr")) {
+				} else if (sv_eq_cstr(structure_access.name, "data")) {
 					item_type = create_pointer_type(create_array_type(structure_type.value->array_view_type.inner));
 				}
 				break;
 			}
 			case STRING_TYPE_VALUE: {
-				if (sv_eq_cstr(structure_access.name, "count")) {
+				if (sv_eq_cstr(structure_access.name, "len")) {
 					item_type = create_integer_type(false, context->codegen.default_integer_size);
 				} else if (sv_eq_cstr(structure_access.name, "data")) {
 					item_type = create_pointer_type(create_array_type(create_integer_type(false, 8)));

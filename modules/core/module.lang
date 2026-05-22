@@ -19,5 +19,7 @@ print :: fn ($fmt: string, args: $T) {
 	print_.print(&stdout_printer, fmt, args);
 }
 
+load "array.lang";
+
 c :: import "c";
 print_ :: import "print";

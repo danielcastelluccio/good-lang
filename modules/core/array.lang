@@ -1,0 +1,33 @@
+Dynamic_Array :: struct (T: type) {
+	data: *[_]T;
+	len: uint;
+	cap: uint;
+	allocator: Allocator;
+}
+
+append :: fn (array: *Dynamic_Array($T), value: T) {
+	if array.len == array.cap {
+		new_cap := array.cap * 2;
+		if new_cap == 0 => new_cap = 4;
+
+		array.data = cast(*[_]T) realloc(cast(*) array.data, new_cap * size_of(T), array.allocator) catch return;
+	}
+
+	array.data[array.len] = value;
+	array.len = array.len + 1;
+}
+
+remove :: fn (array: *Dynamic_Array($T), index: uint) {
+	for index..array.len |i| {
+		array.data[i] = array.data[i + 1];
+	}
+
+	array.len = array.len - 1;
+}
+
+as_view :: fn (array: Dynamic_Array($T)) -> []T {
+	result: []T;
+	result.data = array.data;
+	result.len = array.len;
+	return result;
+}

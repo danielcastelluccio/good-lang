@@ -789,7 +789,7 @@ static LLVMValueRef generate_structure_access(Node *node, State *state) {
 		case ARRAY_VIEW_TYPE_VALUE: {
 			if (sv_eq_cstr(structure_access.name, "len")) {
 				index = 0;
-			} else if (sv_eq_cstr(structure_access.name, "ptr")) {
+			} else if (sv_eq_cstr(structure_access.name, "data")) {
 				index = 1;
 			} else {
 				assert(false);

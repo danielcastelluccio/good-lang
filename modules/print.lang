@@ -9,7 +9,7 @@ print :: fn (printer: *Printer, $fmt: string, args: $T) {
 	$if type_info is Tuple |tuple| {
 		$argument_index: uint = 0;
 		$i: uint = 0;
-		$while i < fmt.count {
+		$while i < fmt.len {
 			$if fmt[i] == '%' {
 				$if argument_index >= tuple.members.len {
 					compile_error("Not enough arguments");

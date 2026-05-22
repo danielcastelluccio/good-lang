@@ -326,10 +326,10 @@ static Value evaluate_struct_type(State *state, Node *node) {
 		arrpush(struct_value_data->struct_type.members, evaluate_state(state, struct_type.members[i].type));
 	}
 
-	// if (struct_type.inherit_function) {
-	// 	struct_value_data->struct_type.inherited_node = function_node;
-	// 	struct_value_data->struct_type.inherited_arguments = function_arguments;
-	// }
+	if (struct_type.inherit_function) {
+		struct_value_data->struct_type.inherited_node = function_node;
+		struct_value_data->struct_type.inherited_arguments = function_arguments;
+	}
 
 	Scope *scopes = NULL;
 	for (long int i = 0; i < arrlen(state->context->scopes); i++) {
@@ -607,7 +607,9 @@ static Value evaluate_call(State *state, Node *node) {
 	jmp_buf prev_jmp;
 	memcpy(&prev_jmp, &jmp, sizeof(jmp_buf));
 	if (!setjmp(jmp)) {
+		arrpush(state->context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = function_value.static_id }));
 		result = evaluate_state(state, function_value.body).value;
+		(void) arrpop(state->context->scopes);
 	} else {
 		result = jmp_result.value;
 	}
@@ -835,7 +837,7 @@ static Value evaluate_structure_access(State *state, Node *node) {
 		case ARRAY_VIEW_TYPE_VALUE: {
 			Array_View_Value array_view_value = evaluate_state(state, structure_access.parent).value->array_view;
 
-			if (sv_eq_cstr(structure_access.name, "ptr")) {
+			if (sv_eq_cstr(structure_access.name, "data")) {
 				assert(false);
 			} else if (sv_eq_cstr(structure_access.name, "len")) {
 				return (Value) { .value = array_view_value.length };
@@ -849,7 +851,7 @@ static Value evaluate_structure_access(State *state, Node *node) {
 
 			if (sv_eq_cstr(structure_access.name, "data")) {
 				assert(false);
-			} else if (sv_eq_cstr(structure_access.name, "count")) {
+			} else if (sv_eq_cstr(structure_access.name, "len")) {
 				return (Value) { .value = string_value.length };
 			} else {
 				assert(false);

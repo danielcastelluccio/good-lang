@@ -603,6 +603,11 @@ static void add_inferred_arguments(Function_Argument **arguments, Node *argument
 		case POINTER_NODE:
 			add_inferred_arguments(arguments, argument->pointer_type.inner);
 			break;
+		case CALL_NODE:
+			for (int i = 0; i < arrlen(argument->call.arguments); i++) {
+				add_inferred_arguments(arguments, argument->call.arguments[i].node);
+			}
+			break;
 		case INTERNAL_NODE:
 			break;
 		default:
@@ -828,12 +833,11 @@ static Node *parse_struct_type(Lexer *lexer) {
 
 	Node *struct_ = ast_new(STRUCT_TYPE_NODE, first_token.location);
 	
-	// struct_->struct_type.inherit_function = false;
+	struct_->struct_type.inherit_function = false;
 	Function_Argument *arguments = NULL;
 	if (lexer_peek(lexer).kind == PARENTHESIS_OPEN) {
 		arguments = parse_arguments(lexer).arguments;
-		// struct_->struct_type.inherit_function = true;
-		(void) arguments;
+		struct_->struct_type.inherit_function = true;
 	}
 
 	struct_->struct_type.members = NULL;
