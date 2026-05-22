@@ -225,6 +225,7 @@ typedef struct {
 	bool want_pointer;
 	bool pointer_access;
 	Typed_Value function;
+	Call_Argument_Value *arguments;
 } Array_Access_Data;
 
 typedef struct {
@@ -236,6 +237,7 @@ typedef struct {
 typedef struct {
 	Value type;
 	Typed_Value function;
+	Call_Argument_Value *arguments;
 } Binary_Operator_Data;
 
 typedef struct {

@@ -927,15 +927,10 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 	Array_Access_Data array_access_data = get_data(&state->context, node)->array_access;
 
 	if (array_access_data.function.value.value != NULL) {
-		Call_Argument_Value *arguments = NULL;
-		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = array_access.parent }));
-		arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = array_access.index }));
-
 		if (array_access.assign_value != NULL) {
-			arrpush(arguments, ((Call_Argument_Value) { .kind = CALL_ARGUMENT_NODE, .node = array_access.assign_value }));
-			return generate_call_generic(generate_value(array_access_data.function.value.value, array_access_data.function.type.value, state), array_access_data.function.type.value, arguments, state);
+			return generate_call_generic(generate_value(array_access_data.function.value.value, array_access_data.function.type.value, state), array_access_data.function.type.value, array_access_data.arguments, state);
 		} else {
-			return generate_call_generic(generate_value(array_access_data.function.value.value, array_access_data.function.type.value, state), array_access_data.function.type.value, arguments, state);
+			return generate_call_generic(generate_value(array_access_data.function.value.value, array_access_data.function.type.value, state), array_access_data.function.type.value, array_access_data.arguments, state);
 		}
 	}
 

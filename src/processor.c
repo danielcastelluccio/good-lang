@@ -977,7 +977,11 @@ Resolve_Static_Arguments_Result resolve_static_arguments(Context *context, Node 
 				Pattern_Match_Result result = {};
 				pattern_match(function_arguments[argument].type, data->type, context, inferred_arguments, &result);
 
-				assert(hmlen(result) == arrlen(used_inferred_arguments));
+				if (hmlen(result) != arrlen(used_inferred_arguments)) {
+					return (Resolve_Static_Arguments_Result) {
+						.function_node = NULL
+					};
+				}
 
 				for (long j = 0; j < arrlen(used_inferred_arguments); j++) {
 					Typed_Value value = hmget(result, sv_hash(used_inferred_arguments[j]));
@@ -1122,6 +1126,10 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 	Function_Argument_Value *function_argument_values = NULL;
 	if (function_value.value->tag == FUNCTION_STUB_VALUE) {
 		Resolve_Static_Arguments_Result result = resolve_static_arguments(context, define.node, function_value, call_arguments);
+
+		if (result.function_node == NULL) {
+			return false;
+		}
 
 		Scope *saved_scopes = context->scopes;
 		context->scopes = result.function_scopes;
@@ -1281,7 +1289,7 @@ static Typed_Value lookup_resolve_define(Context *context, Value module_value, N
 }
 
 typedef struct {
-	Value function;
+	Typed_Value function;
 	Call_Argument_Value *arguments;
 } Process_Call_Generic_Result;
 
@@ -1337,7 +1345,7 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 	}
 
 	return (Process_Call_Generic_Result) {
-		.function = function_value,
+		.function = (Typed_Value) { .value = function_value, .type = *function_type },
 		.arguments = call_argument_values
 	};
 }
@@ -1372,7 +1380,7 @@ void add_module(Context *context, char *path, Value value) {
 	arrpush(context->cached_files, file);
 }
 
-Typed_Value resolve_op(Context *context, Node *node, String_View operator_name, Call_Argument *call_arguments) {
+Process_Call_Generic_Result resolve_op(Context *context, Node *node, String_View operator_name, Call_Argument *call_arguments) {
 	Temporary_Context saved_temporary_context = context->temporary_context;
 
 	context->temporary_context = (Temporary_Context) {
@@ -1391,17 +1399,14 @@ Typed_Value resolve_op(Context *context, Node *node, String_View operator_name, 
 		handle_semantic_error(context, node->location, "Operator '%.*s' not found", (int) operator_name.len, operator_name.ptr);
 	}
 
-	Process_Call_Generic_Result result = process_call_generic(context, node, typed_value.value, &typed_value.type, call_arguments);
-	typed_value.value = result.function;
-
-	return typed_value;
+	return process_call_generic(context, node, typed_value.value, &typed_value.type, call_arguments);
 }
 
 static Node_Data *process_array_access(Context *context, Node *node) {
 	Array_Access_Node array_access = node->array_access;
 
 	Value raw_array_type = process_node(context, array_access.parent)->type;
-	if (array_access.assign_value != NULL || (context->temporary_context.want_pointer && raw_array_type.value->tag == ARRAY_TYPE_VALUE) || (raw_array_type.value->tag != ARRAY_TYPE_VALUE && raw_array_type.value->tag != ARRAY_VIEW_TYPE_VALUE && raw_array_type.value->tag != STRING_TYPE_VALUE)) {
+	if (array_access.assign_value != NULL || (context->temporary_context.want_pointer && raw_array_type.value->tag == ARRAY_TYPE_VALUE)) {
 		raw_array_type = process_enforce_pointer(context, array_access.parent, raw_array_type);
 	}
 
@@ -1422,9 +1427,13 @@ static Node_Data *process_array_access(Context *context, Node *node) {
 		if (array_access.assign_value != NULL) {
 			arrpush(call_arguments, ((Call_Argument) { .node = array_access.assign_value }));
 
-			data->array_access.function = resolve_op(context, node, cstr_to_sv("[]="), call_arguments);
+			Process_Call_Generic_Result result = resolve_op(context, node, cstr_to_sv("[]="), call_arguments);
+			data->array_access.function = result.function;
+			data->array_access.arguments = result.arguments;
 		} else {
-			data->array_access.function = resolve_op(context, node, cstr_to_sv("[]"), call_arguments);
+			Process_Call_Generic_Result result = resolve_op(context, node, cstr_to_sv("[]"), call_arguments);
+			data->array_access.function = result.function;
+			data->array_access.arguments = result.arguments;
 			data->type = data->array_access.function.value.value->function.type->function_type.return_type;
 		}
 		return data;
@@ -1583,7 +1592,9 @@ static Node_Data *process_binary_op(Context *context, Node *node) {
 		arrpush(call_arguments, ((Call_Argument) { .node = binary_operator.right }));
 
 		String_View operator_name = cstr_to_sv(get_operator_name(binary_operator.operator));
-		data->binary_operator.function = resolve_op(context, node, operator_name, call_arguments);
+		Process_Call_Generic_Result result = resolve_op(context, node, operator_name, call_arguments);
+		data->binary_operator.function = result.function;
+		data->binary_operator.arguments = result.arguments;
 	}
 
 	Value result_type = {};
@@ -1772,7 +1783,7 @@ static Node_Data *process_call(Context *context, Node *node) {
 		function_value = evaluate(context, call.function);
 	}
 	Process_Call_Generic_Result call_generic_result = process_call_generic(context, node, function_value, &function_type, call.arguments);
-	function_value = call_generic_result.function;
+	function_value = call_generic_result.function.value;
 
 	data->call.function_type = function_type;
 	data->call.function_value = function_value;

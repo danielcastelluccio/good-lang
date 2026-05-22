@@ -31,3 +31,7 @@ as_view :: fn (array: Dynamic_Array($T)) -> []T {
 	result.len = array.len;
 	return result;
 }
+
+op [] :: fn (array: Dynamic_Array($T), index: int) -> T {
+	return array.data[index];
+}
