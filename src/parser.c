@@ -820,11 +820,31 @@ static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 }
 
 static Node *parse_assign(Lexer *lexer, Node *target, bool static_) {
-	lexer_consume(lexer);
+	Token_Kind token_kind = lexer_consume(lexer).kind;
+	Assign_Kind kind;
+	switch (token_kind) {
+		case EQUALS:
+			kind = ASSIGN_STANDARD;
+			break;
+		case PLUS_EQUALS:
+			kind = ASSIGN_COMPOUND_ADD;
+			break;
+		case MINUS_EQUALS:
+			kind = ASSIGN_COMPOUND_SUBTRACT;
+			break;
+		case ASTERISK_EQUALS:
+			kind = ASSIGN_COMPOUND_MULTIPLY;
+			break;
+		case SLASH_EQUALS:
+			kind = ASSIGN_COMPOUND_DIVIDE;
+			break;
+		default:
+			assert(false);
+	}
 
 	Node *assign_value = parse_expression(lexer);
 
-	set_assign_value(target, assign_value, static_);
+	set_assign_value(target, assign_value, kind, static_);
 	return target;
 }
 
@@ -1426,6 +1446,10 @@ static Node *parse_statement(Lexer *lexer) {
 				result = parse_assign(lexer, result, true);
 				break;
 			case EQUALS:
+			case PLUS_EQUALS:
+			case MINUS_EQUALS:
+			case ASTERISK_EQUALS:
+			case SLASH_EQUALS:
 				result = parse_assign(lexer, result, false);
 				break;
 			default:

@@ -20,10 +20,13 @@ typedef struct {
 	Node *type;
 } Structure_Member;
 
-typedef struct {
-	String_View name;
-	Node *function;
-} Operator_Overload;
+typedef enum {
+	ASSIGN_STANDARD,
+	ASSIGN_COMPOUND_ADD,
+	ASSIGN_COMPOUND_SUBTRACT,
+	ASSIGN_COMPOUND_MULTIPLY,
+	ASSIGN_COMPOUND_DIVIDE
+} Assign_Kind;
 
 // Node Types
 
@@ -31,6 +34,7 @@ typedef struct {
 	Node *parent;
 	Node *index;
 	Node *assign_value;
+	Assign_Kind assign_kind;
 } Array_Access_Node;
 
 typedef struct {
@@ -117,11 +121,13 @@ typedef struct {
 typedef struct {
 	Node *node;
 	Node *assign_value;
+	Assign_Kind assign_kind;
 } Deoptional_Node;
 
 typedef struct {
 	Node *node;
 	Node *assign_value;
+	Assign_Kind assign_kind;
 } Dereference_Node;
 
 typedef struct {
@@ -170,6 +176,7 @@ typedef struct {
 typedef struct {
 	String_View value;
 	Node *assign_value;
+	Assign_Kind assign_kind;
 	bool assign_static;
 	bool polymorphic;
 } Identifier_Node;
@@ -224,6 +231,7 @@ typedef struct {
 	} kind;
 	Node **inputs; // stb_ds
 	Node *assign_value;
+	Assign_Kind assign_kind;
 	bool assign_static;
 } Internal_Node;
 
@@ -322,6 +330,7 @@ typedef struct {
 	Node *parent;
 	String_View name;
 	Node *assign_value;
+	Assign_Kind assign_kind;
 } Structure_Access_Node;
 
 typedef struct {
@@ -479,6 +488,6 @@ struct Node {
 
 Node *ast_new(Node_Kind kind, Source_Location location);
 
-void set_assign_value(Node *node, Node *assign_value, bool static_);
+void set_assign_value(Node *node, Node *assign_value, Assign_Kind assign_kind, bool static_);
 
 #endif

@@ -325,6 +325,57 @@ static LLVMValueRef generate_call(Node *node, State *state) {
 	}
 }
 
+static bool is_type_signed(Value_Data *type) {
+	switch (type->tag) {
+		case INTEGER_TYPE_VALUE: {
+			return type->integer_type.signed_;
+		}
+		default:
+			assert(false);
+			return NULL;
+	}
+}
+
+static bool is_type_float(Value_Data *type) {
+	if (type->tag == FLOAT_TYPE_VALUE) return true;
+	return false;
+}
+
+static LLVMValueRef generate_op(Binary_Op_Node_Kind kind, Value type, LLVMValueRef left_value, LLVMValueRef right_value, State *state) {
+	switch (kind) {
+		case OP_ADD:
+			if (is_type_float(type.value)) {
+				return LLVMBuildFAdd(state->llvm_builder, left_value, right_value, "");
+			} else {
+				return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
+			}
+		case OP_SUBTRACT:
+			if (is_type_float(type.value)) {
+				return LLVMBuildFSub(state->llvm_builder, left_value, right_value, "");
+			} else {
+				return LLVMBuildSub(state->llvm_builder, left_value, right_value, "");
+			}
+		case OP_MULTIPLY:
+			if (is_type_float(type.value)) {
+				return LLVMBuildFMul(state->llvm_builder, left_value, right_value, "");
+			} else {
+				return LLVMBuildMul(state->llvm_builder, left_value, right_value, "");
+			}
+		case OP_DIVIDE:
+			if (is_type_float(type.value)) {
+				return LLVMBuildFDiv(state->llvm_builder, left_value, right_value, "");
+			} else {
+				if (is_type_signed(type.value)) {
+					return LLVMBuildSDiv(state->llvm_builder, left_value, right_value, "");
+				} else {
+					return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
+				}
+			}
+		default:
+			assert(false);
+	}
+}
+
 static LLVMValueRef generate_identifier(Node *node, State *state) {
 	assert(node->kind == IDENTIFIER_NODE);
 	Identifier_Node identifier = node->identifier;
@@ -332,11 +383,41 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 	Node_Data *identifier_data = get_data(&state->context, node);
 	switch (identifier_data->identifier.kind) {
 		case IDENTIFIER_VARIABLE: {
-			Node *variable = get_data(&state->context, node)->identifier.variable;
+			Node *variable = identifier_data->identifier.variable;
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable);
 			if (identifier.assign_value != NULL) {
 				if (!identifier.assign_static) {
-					LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
+					switch (identifier.assign_kind) {
+						case ASSIGN_STANDARD:
+							LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
+							break;
+						case ASSIGN_COMPOUND_ADD:
+						case ASSIGN_COMPOUND_SUBTRACT:
+						case ASSIGN_COMPOUND_MULTIPLY:
+						case ASSIGN_COMPOUND_DIVIDE: {
+							Binary_Op_Node_Kind kind;
+							switch (identifier.assign_kind) {
+								case ASSIGN_COMPOUND_ADD:
+									kind = OP_ADD;
+									break;
+								case ASSIGN_COMPOUND_SUBTRACT:
+									kind = OP_SUBTRACT;
+									break;
+								case ASSIGN_COMPOUND_MULTIPLY:
+									kind = OP_MULTIPLY;
+									break;
+								case ASSIGN_COMPOUND_DIVIDE:
+									kind = OP_DIVIDE;
+									break;
+								default:
+									assert(false);
+							}
+
+							return LLVMBuildStore(state->llvm_builder, generate_op(kind, identifier_data->identifier.type, LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type.value, state), variable_llvm_value, ""), generate_node(identifier.assign_value, state), state), variable_llvm_value);
+						}
+						default:
+							assert(false);
+					}
 				}
 				return NULL;
 			} else {
@@ -932,22 +1013,6 @@ static LLVMValueRef generate_array_access(Node *node, State *state) {
 	return NULL;
 }
 
-static bool is_type_signed(Value_Data *type) {
-	switch (type->tag) {
-		case INTEGER_TYPE_VALUE: {
-			return type->integer_type.signed_;
-		}
-		default:
-			assert(false);
-			return NULL;
-	}
-}
-
-static bool is_type_float(Value_Data *type) {
-	if (type->tag == FLOAT_TYPE_VALUE) return true;
-	return false;
-}
-
 static LLVMValueRef values_equal(Value_Data *type, LLVMValueRef value1, LLVMValueRef value2, State *state) {
 	switch (type->tag) {
 		case BYTE_TYPE_VALUE: {
@@ -1061,33 +1126,10 @@ static LLVMValueRef generate_binary_op(Node *node, State *state) {
 				return LLVMBuildICmp(state->llvm_builder, LLVMIntUGE, left_value, right_value, "");
 			}
 		case OP_ADD:
-			if (is_type_float(binary_operator_data.type.value)) {
-				return LLVMBuildFAdd(state->llvm_builder, left_value, right_value, "");
-			} else {
-				return LLVMBuildAdd(state->llvm_builder, left_value, right_value, "");
-			}
 		case OP_SUBTRACT:
-			if (is_type_float(binary_operator_data.type.value)) {
-				return LLVMBuildFSub(state->llvm_builder, left_value, right_value, "");
-			} else {
-				return LLVMBuildSub(state->llvm_builder, left_value, right_value, "");
-			}
 		case OP_MULTIPLY:
-			if (is_type_float(binary_operator_data.type.value)) {
-				return LLVMBuildFMul(state->llvm_builder, left_value, right_value, "");
-			} else {
-				return LLVMBuildMul(state->llvm_builder, left_value, right_value, "");
-			}
 		case OP_DIVIDE:
-			if (is_type_float(binary_operator_data.type.value)) {
-				return LLVMBuildFDiv(state->llvm_builder, left_value, right_value, "");
-			} else {
-				if (is_type_signed(binary_operator_data.type.value)) {
-					return LLVMBuildSDiv(state->llvm_builder, left_value, right_value, "");
-				} else {
-					return LLVMBuildUDiv(state->llvm_builder, left_value, right_value, "");
-				}
-			}
+			return generate_op(binary_operator.operator, binary_operator_data.type, left_value, right_value, state);
 		case OP_MODULUS:
 			if (is_type_float(binary_operator_data.type.value)) {
 				return LLVMBuildFRem(state->llvm_builder, left_value, right_value, "");

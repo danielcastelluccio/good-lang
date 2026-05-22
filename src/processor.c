@@ -2199,6 +2199,15 @@ static Node_Data *process_global(Context *context, Node *node) {
 	return data;
 }
 
+static void process_assign(Context *context, Node *node, Value type, Node *assign_value, Assign_Kind assign_kind) {
+	(void) assign_kind;
+	Temporary_Context temporary_context = { .wanted_type = type };
+	Value value_type = process_node_context(context, temporary_context, assign_value)->type;
+	if (!type_assignable(type.value, value_type.value)) {
+		handle_expected_type_error(context, node, type, value_type);
+	}
+}
+
 static Node_Data *process_identifier(Context *context, Node *node) {
 	Identifier_Node identifier = node->identifier;
 
@@ -2254,11 +2263,7 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 			}
 
 			if (identifier.assign_value != NULL) {
-				Temporary_Context temporary_context = { .wanted_type = type };
-				Value value_type = process_node_context(context, temporary_context, identifier.assign_value)->type;
-				if (!type_assignable(type.value, value_type.value)) {
-					handle_expected_type_error(context, node, type, value_type);
-				}
+				process_assign(context, node, type, identifier.assign_value, identifier.assign_kind);
 			}
 			break;
 		}
@@ -2296,11 +2301,7 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 			type = lookup_result.type;
 
 			if (identifier.assign_value != NULL) {
-				Temporary_Context temporary_context = { .wanted_type = type };
-				Value value_type = process_node_context(context, temporary_context, identifier.assign_value)->type;
-				if (!type_assignable(type.value, value_type.value)) {
-					handle_expected_type_error(context, node, type, value_type);
-				}
+				process_assign(context, node, type, identifier.assign_value, identifier.assign_kind);
 
 				if (identifier.assign_static) {
 					hmput(context->static_variables, lookup_result.static_variable.node_data, evaluate(context, identifier.assign_value));
@@ -2732,7 +2733,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			data->internal.node = parse_source_statement(context->data, source_string, index, node->location.path_ref, node->location.row, node->location.column);
 
 			if (internal.assign_value != NULL) {
-				set_assign_value(data->internal.node, internal.assign_value, internal.assign_static);
+				set_assign_value(data->internal.node, internal.assign_value, internal.assign_kind, internal.assign_static);
 			}
 
 			Temporary_Context temporary_context = context->temporary_context;

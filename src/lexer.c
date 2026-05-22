@@ -224,6 +224,11 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(EXCLAMATION, lexer);
 			break;
 		case '*':
+			if (lexer->source[lexer->position] == '=') {
+				result = create_token(ASTERISK_EQUALS, lexer);
+				increment_position(lexer);
+				break;
+			}
 			result = create_token(ASTERISK, lexer);
 			break;
 		case '^':
@@ -238,9 +243,19 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 			result = create_token(QUESTION, lexer);
 			break;
 		case '+':
+			if (lexer->source[lexer->position] == '=') {
+				result = create_token(PLUS_EQUALS, lexer);
+				increment_position(lexer);
+				break;
+			}
 			result = create_token(PLUS, lexer);
 			break;
 		case '/':
+			if (lexer->source[lexer->position] == '=') {
+				result = create_token(SLASH_EQUALS, lexer);
+				increment_position(lexer);
+				break;
+			}
 			result = create_token(SLASH, lexer);
 			break;
 		case '&':
@@ -406,6 +421,11 @@ Token_Data lexer_next(Lexer *lexer, bool advance) {
 						result = create_token(MINUS_ARROW, lexer);
 						break;
 					}
+					if (lexer->source[lexer->position] == '=') {
+						result = create_token(MINUS_EQUALS, lexer);
+						increment_position(lexer);
+						break;
+					}
 					result = create_token(MINUS, lexer);
 				}
 				break;
@@ -502,6 +522,8 @@ char *token_to_string(Token_Kind kind) {
 			return "=";
 		case ASTERISK:
 			return "*";
+		case ASTERISK_EQUALS:
+			return "*=";
 		case CARET:
 			return "^";
 		case QUESTION:
@@ -510,12 +532,18 @@ char *token_to_string(Token_Kind kind) {
 			return "??";
 		case PLUS:
 			return "+";
+		case PLUS_EQUALS:
+			return "+=";
 		case MINUS:
 			return "-";
 		case MINUS_ARROW:
 			return "->";
+		case MINUS_EQUALS:
+			return "-=";
 		case SLASH:
 			return "/";
+		case SLASH_EQUALS:
+			return "/=";
 		case AMPERSAND:
 			return "&";
 		case AT:
