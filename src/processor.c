@@ -2500,6 +2500,10 @@ static Node_Data *process_import(Context *context, Node *node) {
 		char *new_source = malloc(strlen(cwd) + 32);
 		sprintf(new_source, "%s/modules/%s.lang", cwd, source);
 
+		if (access(new_source, F_OK) != 0) {
+			sprintf(new_source, "%s/modules/%s/module.lang", cwd, source);
+		}
+
 		Node *file_node = parse_file(context->data, new_source);
 
 		Scope *saved_scopes = context->scopes;
