@@ -819,7 +819,7 @@ static Node *parse_array_access_or_slice(Lexer *lexer, Node *array) {
 	}
 }
 
-static Node *parse_assign(Lexer *lexer, Node *target, bool static_) {
+static Node *parse_assign(Lexer *lexer, Node *target) {
 	Token_Kind token_kind = lexer_consume(lexer).kind;
 	Assign_Kind kind;
 	switch (token_kind) {
@@ -844,7 +844,7 @@ static Node *parse_assign(Lexer *lexer, Node *target, bool static_) {
 
 	Node *assign_value = parse_expression(lexer);
 
-	set_assign_value(target, assign_value, kind, static_);
+	set_assign_value(target, assign_value, kind);
 	return target;
 }
 
@@ -1441,16 +1441,12 @@ static Node *parse_statement(Lexer *lexer) {
 	while (operating) {
 		Token_Data next = lexer_peek(lexer);
 		switch (next.kind) {
-			case DOLLAR:
-				lexer_consume(lexer);
-				result = parse_assign(lexer, result, true);
-				break;
 			case EQUALS:
 			case PLUS_EQUALS:
 			case MINUS_EQUALS:
 			case ASTERISK_EQUALS:
 			case SLASH_EQUALS:
-				result = parse_assign(lexer, result, false);
+				result = parse_assign(lexer, result);
 				break;
 			default:
 				operating = false;

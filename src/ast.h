@@ -177,7 +177,6 @@ typedef struct {
 	String_View value;
 	Node *assign_value;
 	Assign_Kind assign_kind;
-	bool assign_static;
 	bool polymorphic;
 } Identifier_Node;
 
@@ -488,6 +487,6 @@ struct Node {
 
 Node *ast_new(Node_Kind kind, Source_Location location);
 
-void set_assign_value(Node *node, Node *assign_value, Assign_Kind assign_kind, bool static_);
+void set_assign_value(Node *node, Node *assign_value, Assign_Kind assign_kind);
 
 #endif

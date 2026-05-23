@@ -386,38 +386,36 @@ static LLVMValueRef generate_identifier(Node *node, State *state) {
 			Node *variable = identifier_data->identifier.variable;
 			LLVMValueRef variable_llvm_value = hmget(state->variables, variable);
 			if (identifier.assign_value != NULL) {
-				if (!identifier.assign_static) {
-					switch (identifier.assign_kind) {
-						case ASSIGN_STANDARD:
-							LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
-							break;
-						case ASSIGN_COMPOUND_ADD:
-						case ASSIGN_COMPOUND_SUBTRACT:
-						case ASSIGN_COMPOUND_MULTIPLY:
-						case ASSIGN_COMPOUND_DIVIDE: {
-							Binary_Op_Node_Kind kind;
-							switch (identifier.assign_kind) {
-								case ASSIGN_COMPOUND_ADD:
-									kind = OP_ADD;
-									break;
-								case ASSIGN_COMPOUND_SUBTRACT:
-									kind = OP_SUBTRACT;
-									break;
-								case ASSIGN_COMPOUND_MULTIPLY:
-									kind = OP_MULTIPLY;
-									break;
-								case ASSIGN_COMPOUND_DIVIDE:
-									kind = OP_DIVIDE;
-									break;
-								default:
-									assert(false);
-							}
-
-							return LLVMBuildStore(state->llvm_builder, generate_op(kind, identifier_data->identifier.type, LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type.value, state), variable_llvm_value, ""), generate_node(identifier.assign_value, state), state), variable_llvm_value);
+				switch (identifier.assign_kind) {
+					case ASSIGN_STANDARD:
+						LLVMBuildStore(state->llvm_builder, generate_node(identifier.assign_value, state), variable_llvm_value);
+						break;
+					case ASSIGN_COMPOUND_ADD:
+					case ASSIGN_COMPOUND_SUBTRACT:
+					case ASSIGN_COMPOUND_MULTIPLY:
+					case ASSIGN_COMPOUND_DIVIDE: {
+						Binary_Op_Node_Kind kind;
+						switch (identifier.assign_kind) {
+							case ASSIGN_COMPOUND_ADD:
+								kind = OP_ADD;
+								break;
+							case ASSIGN_COMPOUND_SUBTRACT:
+								kind = OP_SUBTRACT;
+								break;
+							case ASSIGN_COMPOUND_MULTIPLY:
+								kind = OP_MULTIPLY;
+								break;
+							case ASSIGN_COMPOUND_DIVIDE:
+								kind = OP_DIVIDE;
+								break;
+							default:
+								assert(false);
 						}
-						default:
-							assert(false);
+
+						return LLVMBuildStore(state->llvm_builder, generate_op(kind, identifier_data->identifier.type, LLVMBuildLoad2(state->llvm_builder, create_llvm_type(identifier_data->identifier.type.value, state), variable_llvm_value, ""), generate_node(identifier.assign_value, state), state), variable_llvm_value);
 					}
+					default:
+						assert(false);
 				}
 				return NULL;
 			} else {

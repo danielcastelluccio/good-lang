@@ -16,11 +16,11 @@ print :: fn (printer: *Printer, $fmt: string, args: $T) {
 				}
 
 				print_value(printer, embed("args._", cast(byte) argument_index + 48));
-				argument_index $= argument_index + 1;
+				argument_index = argument_index + 1;
 			} else {
 				print_char(printer, fmt[i]);
 			}
-			i $= i + 1;
+			i = i + 1;
 		}
 	} else {
 		compile_error("Need tuple as argument");

@@ -2311,12 +2311,13 @@ static Node_Data *process_identifier(Context *context, Node *node) {
 		case LOOKUP_RESULT_STATIC_VARIABLE: {
 			type = lookup_result.type;
 
+			data->identifier.kind = IDENTIFIER_STATIC_VARIABLE;
+			data->identifier.static_variable = lookup_result.static_variable;
+
 			if (identifier.assign_value != NULL) {
 				process_assign(context, node, type, identifier.assign_value, identifier.assign_kind);
 
-				if (identifier.assign_static) {
-					hmput(context->static_variables, lookup_result.static_variable.node_data, evaluate(context, identifier.assign_value));
-				}
+				hmput(context->static_variables, lookup_result.static_variable.node_data, evaluate(context, identifier.assign_value));
 			} else {
 				value = hmget(context->static_variables, lookup_result.static_variable.node_data);
 			}
@@ -2744,7 +2745,7 @@ static Node_Data *process_internal(Context *context, Node *node) {
 			data->internal.node = parse_source_statement(context->data, source_string, index, node->location.path_ref, node->location.row, node->location.column);
 
 			if (internal.assign_value != NULL) {
-				set_assign_value(data->internal.node, internal.assign_value, internal.assign_kind, internal.assign_static);
+				set_assign_value(data->internal.node, internal.assign_value, internal.assign_kind);
 			}
 
 			Temporary_Context temporary_context = context->temporary_context;
