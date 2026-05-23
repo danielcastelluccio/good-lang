@@ -319,10 +319,10 @@ typedef struct {
 typedef struct {
 	String_View identifier;
 	Node *node;
-} Structure_Member_Value;
+} Structure_Argument;
 
 typedef struct {
-	Structure_Member_Value *values; // stb_ds
+	Structure_Argument *values; // stb_ds
 } Structure_Node;
 
 typedef struct {

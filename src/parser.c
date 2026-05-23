@@ -114,15 +114,19 @@ static Node *parse_structure(Lexer *lexer) {
 
 	if (lexer_peek(lexer).kind != CURLY_BRACE_CLOSED) {
 		while (true) {
-			Structure_Member_Value item_value = {};
+			String_View identifier = {};
+			Node *argument = parse_expression(lexer);
 
-			if (lexer_peek(lexer).kind == PERIOD) {
+			if (lexer_peek(lexer).kind == EQUALS) {
+				identifier = argument->identifier.value;
 				lexer_consume(lexer);
-				item_value.identifier = lexer_consume_check(lexer, IDENTIFIER).string;
-				lexer_consume_check(lexer, EQUALS);
+				argument = parse_expression(lexer);
 			}
 
-			item_value.node = parse_expression(lexer);
+			Structure_Argument item_value = {
+				.node = argument,
+				.identifier = identifier
+			};
 			arrpush(structure->structure.values, item_value);
 
 			Token_Data token = lexer_peek(lexer);

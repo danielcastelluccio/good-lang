@@ -103,6 +103,7 @@ typedef struct {
 
 typedef struct {
 	Value type;
+	Node **arguments;
 } Structure_Data;
 
 typedef struct {

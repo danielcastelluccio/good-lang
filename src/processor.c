@@ -803,14 +803,11 @@ static Node **order_call_args(Node *function_type_node, Call_Argument *call_argu
 	Node **call_arguments_rearranged = NULL;
 	arrsetlen(call_arguments_rearranged, arrlen(function_type_node->function_type.arguments));
 
-	long int index = 0;
 	for (long int i = 0; i < arrlen(function_type_node->function_type.arguments); i++) {
-		call_arguments_rearranged[index] = NULL;
-
-		index++;
+		call_arguments_rearranged[i] = NULL;
 	}
 
-	index = 0;
+	long int index = 0;
 	for (long int i = 0; i < arrlen(call_arguments); i++) {
 		if (call_arguments[i].identifier.ptr != NULL) {
 			for (long int j = 0; j < arrlen(function_type_node->function_type.arguments); j++) {
@@ -913,7 +910,7 @@ typedef struct {
 	Scope *function_scopes;
 } Resolve_Static_Arguments_Result;
 
-Resolve_Static_Arguments_Result resolve_static_arguments(Context *context, Node *node, Value function_value, Node **call_arguments) {
+Resolve_Static_Arguments_Result resolve_static_arguments(Context *context, Value function_value, Node **call_arguments) {
 	assert(function_value.value->tag == FUNCTION_STUB_VALUE);
 
 	Scope *function_scopes = NULL;
@@ -938,7 +935,7 @@ Resolve_Static_Arguments_Result resolve_static_arguments(Context *context, Node 
 
 	size_t *arguments_order = get_arguments_order(function_arguments);
 
-	arrpush(function_scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = 0 }));
+	arrpush(function_scopes, ((Scope) { .node = function_stub_node, .has_static_id = true, .static_id = 0 }));
 
 	Value *static_arguments = NULL;
 	for (long i = 0; i < argument_count; i++) {
@@ -1013,11 +1010,10 @@ Resolve_Static_Arguments_Result resolve_static_arguments(Context *context, Node 
 	};
 }
 
-// TODO: node just shouldn't be an argument
-void resolve_function_stub(Context *context, Node *node, Value *function_value, Value *function_type, Node **call_arguments) {
+void resolve_function_stub(Context *context, Value *function_value, Value *function_type, Node **call_arguments) {
 	bool compile_only_parent = context->compile_only;
 
-	Resolve_Static_Arguments_Result result = resolve_static_arguments(context, node, *function_value, call_arguments);
+	Resolve_Static_Arguments_Result result = resolve_static_arguments(context, *function_value, call_arguments);
 	Node *function_node = result.function_node;
 	Node *function_stub_node = result.function_stub_node;
 	Value *static_arguments = result.static_arguments;
@@ -1054,7 +1050,7 @@ void resolve_function_stub(Context *context, Node *node, Value *function_value, 
 	if (!found_match) {
 		size_t new_static_id = ++function_node->function.static_id_counter;
 
-		arrpush(context->scopes, ((Scope) { .node = node, .has_static_id = true, .static_id = new_static_id }));
+		arrpush(context->scopes, ((Scope) { .node = function_node, .has_static_id = true, .static_id = new_static_id }));
 		arrlast(context->scopes).identifiers = identifiers;
 
 		*function_type = process_function(context, function_node)->type;
@@ -1125,7 +1121,7 @@ static bool is_valid_overload(Context *context, Define_Scope define) {
 
 	Function_Argument_Value *function_argument_values = NULL;
 	if (function_value.value->tag == FUNCTION_STUB_VALUE) {
-		Resolve_Static_Arguments_Result result = resolve_static_arguments(context, define.node, function_value, call_arguments);
+		Resolve_Static_Arguments_Result result = resolve_static_arguments(context, function_value, call_arguments);
 
 		if (result.function_node == NULL) {
 			return false;
@@ -1314,7 +1310,7 @@ static Process_Call_Generic_Result process_call_generic(Context *context, Node *
 	}
 
 	if (function_value.value != NULL && function_value.value->tag == FUNCTION_STUB_VALUE) {
-		resolve_function_stub(context, node, &function_value, function_type, call_arguments);
+		resolve_function_stub(context, &function_value, function_type, call_arguments);
 	}
 
 	if (function_type->value->tag != FUNCTION_TYPE_VALUE) {
@@ -3506,6 +3502,48 @@ static Node_Data *process_struct_type(Context *context, Node *node) {
 	return data;
 }
 
+static Node **order_structure_args(Value structure_type, Structure_Argument *structure_arguments) {
+	Structure_Member *members = NULL;
+	Node **structure_arguments_rearranged = NULL;
+
+	if (structure_type.value != NULL) {
+		switch (structure_type.value->tag) {
+			case STRUCT_TYPE_VALUE: {
+				members = structure_type.value->struct_type.node->struct_type.members;
+				break;
+			}
+			default:
+				assert(false);
+		}
+
+		arrsetlen(structure_arguments_rearranged, arrlen(structure_type.value->struct_type.members));
+	} else {
+		arrsetlen(structure_arguments_rearranged, arrlen(structure_arguments));
+	}
+
+	for (long int i = 0; i < arrlen(members); i++) {
+		structure_arguments_rearranged[i] = NULL;
+	}
+
+	for (long int i = 0; i < arrlen(structure_arguments); i++) {
+		long int index = i;
+		if (structure_type.value != NULL) {
+			if (structure_arguments[i].identifier.ptr != NULL) {
+				for (long int j = 0; j < arrlen(members); j++) {
+					if (sv_eq(structure_arguments[i].identifier, members[j].name)) {
+						index = j;
+						break;
+					}
+				}
+			}
+		}
+
+		structure_arguments_rearranged[index] = structure_arguments[i].node;
+	}
+
+	return structure_arguments_rearranged;
+}
+
 static Node_Data *process_structure(Context *context, Node *node) {
 	Structure_Node structure = node->structure;
 
@@ -3521,7 +3559,9 @@ static Node_Data *process_structure(Context *context, Node *node) {
 		handle_semantic_error(context, node->location, "Incorrect member count in struct literal");
 	}
 
-	for (long int i = 0; i < arrlen(structure.values); i++) {
+	Node **arguments = order_structure_args(wanted_type, structure.values);
+
+	for (long int i = 0; i < arrlen(arguments); i++) {
 		Value item_wanted_type = {};
 		if (wanted_type.value != NULL) {
 			switch (wanted_type.value->tag) {
@@ -3536,22 +3576,10 @@ static Node_Data *process_structure(Context *context, Node *node) {
 					item_wanted_type = wanted_type.value->array_type.inner;
 					break;
 				case TAGGED_UNION_TYPE_VALUE:
-					for (long int j = 0; j < arrlen(wanted_type.value->tagged_union_type.items); j++) {
-						if (sv_eq(wanted_type.value->tagged_union_type.items[j].identifier, structure.values[i].identifier)) {
-							item_wanted_type = wanted_type.value->tagged_union_type.items[j].type;
-							break;
-						}
-					}
-					assert(item_wanted_type.value != NULL);
+					item_wanted_type = wanted_type.value->tagged_union_type.items[i].type;
 					break;
 				case UNION_TYPE_VALUE:
-					for (long int j = 0; j < arrlen(wanted_type.value->union_type.items); j++) {
-						if (sv_eq(wanted_type.value->union_type.items[j].identifier, structure.values[i].identifier)) {
-							item_wanted_type = wanted_type.value->union_type.items[j].type;
-							break;
-						}
-					}
-					assert(item_wanted_type.value != NULL);
+					item_wanted_type = wanted_type.value->union_type.items[i].type;
 					break;
 				default:
 					assert(false);
@@ -3559,7 +3587,7 @@ static Node_Data *process_structure(Context *context, Node *node) {
 		}
 
 		Temporary_Context temporary_context = { .wanted_type = item_wanted_type };
-		Value value_type = process_node_context(context, temporary_context, structure.values[i].node)->type;
+		Value value_type = process_node_context(context, temporary_context, arguments[i])->type;
 
 		if (wanted_type.value == NULL) {
 			arrpush(result_type.value->tuple_type.members, value_type);
@@ -3568,6 +3596,7 @@ static Node_Data *process_structure(Context *context, Node *node) {
 
 	Node_Data *data = context->temporary_context.data;
 	data->structure.type = result_type;
+	data->structure.arguments = arguments;
 	data->type = result_type;
 	return data;
 }

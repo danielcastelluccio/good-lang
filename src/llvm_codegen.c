@@ -556,16 +556,16 @@ static LLVMValueRef generate_boolean(Node *node, State *state) {
 
 static LLVMValueRef generate_structure(Node *node, State *state) {
 	assert(node->kind == STRUCTURE_NODE);
-	Structure_Node structure = node->structure;
+	Structure_Data structure_data = get_data(&state->context, node)->structure;
 
-	Value_Data *type = get_data(&state->context, node)->structure.type.value;
+	Value_Data *type = structure_data.type.value;
 
 	switch (type->tag) {
 		case STRUCT_TYPE_VALUE: {
 			LLVMValueRef struct_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
 			for (long int i = 0; i < arrlen(type->struct_type.members); i++) {
 				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), struct_value, i, "");
-				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i].node, state), item_pointer);
+				LLVMBuildStore(state->llvm_builder, generate_node(structure_data.arguments[i], state), item_pointer);
 			}
 
 			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), struct_value, "");
@@ -574,9 +574,7 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 			LLVMValueRef struct_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
 			for (long int i = 0; i < arrlen(type->tuple_type.members); i++) {
 				LLVMValueRef item_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), struct_value, i, "");
-				LLVMValueRef v = generate_node(structure.values[i].node, state);
-				Node_Data *d = get_data(&state->context, structure.values[i].node);
-				(void) d;
+				LLVMValueRef v = generate_node(structure_data.arguments[i], state);
 				LLVMBuildStore(state->llvm_builder, v, item_pointer);
 			}
 
@@ -591,17 +589,15 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 				};
 
 				LLVMValueRef item_pointer = LLVMBuildGEP2(state->llvm_builder, create_llvm_type(type, state), array_value, indices, 2, "");
-				LLVMBuildStore(state->llvm_builder, generate_node(structure.values[i].node, state), item_pointer);
+				LLVMBuildStore(state->llvm_builder, generate_node(structure_data.arguments[i], state), item_pointer);
 			}
 
 			return LLVMBuildLoad2(state->llvm_builder, create_llvm_type(type, state), array_value, "");
 		}
 		case TAGGED_UNION_TYPE_VALUE: {
 			LLVMValueRef tagged_union_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
-			String_View identifier = structure.values[0].identifier;
-			Node *node = structure.values[0].node;
 			for (long int i = 0; i < arrlen(type->tagged_union_type.items); i++) {
-				if (sv_eq(type->tagged_union_type.items[i].identifier, identifier)) {
+				if (structure_data.arguments[i] != NULL) {
 					LLVMValueRef tag_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), tagged_union_value, 0, "");
 					LLVMBuildStore(state->llvm_builder, LLVMConstInt(LLVMInt64TypeInContext(state->llvm_context), i, false), tag_pointer);
 					LLVMValueRef data_pointer = LLVMBuildStructGEP2(state->llvm_builder, create_llvm_type(type, state), tagged_union_value, 1, "");
@@ -617,10 +613,8 @@ static LLVMValueRef generate_structure(Node *node, State *state) {
 		}
 		case UNION_TYPE_VALUE: {
 			LLVMValueRef union_value = LLVMBuildAlloca(state->llvm_builder, create_llvm_type(type, state), "");
-			String_View identifier = structure.values[0].identifier;
-			Node *node = structure.values[0].node;
 			for (long int i = 0; i < arrlen(type->tagged_union_type.items); i++) {
-				if (sv_eq(type->tagged_union_type.items[i].identifier, identifier)) {
+				if (structure_data.arguments[i] != NULL) {
 					LLVMValueRef element_pointer = LLVMBuildBitCast(state->llvm_builder, union_value, LLVMPointerType(create_llvm_type(type->tagged_union_type.items[i].type.value, state), 0), "");
 					LLVMBuildStore(state->llvm_builder, generate_node(node, state), element_pointer);
 
